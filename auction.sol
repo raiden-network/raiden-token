@@ -1,14 +1,8 @@
 pragma solidity 0.4.11;
 
 
-/// @title Abstract token contracts - Functions to be implemented by token contracts.
+/// @title Abstract Mint contract - Functions to be implemented by Mint contracts.
 /// FIXME: is it necessary to provide the full interface?
-contract Token {
-    function addCollateral() returns (bool success);
-    // This is not an abstract function, because solc won't recognize generated getter functions for public variables as functions.
-    function totalSupply() constant returns (uint256 supply) {}
-    function maxSupply() constant returns (uint256 supply) {}
-}
 
 contract Mint {
     function registerMintingRight(address eligible, uint num, uint startTime, uint endTime) returns (bool);
@@ -126,24 +120,16 @@ contract DutchAuction {
 
     /// @dev Setup function sets external contracts' addresses.
     /// @param _token the token address.
-    function setup(address _token, address _mint)
+    function setup(address _mint)
         public
         isOwner
         atStage(Stages.AuctionDeployed)
     {
-        // register token
-        assert(_token);
-        token = Token(_token);
-        // Validate token supply
-        assert(token.totalSupply() + maxTokensAvailable <= token.maxSupply());
-
         // register mint
         assert(_mint);
         mint = Mint(_mint);
         assert(mint.isReady());
         assert(mint.maxMintable() - mint.totalMintingRightsGranted() >= maxTokensAvailable);
-        assert(mint.maxMintable() <= token.maxSupply() - token.totalSupply());
-
         stage = Stages.AuctionSetUp;
     }
 
