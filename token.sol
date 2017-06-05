@@ -111,13 +111,14 @@ contract StandardToken is Token {
 
 /// @title Raiden token contract
 /// @author Heiko Hees
+
 contract RaidenToken is StandardToken {
 
     /*
      *  Token meta data
      */
     string constant public name = "Raiden Token";
-    string constant public symbol = "RDB";
+    string constant public symbol = "RDN";
     uint8 constant public decimals = 24;  // ETH has 18
     uint constant public maxSupply = 10 * 1000000 * 10**decimals;
     address public mint;
@@ -161,13 +162,13 @@ contract RaidenToken is StandardToken {
 
 
     // used to safely send ETH to the contract
-    // FIXME default function should fail
+    // FIXME: default function should fail, right?
     function addCollateral()
         public
         payable
         returns (bool)
     {
-        assert(msg.sender == mint); // FIXME: required restriction? also the auction is collecting it
+        assert(msg.sender == mint); // FIXME: required restriction?
         CollateralUpdated(msg.value, this.value);
         return true;
     }
@@ -188,8 +189,12 @@ contract RaidenToken is StandardToken {
     {
         assert(balance[msg.sender] >= num);
         balance[msg.sender] -= num;
+        totalSupply -= num;
+        maxSupply -= num;
         unlockedETH = num / tokensPerWei();
+        uint pre = this.value;
         assert(send(msg.sender, unlockedETH));
+        assert(this.value == pre - unlockedETH);
         Destroyed(msg.sender, num, totalSupply);
         CollateralUpdated(-unlockedETH, this.value);
         return true;

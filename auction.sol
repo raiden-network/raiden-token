@@ -15,6 +15,7 @@ contract Mint {
     function mintable(address account) returns (uint);
     function maxMintable() returns (uint);
     function isReady() returns (bool);
+    function addCollateral() returns (bool);
 }
 
 
@@ -124,7 +125,7 @@ contract DutchAuction {
     }
 
     /// @dev Setup function sets external contracts' addresses.
-    /// @param _token Gnosis token address.
+    /// @param _token the token address.
     function setup(address _token, address _mint)
         public
         isOwner
@@ -260,7 +261,7 @@ contract DutchAuction {
         finalMintingPeriod = calcMintingPeriod(elapsed);
 
         // Transfer funding to collateralize the token
-        assert(token.addCollateral.value(this.value)()); // FIXME double check
+        assert(mint.addCollateral.value(this.value)()); // FIXME double check
     }
 
     /// @dev registers minting rights for bidder after auction with the Mint

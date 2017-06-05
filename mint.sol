@@ -22,7 +22,7 @@ contract Mint {
 
     mapping (address => MintingRight) minters;
     address owner;
-    address mintingRightGranter;
+    address mintingRightsGranter;
     address token;
     uint public maxMintable;
     uint public totalMinted;
@@ -31,7 +31,8 @@ contract Mint {
 
     enum Stages {
         MintDeployed,
-        MintSetUp
+        MintSetUp,
+        CollateralProvided
     }
 
     Stages public stage;
@@ -59,7 +60,7 @@ contract Mint {
 
     /// @dev Setup function sets external contracts' addresses.
     /// @param _token Raiden token address.
-    function setup(address _token, address _mintingRightGranter)
+    function setup(address _token, address _mintingRightsGranter)
         public
         atStage(MintDeployed)
     {
@@ -67,27 +68,38 @@ contract Mint {
         // register token
         assert(_token);
         assert(Token(_token).maxSupply() == token.totalSupply() + maxMintable);
-        // register mintingRightGranter
-        assert(_mintingRightGranter);
-        mintingRightGranter = _mintingRightGranter;
+        // register mintingRightsGranter
+        assert(_mintingRightsGranter);
+        mintingRightsGranter = _mintingRightsGranter;
         stage = Stages.MintSetUp;
     }
 
     function isReady()
         public
+        constant
         atStage(Stages.MintSetUp)
         returns (bool)
     {
         return True;
     }
 
-
-    function registerMintingRight(address eligible, uint num, uint startTime, uint endTime)
+    // forwards collateral to the token
+    function addCollateral()
         public
+        payable
         atStage(Stages.MintSetUp)
         returns (bool)
     {
-        assert(msg.sender == mintingRightGranter);
+        assert(msg.sender == mintingRightsGranter);
+        assert(token.addCollateral.value(this.value)()); // FIXME double check
+    }
+
+    function registerMintingRight(address eligible, uint num, uint startTime, uint endTime)
+        public
+        atStage(Stages.CollateralProvided)
+        returns (bool)
+    {
+        assert(msg.sender == mintingRightsGranter);
         assert(!minters[eligible]);
         assert(startTime < endTime);
         minters[eligible] = MintingRight({startTime: startTime,
@@ -102,7 +114,7 @@ contract Mint {
     // calc the max mintable amount for account
     function mintable(address account)
         public
-        atStage(Stages.MintSetUp)
+        atStage(Stages.CollateralProvided)
         returns (uint)
     {
         MintingRight minter = minters[account];
@@ -119,7 +131,7 @@ contract Mint {
     // note: anyone can call mint
     function mint(uint num, address account)
         public
-        atStage(Stages.MintSetUp)
+        atStage(Stages.CollateralProvided)
     {
         require(num>0);
         MintingRight minter = minters[account];
