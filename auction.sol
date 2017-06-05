@@ -45,6 +45,7 @@ contract DutchAuction {
     uint public endTime; // time the auction ends at latest
 
     mapping (address => uint) public bids;
+    mapping (address => bool) public bidders;
 
     /*
      *  Enums
@@ -118,6 +119,18 @@ contract DutchAuction {
         stage = Stages.AuctionDeployed;
     }
 
+    /// @dev call to whitelist bidders
+    function registerEligibleBidders(address[] _bidders)
+        public
+        isOwner
+        atStage(Stages.AuctionDeployed)
+    {
+        for (uint i=0; i<_bidders.length; i++) {
+            assert(_bidders[i] != 0);
+            bidders[_bidders[i]] = true;
+        }
+    }
+
     /// @dev Setup function sets external contracts' addresses.
     /// @param _token the token address.
     function setup(address _mint)
@@ -132,6 +145,8 @@ contract DutchAuction {
         assert(mint.maxMintable() - mint.totalMintingRightsGranted() >= maxTokensAvailable);
         stage = Stages.AuctionSetUp;
     }
+
+
 
     /// @dev Changes auction collateralCeiling and start price factor before auction is started.
     /// @param _collateralCeiling Updated auction collateralCeiling.
@@ -179,6 +194,8 @@ contract DutchAuction {
         // If a bid is done on behalf of a user via ShapeShift, the bidder address is set.
         if (bidder == 0)
             bidder = msg.sender;
+        // check if whitelisted
+        assert(bidders[bidder]);
 
         // enforce percentage per bidder limit
         uint maxWeiAccepted = collateralCeiling * maxCollateralFractionPercentPerBidder / 100;
