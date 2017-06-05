@@ -4,6 +4,8 @@ pragma solidity 0.4.11;
 /// @title Abstract token contract - Functions to be implemented by token contracts.
 contract Token {
     function maxSupply() constant returns (uint256 supply) {}
+    function totalSupply() constant returns (uint256) {}
+    function addCollateral() returns (bool) {}
     function mint(address receiver, uint num) returns (bool) {}
 } // FIXME: is it required to specify the complete interface or only the required parts?
 
@@ -23,7 +25,7 @@ contract Mint {
     mapping (address => MintingRight) minters;
     address owner;
     address mintingRightsGranter;
-    address token;
+    Token token;
     uint public maxMintable;
     uint public totalMinted;
     uint public totalMintingRightsGranted;
@@ -62,14 +64,14 @@ contract Mint {
     /// @param _token Raiden token address.
     function setup(address _token, address _mintingRightsGranter)
         public
-        atStage(MintDeployed)
+        atStage(Stages.MintDeployed)
     {
         assert(msg.sender == owner);
         // register token
-        assert(_token);
-        assert(Token(_token).maxSupply() == token.totalSupply() + maxMintable);
+        assert(_token != 0x0);
+        assert(Token(_token).maxSupply() == Token(_token).totalSupply() + maxMintable);
         // register mintingRightsGranter
-        assert(_mintingRightsGranter);
+        assert(_mintingRightsGranter != 0x0);
         mintingRightsGranter = _mintingRightsGranter;
         stage = Stages.MintSetUp;
     }
@@ -80,7 +82,7 @@ contract Mint {
         atStage(Stages.MintSetUp)
         returns (bool)
     {
-        return True;
+        return true;
     }
 
     // forwards collateral to the token
@@ -91,7 +93,7 @@ contract Mint {
         returns (bool)
     {
         assert(msg.sender == mintingRightsGranter);
-        assert(token.addCollateral.value(this.value)()); // FIXME double check
+        assert(token.addCollateral.value(this.balance)()); // FIXME double check
     }
 
     function registerMintingRight(address eligible, uint num, uint startTime, uint endTime)
@@ -106,9 +108,9 @@ contract Mint {
                                           endTime: endTime,
                                           total: num,
                                           issued: 0});
-        totalMintingRightsGranted += num
+        totalMintingRightsGranted += num;
         assert(totalMintingRightsGranted <= maxMintable);
-        return True;
+        return true;
     }
 
     // calc the max mintable amount for account
@@ -117,13 +119,18 @@ contract Mint {
         atStage(Stages.CollateralProvided)
         returns (uint)
     {
+        uint elapsed;
         MintingRight minter = minters[account];
         if(!minter || now < minter.startTime)
             return 0;
         // calc max mintable
         uint period = minter.endTime - minter.startTime;
-        uint elapsed = min(now - minter.startTime, period);
-        uint mintableByNow = minter.total * elapsed / period:
+        if (now - minter.startTime <= period) {
+            elapsed = now - minter.startTime;
+        } else {
+            elapsed = period;
+        }
+        uint mintableByNow = minter.total * elapsed / period;
         return mintableByNow - minter.issued;
     }
 

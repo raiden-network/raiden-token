@@ -120,13 +120,12 @@ contract RaidenToken is StandardToken {
     string constant public name = "Raiden Token";
     string constant public symbol = "RDN";
     uint8 constant public decimals = 24;  // ETH has 18
-    uint constant public maxSupply = 10 * 1000000 * 10**decimals;
-    address public mint;
+    uint public maxSupply = 10 * 1000000 * 10**decimals;
+    address public minter;
 
     event Minted(address indexed receiver, uint num, uint _totalSupply);
     event Destroyed(address indexed receiver, uint num, uint _totalSupply);
-    event CollateralChanged(int changed, uint newETHValue);
-
+    event CollateralUpdated(uint changed, uint newETHValue);
 
     /*
      *  Public functions
@@ -135,7 +134,7 @@ contract RaidenToken is StandardToken {
     /// @param mint Address of dutch auction contract.
     /// @param owners Array of addresses receiving preassigned tokens.
     /// @param numtokens Array of preassigned token amounts.
-    function RaidenToken(address mint; address[] owners, uint[] numtokens)
+    function RaidenToken(address minter, address[] owners, uint[] numtokens)
         public
     {
         // prealloc
@@ -146,12 +145,11 @@ contract RaidenToken is StandardToken {
         assert(totalSupply <= maxSupply);
     }
 
-
     function mint(address receiver, uint num)
         public
         returns (bool)
     {
-        assert(msg.sender == this.address || msg.sender == mint);
+        assert(msg.sender == address(this) || msg.sender == minter);
         totalSupply += num;
         assert(totalSupply <= maxSupply);
         balances[receiver] += num;
@@ -160,7 +158,6 @@ contract RaidenToken is StandardToken {
         return true;
     }
 
-
     // used to safely send ETH to the contract
     // FIXME: default function should fail, right?
     function addCollateral()
@@ -168,37 +165,33 @@ contract RaidenToken is StandardToken {
         payable
         returns (bool)
     {
-        assert(msg.sender == mint); // FIXME: required restriction?
-        CollateralUpdated(msg.value, this.value);
+        assert(msg.sender == minter); // FIXME: required restriction?
+        CollateralUpdated(msg.value, this.balance);
         return true;
     }
-
 
     function tokensPerWei()
         public
         constant
         returns (uint)
     {
-        return totalSupply / this.value; // wei per token FIXME
+        return totalSupply / this.balance; // wei per token FIXME
     }
 
-
-    function destroy(num)
+    function destroy(uint num)
         public
-        returns (uint)
+        returns (bool)
     {
-        assert(balance[msg.sender] >= num);
-        balance[msg.sender] -= num;
+        assert(balances[msg.sender] >= num);
+        balances[msg.sender] -= num;
         totalSupply -= num;
         maxSupply -= num;
-        unlockedETH = num / tokensPerWei();
-        uint pre = this.value;
-        assert(send(msg.sender, unlockedETH));
-        assert(this.value == pre - unlockedETH);
+        uint unlockedETH = num / tokensPerWei();
+        uint pre = this.balance;
+        msg.sender.transfer(unlockedETH);
+        assert(this.balance == pre - unlockedETH);
         Destroyed(msg.sender, num, totalSupply);
-        CollateralUpdated(-unlockedETH, this.value);
+        CollateralUpdated(-unlockedETH, this.balance);
         return true;
     }
-
-
 }

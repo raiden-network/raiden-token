@@ -1,4 +1,5 @@
 pragma solidity 0.4.11;
+import "token.sol";
 
 
 /// @title Abstract Mint contract - Functions to be implemented by Mint contracts.
@@ -10,6 +11,7 @@ contract Mint {
     function maxMintable() returns (uint);
     function isReady() returns (bool);
     function addCollateral() returns (bool);
+    function totalMintingRightsGranted() returns (uint);
 }
 
 
@@ -94,25 +96,26 @@ contract DutchAuction {
     /// @param _collateralFactor Auction price factor.
     function DutchAuction(uint _collateralCeiling,
                           uint _collateralFactor,
-                          uint _maxTokensAvailable
+                          uint _maxTokensAvailable,
                           uint _minCollateralPerBidder,
-                          uint _maxCollateralFractionPercentPerBidder,
+                          uint _maxCollateralFractionPerBidder,
                           uint _mintingPeriodFactor,
                           uint _mintingPeriodDevisorConstant,
                           uint _waitingPeriod)
         public
     {
         owner = msg.sender;
-        assert(_collateralCeiling && _collateralFactor);
+        assert(_collateralCeiling != 0 && _collateralFactor != 0);
         collateralCeiling = _collateralCeiling;
         collateralFactor = _collateralFactor;
-        assert(_maxTokensAvailable);
+        assert(_maxTokensAvailable != 0);
         maxTokensAvailable = _maxTokensAvailable;
-        assert(_minCollateralPerBidder)
+        assert(_minCollateralPerBidder != 0);
         minCollateralPerBidder = _minCollateralPerBidder;
-        assert(0 < _maxCollateralFractionPerBidder <=100);
-        maxCollateralFractionPerBidder = _maxCollateralFractionPercentPerBidder;
-        assert(_mintingPeriodFactor && _mintingPeriodDevisorConstant);
+        assert(0 < _maxCollateralFractionPerBidder);
+        assert(_maxCollateralFractionPerBidder <= 100);
+        maxCollateralFractionPerBidder = _maxCollateralFractionPerBidder;
+        assert(_mintingPeriodFactor != 0 && _mintingPeriodDevisorConstant != 0);
         mintingPeriodFactor = _mintingPeriodFactor;
         mintingPeriodDevisorConstant = _mintingPeriodDevisorConstant;
         waitingPeriod = _waitingPeriod;
@@ -139,7 +142,7 @@ contract DutchAuction {
         atStage(Stages.AuctionDeployed)
     {
         // register mint
-        assert(_mint);
+        assert(_mint != 0x0);
         mint = Mint(_mint);
         assert(mint.isReady());
         assert(mint.maxMintable() - mint.totalMintingRightsGranted() >= maxTokensAvailable);
@@ -153,7 +156,7 @@ contract DutchAuction {
     /// @param _collateralFactor Updated start price factor.
     function changeSettings(uint _collateralCeiling, uint _collateralFactor)
         public
-        idOwner
+        isOwner
         atStage(Stages.AuctionSetUp)
     {
         collateralCeiling = _collateralCeiling;
@@ -198,11 +201,15 @@ contract DutchAuction {
         assert(bidders[bidder]);
 
         // enforce percentage per bidder limit
-        uint maxWeiAccepted = collateralCeiling * maxCollateralFractionPercentPerBidder / 100;
+        uint maxWeiAccepted = collateralCeiling * maxCollateralFractionPerBidder / 100;
         maxWeiAccepted -= bids[bidder]; // take in to account previously sent wei
 
         // enforce total collateral limit
-        maxWeiAccepted = min(maxWeiAccepted, collateralCeiling - totalCollateralReceived);
+        if (maxWeiAccepted <= collateralCeiling - totalCollateralReceived) {
+            maxWeiAccepted = maxWeiAccepted;
+        } else {
+            maxWeiAccepted = collateralCeiling - totalCollateralReceived;
+        }
 
         uint numWei = msg.value;
 
@@ -211,7 +218,7 @@ contract DutchAuction {
             numWei = maxWeiAccepted;
             // Send change back to bidder address. In case of a ShapeShift bid the user receives the change back directly.
             assert(msg.value >= numWei);
-            uint refund = msg.value - numWei
+            uint refund = msg.value - numWei;
             assert(bidder.send(refund));
         }
 
@@ -246,7 +253,7 @@ contract DutchAuction {
     function currentMintingPeriod()
         constant
         public
-        atStage(Stage.AuctionStarted)
+        atStage(Stages.AuctionStarted)
         returns (uint)
         {
             return calcMintingPeriod(block.number - startBlock);
