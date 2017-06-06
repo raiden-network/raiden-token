@@ -62,6 +62,7 @@ contract Mint {
         public
      {
         owner = msg.sender;
+        mintingRightsGranter = msg.owner; // changed with setup
         maxMintable = _maxMintable;
         stage = Stages.MintDeployed;
      }
@@ -103,12 +104,14 @@ contract Mint {
         assert(token.addCollateral.value(this.balance)()); // FIXME double check
     }
 
+    // owner can register minting rights before calling Mint.setup
     function registerMintingRight(address eligible, uint num, uint startTime, uint endTime)
         public
-        atStage(Stages.CollateralProvided)
         returns (bool)
     {
         assert(msg.sender == mintingRightsGranter);
+        assert((stage == Stages.MintDeployed && msg.sender == owner) ||
+               (stage == Stages.MintSetUp && msg.sender != owner));
         assert(!minters[eligible]);
         assert(startTime < endTime);
         minters[eligible] = MintingRight({startTime: startTime,
