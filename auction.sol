@@ -1,19 +1,7 @@
 pragma solidity 0.4.11;
-import "token.sol";
+import "mint.sol";
 
-
-/// @title Abstract Mint contract - Functions to be implemented by Mint contracts.
-/// FIXME: is it necessary to provide the full interface?
-
-contract Mint {
-    function registerMintingRight(address eligible, uint num, uint startTime, uint endTime) returns (bool);
-    function mintable(address account) returns (uint);
-    function maxMintable() returns (uint);
-    function isReady() returns (bool);
-    function addCollateral() payable returns (bool);
-    function totalMintingRightsGranted() returns (uint);
-}
-
+// TODO: add interface for mint
 
 /// @title Dutch auction contract - distribution of Raiden token Minting rights using an auction
 /// @author Heiko, also credits to team Gnosis!
@@ -22,15 +10,11 @@ contract Mint {
 /// The result of the auctinon are minting rights.
 contract DutchAuction {
 
-    /*
-     *  Events
-     */
+    /* Events */
     event BidSubmission(address indexed sender, uint256 amount);
 
-    /*
-     *  Storage
-     */
-    Token public token;
+    /* Storage */
+    RaidenToken public token;
     Mint public mint;
     address public owner;
     uint public maxTokensAvailable;
@@ -49,9 +33,7 @@ contract DutchAuction {
     mapping (address => uint) public bids;
     mapping (address => bool) public bidders;
 
-    /*
-     *  Enums
-     */
+    /* Enums */
     enum Stages {
         AuctionDeployed,
         AuctionSetUp,
@@ -61,10 +43,7 @@ contract DutchAuction {
     }
     Stages public stage;
 
-
-    /*
-     *  Modifiers
-     */
+    /* Modifiers */
     modifier atStage(Stages _stage) {
         assert(stage == _stage);
         _;
@@ -88,9 +67,8 @@ contract DutchAuction {
         _;
     }
 
-    /*
-     *  Public functions
-     */
+    /* Public functions */
+
     /// @dev Contract constructor function sets owner.
     /// @param _collateralCeiling Auction collateralCeiling.
     /// @param _collateralFactor Auction price factor.
@@ -135,7 +113,7 @@ contract DutchAuction {
     }
 
     /// @dev Setup function sets external contracts' addresses.
-    /// @param _token the token address.
+    /// @param _mint the mint address.
     function setup(address _mint)
         public
         isOwner

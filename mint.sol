@@ -1,13 +1,8 @@
 pragma solidity 0.4.11;
+import "token.sol";
 
 
-/// @title Abstract token contract - Functions to be implemented by token contracts.
-contract Token {
-    function maxSupply() constant returns (uint256 supply) {}
-    function totalSupply() constant returns (uint256) {}
-    function addCollateral() payable returns (bool) {}
-    function mint(address receiver, uint num) returns (bool) {}
-} // FIXME: is it required to specify the complete interface or only the required parts?
+// TODO: add interface for auction and token
 
 contract Mint {
 
@@ -28,7 +23,7 @@ contract Mint {
     mapping (address => MintingRight) minters;
     address owner;
     address mintingRightsGranter;
-    Token token;
+    RaidenToken token;
     uint public maxMintable;
     uint public totalMinted;
     uint public totalMintingRightsGranted;
@@ -78,7 +73,8 @@ contract Mint {
         assert(msg.sender == owner);
         // register token
         assert(_token != 0x0);
-        assert(Token(_token).maxSupply() == Token(_token).totalSupply() + maxMintable);
+        assert(RaidenToken(_token).maxSupply() == RaidenToken(_token).totalSupply() + maxMintable);
+        token = RaidenToken(_token);
         // register mintingRightsGranter
         assert(_mintingRightsGranter != 0x0);
         mintingRightsGranter = _mintingRightsGranter;
@@ -172,7 +168,7 @@ contract Mint {
         assert(num <= mintable(account));
         minter.issued += num;
         totalMinted += num;
-        assert(Token(token).mint(account, num));
+        assert(RaidenToken(token).mint(account, num));
         assert(minter.issued <= minter.total);
         assert(totalMinted <= totalMintingRightsGranted);
         assert(totalMinted <= maxMintable);
