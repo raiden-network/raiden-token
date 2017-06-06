@@ -119,7 +119,7 @@ contract RaidenToken is StandardToken {
      */
     string constant public name = "Raiden Token";
     string constant public symbol = "RDN";
-    uint8 constant public decimals = 24;  // ETH has 18
+    uint constant public decimals = 24;  // ETH has 18
     uint public maxSupply = 10 * 1000000 * 10**decimals;
     address public minter;
 
