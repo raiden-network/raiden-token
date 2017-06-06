@@ -11,6 +11,8 @@ contract Token {
 
 contract Mint {
 
+    event MintingRightTransferred(address indexed from, address indexed to);
+
     /*
      *  Data structures
      */
@@ -38,6 +40,7 @@ contract Mint {
     }
 
     Stages public stage;
+
     /*
      *  Modifiers
      */
@@ -46,6 +49,10 @@ contract Mint {
         _;
     }
 
+    modifier isValidPayload() {
+        assert(msg.data.length == 4 || msg.data.length == 36);
+        _;
+    }
     /*
      *  Public functions
      */
@@ -112,6 +119,20 @@ contract Mint {
         assert(totalMintingRightsGranted <= maxMintable);
         return true;
     }
+
+    function transferMintingRight(address _eligible)
+        public
+        isValidPayload
+        atStage(Stages.CollateralProvided)
+        returns (uint)
+    {
+        require(minters[msg.sender] != 0x0);
+        minters[_eligible] = minters[msg.sender];
+        minters[msg.sender] = 0;
+        MintingRightTransferred(msg.sender, _eligible);
+        return true;
+    }
+
 
     // calc the max mintable amount for account
     function mintable(address account)
