@@ -275,7 +275,7 @@ contract DutchAuction {
     }
 
     /// @dev registers minting rights for bidder after auction with the Mint
-    /// @param receiver MintingRighhts will be assigned to this address if set
+    /// @param receiver MintingRights will be assigned to this address if set
     function registerMintingRights(address receiver)
         public
         isValidPayload
