@@ -5,7 +5,7 @@ pragma solidity 0.4.11;
 contract Token {
     function maxSupply() constant returns (uint256 supply) {}
     function totalSupply() constant returns (uint256) {}
-    function addCollateral() returns (bool) {}
+    function addCollateral() payable returns (bool) {}
     function mint(address receiver, uint num) returns (bool) {}
 } // FIXME: is it required to specify the complete interface or only the required parts?
 
@@ -22,6 +22,7 @@ contract Mint {
         uint endTime;
         uint total;
         uint issued;
+        bool has_rights;
     }
 
     mapping (address => MintingRight) minters;
@@ -62,7 +63,7 @@ contract Mint {
         public
      {
         owner = msg.sender;
-        mintingRightsGranter = msg.owner; // changed with setup
+        mintingRightsGranter = msg.sender; // changed with setup
         maxMintable = _maxMintable;
         stage = Stages.MintDeployed;
      }
@@ -102,6 +103,7 @@ contract Mint {
     {
         assert(msg.sender == mintingRightsGranter);
         assert(token.addCollateral.value(this.balance)()); // FIXME double check
+        return true;
     }
 
     // owner can register minting rights before calling Mint.setup
@@ -112,12 +114,13 @@ contract Mint {
         assert(msg.sender == mintingRightsGranter);
         assert((stage == Stages.MintDeployed && msg.sender == owner) ||
                (stage == Stages.MintSetUp && msg.sender != owner));
-        assert(!minters[eligible]);
+        assert(!minters[eligible].has_rights);
         assert(startTime < endTime);
         minters[eligible] = MintingRight({startTime: startTime,
                                           endTime: endTime,
                                           total: num,
-                                          issued: 0});
+                                          issued: 0,
+                                          has_rights: true});
         totalMintingRightsGranted += num;
         assert(totalMintingRightsGranted <= maxMintable);
         return true;
@@ -127,11 +130,11 @@ contract Mint {
         public
         isValidPayload
         atStage(Stages.CollateralProvided)
-        returns (uint)
+        returns (bool)
     {
-        require(minters[msg.sender] != 0x0);
+        require(minters[msg.sender].has_rights);
         minters[_eligible] = minters[msg.sender];
-        minters[msg.sender] = 0;
+        minters[msg.sender] = MintingRight(0, 0, 0, 0, false);
         MintingRightTransferred(msg.sender, _eligible);
         return true;
     }
@@ -145,7 +148,7 @@ contract Mint {
     {
         uint elapsed;
         MintingRight minter = minters[account];
-        if(!minter || now < minter.startTime)
+        if(!minter.has_rights || now < minter.startTime)
             return 0;
         // calc max mintable
         uint period = minter.endTime - minter.startTime;

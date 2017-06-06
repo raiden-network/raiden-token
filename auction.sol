@@ -10,7 +10,7 @@ contract Mint {
     function mintable(address account) returns (uint);
     function maxMintable() returns (uint);
     function isReady() returns (bool);
-    function addCollateral() returns (bool);
+    function addCollateral() payable returns (bool);
     function totalMintingRightsGranted() returns (uint);
 }
 
@@ -271,7 +271,7 @@ contract DutchAuction {
         finalMintingPeriod = calcMintingPeriod(elapsed);
 
         // Transfer funding to collateralize the token
-        assert(mint.addCollateral.value(this.value)()); // FIXME double check
+        assert(mint.addCollateral.value(this.balance)()); // FIXME double check
     }
 
     /// @dev registers minting rights for bidder after auction with the Mint
