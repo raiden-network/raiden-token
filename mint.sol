@@ -1,16 +1,15 @@
 pragma solidity 0.4.11;
-import "token.sol";
-
+import "RaidenToken.sol";
 
 // TODO: add interface for auction and token
 
 contract Mint {
 
+    /* Events */
+
     event MintingRightTransferred(address indexed from, address indexed to);
 
-    /*
-     *  Data structures
-     */
+    /* Data structures */
 
     struct MintingRight {
         uint startTime;
@@ -28,6 +27,7 @@ contract Mint {
     uint public totalMinted;
     uint public totalMintingRightsGranted;
 
+    /* Enums */
 
     enum Stages {
         MintDeployed,
@@ -37,26 +37,21 @@ contract Mint {
 
     Stages public stage;
 
-    /*
-     *  Modifiers
-     */
+    /* Modifiers */
+
     modifier atStage(Stages _stage) {
-        assert(stage == _stage);
+        require(stage == _stage);
         _;
     }
 
     modifier isValidPayload() {
-        assert(msg.data.length == 4 || msg.data.length == 36);
+        require(msg.data.length == 4 || msg.data.length == 36);
         _;
     }
-    /*
-     *  Public functions
-     */
 
+    /*  Public functions */
 
-     function Mint(uint _maxMintable)
-        public
-     {
+     function Mint(uint _maxMintable) public {
         owner = msg.sender;
         mintingRightsGranter = msg.sender; // changed with setup
         maxMintable = _maxMintable;
@@ -65,28 +60,30 @@ contract Mint {
 
 
     /// @dev Setup function sets external contracts' addresses.
-    /// @param _token Raiden token address.
     function setup(address _token, address _mintingRightsGranter)
         public
         atStage(Stages.MintDeployed)
     {
-        assert(msg.sender == owner);
+        require(msg.sender == owner);
+
         // register token
-        assert(_token != 0x0);
-        assert(RaidenToken(_token).maxSupply() == RaidenToken(_token).totalSupply() + maxMintable);
+        require(_token != 0x0);
+        require(RaidenToken(_token).maxSupply() == RaidenToken(_token).totalSupply() + maxMintable);
+
         token = RaidenToken(_token);
+
         // register mintingRightsGranter
-        assert(_mintingRightsGranter != 0x0);
+        require(_mintingRightsGranter != 0x0);
+
         mintingRightsGranter = _mintingRightsGranter;
+
         stage = Stages.MintSetUp;
+        require(address(token) == _token);
+        require(mintingRightsGranter == _mintingRightsGranter);
+        require(stage == Stages.MintSetUp);
     }
 
-    function isReady()
-        public
-        constant
-        atStage(Stages.MintSetUp)
-        returns (bool)
-    {
+    function isReady() public constant atStage(Stages.MintSetUp) returns (bool) {
         return true;
     }
 
@@ -97,8 +94,9 @@ contract Mint {
         atStage(Stages.MintSetUp)
         returns (bool)
     {
-        assert(msg.sender == mintingRightsGranter);
-        assert(token.addCollateral.value(this.balance)()); // FIXME double check
+        require(msg.sender == mintingRightsGranter);
+        require(token.addCollateral.value(this.balance)()); // FIXME double check
+
         return true;
     }
 
@@ -107,18 +105,22 @@ contract Mint {
         public
         returns (bool)
     {
-        assert(msg.sender == mintingRightsGranter);
-        assert((stage == Stages.MintDeployed && msg.sender == owner) ||
-               (stage == Stages.MintSetUp && msg.sender != owner));
-        assert(!minters[eligible].has_rights);
-        assert(startTime < endTime);
+        require(msg.sender == mintingRightsGranter);
+        require((stage == Stages.MintDeployed && msg.sender == owner) ||
+                (stage == Stages.MintSetUp && msg.sender != owner));
+        require(!minters[eligible].has_rights);
+        require(startTime < endTime);
+
         minters[eligible] = MintingRight({startTime: startTime,
                                           endTime: endTime,
                                           total: num,
                                           issued: 0,
                                           has_rights: true});
         totalMintingRightsGranted += num;
-        assert(totalMintingRightsGranted <= maxMintable);
+
+        require(totalMintingRightsGranted <= maxMintable);
+        require(minters[eligible].has_rights);
+
         return true;
     }
 
@@ -129,9 +131,17 @@ contract Mint {
         returns (bool)
     {
         require(minters[msg.sender].has_rights);
+        // right now we can only transfer mintin rights to an account that
+        // does not already have minting rights
+        require(!minters[_eligible].has_rights);
+
         minters[_eligible] = minters[msg.sender];
         minters[msg.sender] = MintingRight(0, 0, 0, 0, false);
         MintingRightTransferred(msg.sender, _eligible);
+
+        require(!minters[msg.sender].has_rights);
+        require(minters[_eligible].has_rights);
+
         return true;
     }
 
@@ -144,16 +154,20 @@ contract Mint {
     {
         uint elapsed;
         MintingRight minter = minters[account];
-        if(!minter.has_rights || now < minter.startTime)
+        if (!minter.has_rights || now < minter.startTime) {
             return 0;
+        }
         // calc max mintable
         uint period = minter.endTime - minter.startTime;
+
+        // get min(now - minter.startTime, period)
         if (now - minter.startTime <= period) {
             elapsed = now - minter.startTime;
         } else {
             elapsed = period;
         }
         uint mintableByNow = minter.total * elapsed / period;
+
         return mintableByNow - minter.issued;
     }
 
@@ -163,14 +177,16 @@ contract Mint {
         public
         atStage(Stages.CollateralProvided)
     {
-        require(num>0);
+        require(num > 0);
+        require(num <= mintable(account));
+
         MintingRight minter = minters[account];
-        assert(num <= mintable(account));
         minter.issued += num;
         totalMinted += num;
-        assert(RaidenToken(token).mint(account, num));
-        assert(minter.issued <= minter.total);
-        assert(totalMinted <= totalMintingRightsGranted);
-        assert(totalMinted <= maxMintable);
+        require(RaidenToken(token).mint(account, num));
+
+        require(minter.issued <= minter.total);
+        require(totalMinted <= totalMintingRightsGranted);
+        require(totalMinted <= maxMintable);
     }
 }

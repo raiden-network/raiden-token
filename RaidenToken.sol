@@ -13,7 +13,7 @@ contract RaidenToken is StandardToken {
     string constant public symbol = "RDN";
     uint constant public decimals = 24;  // ETH has 18
     uint public maxSupply = 10 * 1000000 * 10**decimals;
-    address public minter;
+    address public mint;
 
     event Minted(address indexed receiver, uint num, uint _totalSupply);
     event Destroyed(address indexed receiver, uint num, uint _totalSupply);
@@ -23,10 +23,10 @@ contract RaidenToken is StandardToken {
      *  Public functions
      */
     /// @dev Contract constructor function sets the mint contract address
-    /// @param mint Address of dutch auction contract.
+    /// @param _mint Address of dutch auction contract.
     /// @param owners Array of addresses receiving preassigned tokens.
     /// @param numtokens Array of preassigned token amounts.
-    function RaidenToken(address minter, address[] owners, uint[] numtokens)
+    function RaidenToken(address _mint, address[] owners, uint[] numtokens)
         public
     {
         // prealloc
@@ -35,13 +35,14 @@ contract RaidenToken is StandardToken {
             mint(owners[i], numtokens[i]);
         }
         assert(totalSupply <= maxSupply);
+        mint = _mint;
     }
 
     function mint(address receiver, uint num)
         public
         returns (bool)
     {
-        assert(msg.sender == address(this) || msg.sender == minter);
+        assert(msg.sender == address(this) || msg.sender == mint);
         totalSupply += num;
         assert(totalSupply <= maxSupply);
         balances[receiver] += num;
@@ -57,7 +58,7 @@ contract RaidenToken is StandardToken {
         payable
         returns (bool)
     {
-        assert(msg.sender == minter); // FIXME: required restriction?
+        assert(msg.sender == mint); // FIXME: required restriction?
         CollateralUpdated(msg.value, this.balance);
         return true;
     }
