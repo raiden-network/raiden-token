@@ -7,13 +7,16 @@ import "mint.sol";
 /// @author Heiko, also credits to team Gnosis!
 /// This is a variation of the Gnosis model. The price and number of mintable tokens are fixed.
 /// Bidders bid for mining rights and compete on the dimension of the their max acceptable minting period.
-/// The result of the auctinon are minting rights.
+/// The result of the auction is minting rights.
+
 contract DutchAuction {
 
     /* Events */
+
     event BidSubmission(address indexed sender, uint256 amount);
 
     /* Storage */
+
     RaidenToken public token;
     Mint public mint;
     address public owner;
@@ -34,6 +37,7 @@ contract DutchAuction {
     mapping (address => bool) public bidders;
 
     /* Enums */
+
     enum Stages {
         AuctionDeployed,
         AuctionSetUp,
@@ -41,24 +45,27 @@ contract DutchAuction {
         AuctionEnded,
         TradingStarted
     }
+
     Stages public stage;
 
     /* Modifiers */
+
     modifier atStage(Stages _stage) {
-        assert(stage == _stage);
+        require(stage == _stage);
         _;
     }
 
     modifier isOwner() {
-        assert(msg.sender == owner);
+        require(msg.sender == owner);
         _;
     }
 
     modifier isValidPayload() {
-        assert(msg.data.length == 4 || msg.data.length == 36);
+        require(msg.data.length == 4 || msg.data.length == 36);
         _;
     }
 
+    // TODO: I don't think we should have state changes in a modifier
     modifier timedTransitions() {
         if (stage == Stages.AuctionStarted && (now > endTime || totalCollateralReceived == collateralCeiling))
             finalizeAuction();
@@ -72,28 +79,31 @@ contract DutchAuction {
     /// @dev Contract constructor function sets owner.
     /// @param _collateralCeiling Auction collateralCeiling.
     /// @param _collateralFactor Auction price factor.
-    function DutchAuction(uint _collateralCeiling,
-                          uint _collateralFactor,
-                          uint _maxTokensAvailable,
-                          uint _minCollateralPerBidder,
-                          uint _maxCollateralFractionPerBidder,
-                          uint _mintingPeriodFactor,
-                          uint _mintingPeriodDevisorConstant,
-                          uint _waitingPeriod)
+    // TODO add the rest of the params
+    function DutchAuction(
+        uint _collateralCeiling,
+        uint _collateralFactor,
+        uint _maxTokensAvailable,
+        uint _minCollateralPerBidder,
+        uint _maxCollateralFractionPerBidder,
+        uint _mintingPeriodFactor,
+        uint _mintingPeriodDevisorConstant,
+        uint _waitingPeriod)
         public
     {
+        require(_collateralCeiling != 0 && _collateralFactor != 0);
+        require(_maxTokensAvailable != 0);
+        require(_minCollateralPerBidder != 0);
+        require(0 < _maxCollateralFractionPerBidder);
+        require(_maxCollateralFractionPerBidder <= 100);
+        require(_mintingPeriodFactor != 0 && _mintingPeriodDevisorConstant != 0);
+
         owner = msg.sender;
-        assert(_collateralCeiling != 0 && _collateralFactor != 0);
         collateralCeiling = _collateralCeiling;
         collateralFactor = _collateralFactor;
-        assert(_maxTokensAvailable != 0);
         maxTokensAvailable = _maxTokensAvailable;
-        assert(_minCollateralPerBidder != 0);
         minCollateralPerBidder = _minCollateralPerBidder;
-        assert(0 < _maxCollateralFractionPerBidder);
-        assert(_maxCollateralFractionPerBidder <= 100);
         maxCollateralFractionPerBidder = _maxCollateralFractionPerBidder;
-        assert(_mintingPeriodFactor != 0 && _mintingPeriodDevisorConstant != 0);
         mintingPeriodFactor = _mintingPeriodFactor;
         mintingPeriodDevisorConstant = _mintingPeriodDevisorConstant;
         waitingPeriod = _waitingPeriod;
@@ -106,28 +116,25 @@ contract DutchAuction {
         isOwner
         atStage(Stages.AuctionDeployed)
     {
-        for (uint i=0; i<_bidders.length; i++) {
-            assert(_bidders[i] != 0);
+        for (uint i = 0; i < _bidders.length; i++) {
+            assert(_bidders[i] != 0x0);
             bidders[_bidders[i]] = true;
         }
     }
 
     /// @dev Setup function sets external contracts' addresses.
     /// @param _mint the mint address.
-    function setup(address _mint)
-        public
-        isOwner
-        atStage(Stages.AuctionDeployed)
-    {
+    function setup(address _mint) public isOwner atStage(Stages.AuctionDeployed) {
         // register mint
-        assert(_mint != 0x0);
+        require(_mint != 0x0);
+
         mint = Mint(_mint);
-        assert(mint.isReady());
+
+        require(mint.isReady());
         assert(mint.maxMintable() - mint.totalMintingRightsGranted() >= maxTokensAvailable);
+
         stage = Stages.AuctionSetUp;
     }
-
-
 
     /// @dev Changes auction collateralCeiling and start price factor before auction is started.
     /// @param _collateralCeiling Updated auction collateralCeiling.
@@ -139,13 +146,11 @@ contract DutchAuction {
     {
         collateralCeiling = _collateralCeiling;
         collateralFactor = _collateralFactor;
+        // TODO should we have an event for this?
     }
 
     /// @dev Starts auction and sets startBlock.
-    function startAuction()
-        public
-        isOwner
-        atStage(Stages.AuctionSetUp)
+    function startAuction() public isOwner atStage(Stages.AuctionSetUp)
     {
         stage = Stages.AuctionStarted;
         startBlock = block.number;
@@ -154,11 +159,7 @@ contract DutchAuction {
 
     /// @dev Returns correct stage, even if a function with timedTransitions modifier has not yet been called yet.
     /// @return Returns current auction stage.
-    function updateStage()
-        public
-        timedTransitions
-        returns (Stages)
-    {
+    function updateStage() public timedTransitions returns (Stages) {
         return stage;
     }
 
@@ -173,10 +174,12 @@ contract DutchAuction {
         returns (uint amount)
     {
         // If a bid is done on behalf of a user via ShapeShift, the bidder address is set.
-        if (bidder == 0)
+        if (bidder == 0x0) {
             bidder = msg.sender;
+        }
+
         // check if whitelisted
-        assert(bidders[bidder]);
+        require(bidders[bidder]);
 
         // enforce percentage per bidder limit
         uint maxWeiAccepted = collateralCeiling * maxCollateralFractionPerBidder / 100;
@@ -195,21 +198,22 @@ contract DutchAuction {
         if (numWei > maxWeiAccepted) {
             numWei = maxWeiAccepted;
             // Send change back to bidder address. In case of a ShapeShift bid the user receives the change back directly.
-            assert(msg.value >= numWei);
+            require(msg.value >= numWei);
             uint refund = msg.value - numWei;
-            assert(bidder.send(refund));
+            bidder.transfer(refund); // tranfer throws automatically
         }
 
         // register bid
-        assert(numWei>0);
+        require(numWei > 0);
         bids[bidder] += numWei;
         BidSubmission(bidder, numWei);
 
         // enforce minimum required collateral per bidder, while allowing to add amounts later
-        assert(bids[bidder] > minCollateralPerBidder);
+        require(bids[bidder] > minCollateralPerBidder);
+
         totalCollateralReceived += numWei;
-        assert(totalCollateralReceived <= collateralCeiling);
-        assert(totalCollateralReceived * collateralFactor <= maxTokensAvailable);
+        require(totalCollateralReceived <= collateralCeiling);
+        require(totalCollateralReceived * collateralFactor <= maxTokensAvailable);
 
         // finalize if full
         if (totalCollateralReceived == collateralCeiling)
@@ -217,30 +221,23 @@ contract DutchAuction {
             finalizeAuction();
     }
 
-
     // mintingPeriodFactor: 10_000_000, mintingPeriodDevisorConstant: 1_000
     // starts with 27yrs, 4.5yrs @24hs, 2.4yrs @48hrs, 1.5yrs @72hrs
-    function calcMintingPeriod(uint elapsedBlocks)
-        constant
-        public
-        returns (uint)
-        {
-            return mintingPeriodFactor / (elapsedBlocks + mintingPeriodDevisorConstant);
-        }
+    function calcMintingPeriod(uint elapsedBlocks) constant public returns (uint) {
+        return mintingPeriodFactor / (elapsedBlocks + mintingPeriodDevisorConstant);
+    }
 
     function currentMintingPeriod()
         constant
         public
         atStage(Stages.AuctionStarted)
         returns (uint)
-        {
-            return calcMintingPeriod(block.number - startBlock);
-        }
-
-
-    function finalizeAuction()
-        private
     {
+        return calcMintingPeriod(block.number - startBlock);
+    }
+
+
+    function finalizeAuction() private {
         stage = Stages.AuctionEnded;
         endTime = now;
 
@@ -249,7 +246,7 @@ contract DutchAuction {
         finalMintingPeriod = calcMintingPeriod(elapsed);
 
         // Transfer funding to collateralize the token
-        assert(mint.addCollateral.value(this.balance)()); // FIXME double check
+        require(mint.addCollateral.value(this.balance)()); // FIXME double check
     }
 
     /// @dev registers minting rights for bidder after auction with the Mint
@@ -260,12 +257,13 @@ contract DutchAuction {
         timedTransitions
         atStage(Stages.TradingStarted)
     {
-        if (receiver == 0)
+        if (receiver == 0x0) {
             receiver = msg.sender;
+        }
         uint tokenCount = bids[receiver] * collateralFactor;
-        assert(tokenCount>0);
-        bids[receiver] = 0;
-        assert(mint.registerMintingRight(receiver, tokenCount, endTime, endTime + finalMintingPeriod));
-    }
+        require(tokenCount > 0);
 
+        bids[receiver] = 0;
+        require(mint.registerMintingRight(receiver, tokenCount, endTime, endTime + finalMintingPeriod));
+    }
 }
