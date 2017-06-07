@@ -23,7 +23,7 @@ contract RaidenToken is StandardToken {
     /*  Public functions */
 
     /// @dev Contract constructor function sets the mint contract address
-    /// @param _mint Address of dutch auction contract.
+    /// @param _mint Address of
     /// @param owners Array of addresses receiving preassigned tokens.
     /// @param numtokens Array of preassigned token amounts.
     function RaidenToken(address _mint, address[] owners, uint[] numtokens) public {

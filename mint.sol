@@ -16,7 +16,6 @@ contract Mint {
         uint endTime;
         uint total;
         uint issued;
-        bool has_rights;
     }
 
     mapping (address => MintingRight) minters;
@@ -108,21 +107,29 @@ contract Mint {
         require(msg.sender == mintingRightsGranter);
         require((stage == Stages.MintDeployed && msg.sender == owner) ||
                 (stage == Stages.MintSetUp && msg.sender != owner));
-        require(!minters[eligible].has_rights);
+        require(minters[eligible].total == 0);
         require(startTime < endTime);
+        require(totalMintingRightsGranted + num <= maxMintable);
 
         minters[eligible] = MintingRight({startTime: startTime,
                                           endTime: endTime,
                                           total: num,
-                                          issued: 0,
-                                          has_rights: true});
+                                          issued: 0});
         totalMintingRightsGranted += num;
-
-        require(totalMintingRightsGranted <= maxMintable);
-        require(minters[eligible].has_rights);
-
+        assert(minters[eligible].total = num);
         return true;
     }
+
+    // FIXME, can we return structs to calling contracts?
+    function getMintingRight(address eligible)
+        public
+        constant
+        returns (uint[] values)
+    {
+        MintingRight mr = minters[eligible];
+        return (mr.startTime, mr.endTime, mr.total, mr.issued)
+    }
+
 
     function transferMintingRight(address _eligible)
         public
@@ -130,21 +137,21 @@ contract Mint {
         atStage(Stages.CollateralProvided)
         returns (bool)
     {
-        require(minters[msg.sender].has_rights);
-        // right now we can only transfer mintin rights to an account that
-        // does not already have minting rights
-        require(!minters[_eligible].has_rights);
-
-        minters[_eligible] = minters[msg.sender];
-        minters[msg.sender] = MintingRight(0, 0, 0, 0, false);
+        require(minters[msg.sender].total > 0);
+        if (minters[_eligible].total > 0) {
+            // can only be added if matching minting period
+            require(minters[msg.sender].startTime == minters[_eligible].startTime);
+            require(minters[msg.sender].endTime == minters[_eligible].endTime);
+            minters[_eligible].total += minters[msg.sender].total;
+            minters[_eligible].issued += minters[msg.sender].issued;
+        } else {
+            minters[_eligible] = minters[msg.sender];
+        }
+        minters[msg.sender] = 0; // FIXME double check
         MintingRightTransferred(msg.sender, _eligible);
-
-        require(!minters[msg.sender].has_rights);
-        require(minters[_eligible].has_rights);
-
+        assert(minters[msg.sender].total == 0);
         return true;
     }
-
 
     // calc the max mintable amount for account
     function mintable(address account)
@@ -170,7 +177,6 @@ contract Mint {
 
         return mintableByNow - minter.issued;
     }
-
 
     // note: anyone can call mint
     function mint(uint num, address account)
