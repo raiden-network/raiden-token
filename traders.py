@@ -1,3 +1,4 @@
+from __future__ import division
 from exchange import SellOrder, BuyOrder, Exchange
 
 
@@ -54,6 +55,12 @@ class StrategyBase(object):
             trader.tokens += amount
         return amount
 
+    def sell(self, trader, amount):  # mkt order
+        assert trader.tokens >= amount
+        cost = trader.ex.sell_market(amount)
+        trader.cash += cost
+        trader.tokens -= amount
+
 
 class BuyAndHold(StrategyBase):
     "spends all cash to buy at market or limit"
@@ -73,25 +80,69 @@ class AverageIn(StrategyBase):
     def __init__(self, period, steps):
         self.period = period
         self.steps = steps
-        self.per_step = 0
-        self.last = None
+        self.intervals = None
+
+    def _amount(self, trader):
+        return trader.cash / self.steps
+
+    def _setup(self, trader):
+        amount = self._amount(trader)
+        self.intervals = []
+        for i in range(self.steps):
+            start = i * self.period / self.steps + trader.ex.time
+            self.intervals.append((start, amount))
 
     def trigger(self, trader):
-        if not self.last:
-            self.start = trader.ex.time
-        cash = trader.free_cash
+        if self.intervals is None:
+            self._setup(trader)
+        if self.intervals and self.intervals[0][0] <= trader.ex.time:
+            start, cash = self.intervals.pop(0)
+            self.buy(trader, cash)  # market order
 
 
-class AverageOut(StrategyBase):
+class AverageOut(AverageIn):
     "sells all tokens at market price over a certain period"
+
+    def _amount(self, trader):
+        return trader.tokens / self.steps
+
+    def trigger(self, trader):
+        if self.intervals is None:
+            self._setup(trader)
+        if self.intervals and self.intervals[0][0] <= trader.ex.time:
+            start, amount = self.intervals.pop(0)
+            self.sell(trader, amount)  # market order
 
 
 class TrailingStop(StrategyBase):
-    "sells tokens if price drops below a fraction of the max price seen"
+    "sells all tokens if price drops below a fraction of the max price seen"
+
+    def __init__(self, max_loss_fraction=0.3):
+        self.max_price = 0
+
+    def trigger(self, trader):
+        price = trader.ex.bid
+        self.max_price = max(self.max_price, price)
+        if price < self.max_price * (1 - self.max_loss_fraction):
+            self.sell(trader, trader.tokens)
 
 
 class TrendFollower(StrategyBase):
     "buys if if price is above a moving average, sells otherwise"
+    def __init__(self, period):
+        self.period = period
+
+    def _ma(self, ex): # simple moving average
+        oldest = ex.time - self.period
+        prices = [t.price for t in ex.ticker if t.time > oldest]
+        return sum(prices)/len(prices)
+
+    def trigger(self, trader):
+        ma = self._ma(trader.ex)
+        if trader.cash and trader.ex.ask > ma: # buy signal
+            self.buy(trader, trader.cash)
+        elif trader.tokens and trader.ex.ask < ma: # sell signal
+            self.sell(trader, trader.tokens)
 
 
 class Arbitrageur(StrategyBase):
