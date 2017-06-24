@@ -1,7 +1,7 @@
 from __future__ import division
 
-from token import Beneficiary, Auction
-from token import PriceSupplyCurve, ContinuousToken, xassert
+from ctoken import Beneficiary, Auction
+from ctoken import PriceSupplyCurve, ContinuousToken, xassert
 
 
 def test_curve():
