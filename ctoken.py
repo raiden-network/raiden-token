@@ -195,9 +195,37 @@ class ContinuousToken(object):
         return bid
 
     @property
-    def mktcap(self):  # use bid or ask price?
-        return self.bid * self.token.supply
+    def curve_price_auction(self):
+        return self.curve.cost(self._vsupply_auction, 1)
 
     @property
-    def valuation(self):  # FIXME
+    def curve_price(self):
+        return self.curve.cost(self._vsupply, 1)
+
+    @property
+    def mktcap(self):
+        return self.ask * self.token.supply
+
+    @property
+    def valuation(self):  # (ask - bid) * supply
         return self.mktcap - self.reserve_value
+
+    @property
+    def max_mktcap(self):
+        vsupply = self.curve.supply_at_price(self.ask) - self._skipped_supply
+        return self.ask * vsupply
+
+    @property
+    def max_valuation(self):  # FIXME
+        return self.max_mktcap * self.beneficiary.fraction
+
+    # def valuation_after_create(self, value):
+    #     # calc supply after adding value
+    #     reserve = self.reserve_value + value
+    #     vsa = self.curve.supply(reserve) + self._auction_added_supply  # FIXME at crossing
+    #     ask = self.curve.cost(vsa, 1)
+    #     issued = vsa - self._vsupply_auction
+    #     supply = self.token.supply + issued
+    #     mktcap = ask * supply
+    #     valuation = mktcap - reserve
+    #     return valuation
