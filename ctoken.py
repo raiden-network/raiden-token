@@ -106,9 +106,9 @@ class ContinuousToken(object):
     # supplies
 
     @property
-    def _vsupply(self):
+    def _notional_supply(self):
         """"
-        virtual supply according to reserve_value
+        supply according to reserve_value
         self.token.supply + self._skipped_supply"
         """
         return self.curve.supply(self.reserve_value)
@@ -120,7 +120,7 @@ class ContinuousToken(object):
         return self.curve.supply(self.reserve_value) - self.token.supply
 
     @property
-    def _auction_added_supply(self):
+    def _simulated_supply(self):
         """
         current auction price converted to additional supply
         note: this is virtual skipped supply,
@@ -132,20 +132,20 @@ class ContinuousToken(object):
         return 0
 
     @property
-    def _vsupply_auction(self):
-        return self._vsupply + self._auction_added_supply
+    def _arithmetic_supply(self):
+        return self._notional_supply + self._simulated_supply
 
     # cost of selling, purchasing tokens
 
     def _sale_cost(self, num):  # cost
         assert num >= 0
         added = num / (1 - self.beneficiary.fraction)
-        return self.curve.cost(self._vsupply_auction, added)
+        return self.curve.cost(self._arithmetic_supply, added)
 
     def _purchase_cost_CURVE(self, num):
         "the value offered if tokens are bought back"
         assert num >= 0 and num <= self.token.supply
-        c = -self.curve.cost(self._vsupply_auction, -num)
+        c = -self.curve.cost(self._arithmetic_supply, -num)
         return c
 
     def _purchase_cost_LINEAR(self, num):
@@ -160,10 +160,10 @@ class ContinuousToken(object):
 
     @property
     def isauction(self):
-        return self._auction_added_supply > 0
+        return self._simulated_supply > 0
 
     def create(self, value, recipient=None):
-        s = self._vsupply_auction
+        s = self._arithmetic_supply
         issued = self.curve.issued(s, value)
         sold = issued * (1 - self.beneficiary.fraction)
         seigniorage = issued - sold  # FIXME implement limits
@@ -196,11 +196,11 @@ class ContinuousToken(object):
 
     @property
     def curve_price_auction(self):
-        return self.curve.cost(self._vsupply_auction, 1)
+        return self.curve.cost(self._arithmetic_supply, 1)
 
     @property
     def curve_price(self):
-        return self.curve.cost(self._vsupply, 1)
+        return self.curve.cost(self._notional_supply, 1)
 
     @property
     def mktcap(self):
@@ -222,9 +222,9 @@ class ContinuousToken(object):
     # def valuation_after_create(self, value):
     #     # calc supply after adding value
     #     reserve = self.reserve_value + value
-    #     vsa = self.curve.supply(reserve) + self._auction_added_supply  # FIXME at crossing
+    #     vsa = self.curve.supply(reserve) + self._simulated_supply  # FIXME at crossing
     #     ask = self.curve.cost(vsa, 1)
-    #     issued = vsa - self._vsupply_auction
+    #     issued = vsa - self._arithmetic_supply
     #     supply = self.token.supply + issued
     #     mktcap = ask * supply
     #     valuation = mktcap - reserve

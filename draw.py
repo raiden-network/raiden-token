@@ -32,10 +32,11 @@ def draw(ticks):
 
     # PRICES
     chart('CT_Sale_Price')
-    chart('Market_Price')
-    chart('CT_Auction_Price')
-    chart('CT_Base_Price')
+    if MARKETSIM:
+        chart('Market_Price')
+    chart('CT_Simulated_Price')
     chart('CT_Purchase_Price')
+    chart('CT_Reserve_Based_Price')
 
     # Valuations
     chart2('MktCap')

@@ -83,11 +83,11 @@ def test_auction_raw():
     auction = Auction(factor=10**5, const=10**3)
     beneficiary = Beneficiary(issuance_fraction=0)
     ct = ContinuousToken(curve, beneficiary, auction)
-    assert ct._vsupply == 0
+    assert ct._notional_supply == 0
 
     # buy tokens
     num = 1
-    tcost = curve.cost(ct._vsupply_auction, num)
+    tcost = curve.cost(ct._arithmetic_supply, num)
     cost = ct._sale_cost(num)
     assert cost == tcost
     sold = ct.create(cost)
@@ -120,7 +120,7 @@ def test_auction():
     xassert(num, ct.token.supply)
     print 'bought:', sold, 'at ask:', ask, ' cost:', cost, 'ask after:', ct.ask
     assert ct.token.supply == sold
-    assert ct._vsupply >= ct.token.supply, (ct._vsupply, ct.token.supply)
+    assert ct._notional_supply >= ct.token.supply, (ct._notional_supply, ct.token.supply)
     assert ct.reserve_value == cost
     assert ct.ask > auction.price_surcharge
     assert ct.bid < ct.ask, (ct.bid, ct.ask)
@@ -151,9 +151,9 @@ def test():
     assert ct.token.supply == sold
     assert ct.token.supply == ct.curve.supply(ct.reserve_value)
     assert ct._skipped_supply == 0, ct._skipped_supply
-    assert ct._vsupply == ct.token.supply
+    assert ct._notional_supply == ct.token.supply
     assert ct.token.accounts[None] == sold
-    assert ct._vsupply == ct.token.supply, (ct._vsupply, ct.token.supply)
+    assert ct._notional_supply == ct.token.supply, (ct._notional_supply, ct.token.supply)
     assert ct.reserve_value == cost
     assert ct.ask > ask
     assert ct.bid < ct.ask, (ct.bid, ct.ask)
@@ -163,7 +163,7 @@ def test():
     received = ct.destroy(num)
     assert ct.token.supply >= 0
     xassert(ct.token.supply, 0)
-    assert ct._vsupply == 0
+    assert ct._notional_supply == 0
     assert ct.ask == ask
 
 
@@ -186,7 +186,7 @@ def test_beneficiary():
     assert ct.token.accounts[None] == sold
     assert ct.token.accounts[beneficiary] == ct.token.supply - sold
     num_beneficiary = ct.token.accounts[beneficiary]
-    assert ct._vsupply >= ct.token.supply, (ct._vsupply, ct.token.supply)
+    assert ct._notional_supply >= ct.token.supply, (ct._notional_supply, ct.token.supply)
     assert ct.reserve_value == cost
     assert ct.ask > ask
     assert ct.bid < ct.ask, (ct.bid, ct.ask)
@@ -208,7 +208,7 @@ def test_beneficiary():
     received = ct.destroy(num_beneficiary, beneficiary)
     xassert(received, pcost)
     assert ct.token.supply == 0
-    xassert(ct._vsupply, ct.token.supply)
+    xassert(ct._notional_supply, ct.token.supply)
     assert ct.ask < ask
 
 
@@ -230,7 +230,7 @@ def test_auction_with_beneficiary():
     assert ct.token.accounts[None] == sold
     assert ct.token.accounts[beneficiary] == ct.token.supply - sold
     num_beneficiary = ct.token.accounts[beneficiary]
-    assert ct._vsupply >= ct.token.supply, (ct._vsupply, ct.token.supply)
+    assert ct._notional_supply >= ct.token.supply, (ct._notional_supply, ct.token.supply)
     assert ct.reserve_value == cost
     assert ct.ask > ask
     assert ct.bid < ct.ask, (ct.bid, ct.ask)
@@ -252,7 +252,7 @@ def test_auction_with_beneficiary():
     received = ct.destroy(num_beneficiary, beneficiary)
     xassert(received, pcost)
     assert ct.token.supply == 0
-    xassert(ct._vsupply, ct.token.supply)
+    xassert(ct._notional_supply, ct.token.supply)
     assert ct.ask < ask
 
 

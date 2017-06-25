@@ -83,11 +83,11 @@ class Simulation(object):
                  Max_MktCap=self.ct.max_mktcap,
                  Max_Valuation=self.ct.max_valuation,
                  CT_Reserve=self.ct.reserve_value,
-                 CT_Base_Price=self.ct.curve_price,
+                 CT_Reserve_Based_Price=self.ct.curve_price,
                  CT_Supply=self.ct.token.supply,
-                 CT_Virtual_Supply=self.ct._vsupply_auction,
-                 CT_Reserve_Based_Supply=self.ct._vsupply,
-                 CT_Virtual_Supply_Auction=self.ct._auction_added_supply,
+                 CT_Arithmetic_Supply=self.ct._arithmetic_supply,
+                 CT_Notional_Supply=self.ct._notional_supply,
+                 CT_Simulated_Supply=self.ct._simulated_supply,
                  CT_Skipped_Supply=self.ct._skipped_supply,
                  CT_Spread=self.ct.ask - self.ct.bid
                  )
@@ -105,7 +105,7 @@ class Simulation(object):
                 self.report()
                 if not self.investments:
                     break
-            self.tick(CT_Auction_Price=self.ct.curve_price_auction)
+            self.tick(CT_Simulated_Price=self.ct.curve_price_auction)
             if not self.ct.isauction:
                 break
 
