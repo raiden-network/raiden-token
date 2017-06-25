@@ -1,5 +1,6 @@
 from __future__ import division
-from exchange import SellOrder, BuyOrder, Exchange
+from exchange import SellOrder, BuyOrder, Exchange, NotAvailable
+import random
 
 
 class Trader(object):
@@ -10,7 +11,12 @@ class Trader(object):
         self.cash = cash
         self.tokens = tokens
         self.strategy = strategy
-        self._orders = []
+        self.pending = []  # pending orders
+
+    def __repr__(self):
+        return '<{} cash:{} tokens:{} strategy:{}'.format(self.__class__.__name__,
+                                                          self.cash, self.tokens,
+                                                          self.strategy)
 
     def callback(self, o, price, amount):
         if isinstance(o, SellOrder):
@@ -23,24 +29,48 @@ class Trader(object):
         assert self.cash >= 0
         assert self.tokens >= 0
         if o.amount == 0:
-            self.orders.remove(o)
+            try:
+                self.pending.remove(o)
+            except ValueError:
+                pass  # FIXME
 
     def trigger(self):
+        # print self, 'trigger', self.strategy
         self.strategy.trigger(self)
 
     @property
     def free_cash(self):
-        return self.cash - sum(o.amount * o.price for o in self.orders if isinstance(o, BuyOrder))
+        return self.cash - sum(o.amount * o.price for o in self.pending if isinstance(o, BuyOrder))
 
     @property
     def free_tokens(self):
-        return self.tokens - sum(o.amount for o in self.orders if isinstance(o, SellOrder))
+        return self.tokens - sum(o.amount for o in self.pending if isinstance(o, SellOrder))
+
+    def place(self, o):
+        self.ex.place(o)
+        self.pending.append(o)
+
+    def cancel(self, o):
+        assert o in self.pending
+        try:
+            self.ex.cancel(o)
+        except:
+            print "WARNING, order not at ex", o
+
+        self.pending.remove(o)
 
 
 class StrategyBase(object):
 
+    def __repr__(self):
+        return '<{}>'.format(self.__class__.__name__)
+
     def trigger(self, trader):
-        pass
+        self._trigger(trader)
+        # try:
+        #     self._trigger(trader)
+        # except NotAvailable:
+        #     pass
 
     def buy(self, trader, cash, price=None):
         ex = trader.ex
@@ -48,18 +78,25 @@ class StrategyBase(object):
             amount = cash / price
             o = BuyOrder(price, amount, callback=trader.callback)
             ex.place(o)
+            trader.pending.append(o)
         else:  # market order
-            amount = ex.available(cash)
+            amount, cost = ex.buyable(cash)
+            if amount == 0:
+                return 0
             ex.buy_market(amount)
-            trader.cash -= cash
+            trader.cash -= cost
             trader.tokens += amount
         return amount
 
     def sell(self, trader, amount):  # mkt order
         assert trader.tokens >= amount
+        amount, cost = trader.ex.sellable(amount)
+        if amount == 0:
+            return 0
         cost = trader.ex.sell_market(amount)
         trader.cash += cost
         trader.tokens -= amount
+        return cost
 
 
 class BuyAndHold(StrategyBase):
@@ -68,16 +105,23 @@ class BuyAndHold(StrategyBase):
     def __init__(self, price_limit=None):
         self.price = price_limit
 
-    def trigger(self, trader):
+    def _trigger(self, trader):
         cash = trader.free_cash
         if cash:
-            self.buy(cash)
+            # self.buy(trader, cash)
+            # print trader.ex._sell_orders
+            price = trader.ex.ask * 0.99
+            amount = price / cash
+            if amount < 1:
+                return
+            o = BuyOrder(price, amount, callback=trader.callback)
+            trader.place(o)
 
 
 class AverageIn(StrategyBase):
     "spends all cash to buy at market price over a certain period"
 
-    def __init__(self, period, steps):
+    def __init__(self, period=3600, steps=10):
         self.period = period
         self.steps = steps
         self.intervals = None
@@ -92,12 +136,16 @@ class AverageIn(StrategyBase):
             start = i * self.period / self.steps + trader.ex.time
             self.intervals.append((start, amount))
 
-    def trigger(self, trader):
+    def _trigger(self, trader):
         if self.intervals is None:
             self._setup(trader)
         if self.intervals and self.intervals[0][0] <= trader.ex.time:
             start, cash = self.intervals.pop(0)
-            self.buy(trader, cash)  # market order
+            # self.buy(trader, cash)  # market order
+            price = trader.ex.ask * 0.99
+            amount = price / cash
+            o = BuyOrder(price, amount, callback=trader.callback)
+            trader.place(o)
 
 
 class AverageOut(AverageIn):
@@ -106,12 +154,15 @@ class AverageOut(AverageIn):
     def _amount(self, trader):
         return trader.tokens / self.steps
 
-    def trigger(self, trader):
+    def _trigger(self, trader):
         if self.intervals is None:
             self._setup(trader)
         if self.intervals and self.intervals[0][0] <= trader.ex.time:
             start, amount = self.intervals.pop(0)
-            self.sell(trader, amount)  # market order
+            # self.sell(trader, min(amount, trader.tokens))  # market order
+            price = trader.ex.bid * 1.01
+            o = SellOrder(price, amount, callback=trader.callback)
+            trader.place(o)
 
 
 class TrailingStop(StrategyBase):
@@ -119,9 +170,13 @@ class TrailingStop(StrategyBase):
 
     def __init__(self, max_loss_fraction=0.3):
         self.max_price = 0
+        self.max_loss_fraction = max_loss_fraction
 
-    def trigger(self, trader):
-        price = trader.ex.bid
+    def _trigger(self, trader):
+        try:
+            price = trader.ex.bid
+        except NotAvailable:
+            return
         self.max_price = max(self.max_price, price)
         if price < self.max_price * (1 - self.max_loss_fraction):
             self.sell(trader, trader.tokens)
@@ -129,20 +184,50 @@ class TrailingStop(StrategyBase):
 
 class TrendFollower(StrategyBase):
     "buys if if price is above a moving average, sells otherwise"
-    def __init__(self, period):
+
+    def __init__(self, period=60):
         self.period = period
 
-    def _ma(self, ex): # simple moving average
+    def _ma(self, ex):  # simple moving average
         oldest = ex.time - self.period
         prices = [t.price for t in ex.ticker if t.time > oldest]
-        return sum(prices)/len(prices)
+        if not prices:
+            raise NotAvailable()
+        return sum(prices) / len(prices)
 
-    def trigger(self, trader):
-        ma = self._ma(trader.ex)
-        if trader.cash and trader.ex.ask > ma: # buy signal
+    def _trigger(self, trader):
+        try:
+            ma = self._ma(trader.ex)
+            price = trader.ex.ask
+        except NotAvailable:
+            return
+        if trader.cash and price > ma:  # buy signal
             self.buy(trader, trader.cash)
-        elif trader.tokens and trader.ex.ask < ma: # sell signal
+        elif trader.tokens and price < ma:  # sell signal
             self.sell(trader, trader.tokens)
+
+
+class MarketMaker(StrategyBase):
+    """
+    simulates price based on a random walk
+    sets Bid and Ask offers
+    """
+
+    def __init__(self, start_price, mu, sigma):
+        self.price = start_price
+        self.mu = mu
+        self.sigma = sigma
+
+    def _trigger(self, trader):
+        for o in list(trader.pending):  # delete old orders
+            trader.cancel(o)
+        self.price *= random.normalvariate(self.mu, self.sigma)
+        ask = self.price * 1.01
+        amount = trader.cash / self.price
+        o = BuyOrder(self.price, amount, callback=trader.callback)
+        trader.place(o)
+        o = SellOrder(ask, trader.tokens, callback=trader.callback)
+        trader.place(o)
 
 
 class Arbitrageur(StrategyBase):
@@ -150,3 +235,55 @@ class Arbitrageur(StrategyBase):
     bridges ContinousToken and Exchange by selling/buying at market prices
     should not hold any tokens and have plenty of cash
     """
+
+
+def test():
+    random.seed(42)
+
+    exchange = Exchange()
+
+    max_tokens = 10000
+    max_amount = 100 * max_tokens
+    num_traders = 10
+    traders = []
+    strategies = [TrendFollower,
+                  TrailingStop,
+                  AverageIn,
+                  AverageOut,
+                  BuyAndHold]
+    strategies = [BuyAndHold, AverageOut]
+    # strategies = [BuyAndHold]
+
+    mms = MarketMaker(start_price=100, mu=1, sigma=0.01)  # sigma is variate per tick
+    market_maker = Trader(exchange, max_amount, max_tokens * num_traders, mms)
+    traders.append(market_maker)
+
+    for i in range(num_traders):
+        amount = random.randint(0, max_amount)
+        tokens = random.randint(0, max_tokens)
+        strategy_cls = random.choice(strategies)
+        trader = Trader(exchange, amount, tokens, strategy_cls())
+        traders.append(trader)
+
+    total_tokens = sum([t.tokens for t in traders])
+    # bootstrap
+
+    exchange.time = 1
+    end_time = 3600
+    interval = 10
+    while exchange.time < end_time:
+        exchange.time += interval
+        for t in traders:
+            t.trigger()
+
+    print '\n'.join([str(x) for x in exchange.ticker])
+    print exchange._sell_orders
+    print exchange._buy_orders
+
+    print traders
+
+    total_tokens2 = sum([t.tokens for t in traders])
+    assert total_tokens2 == total_tokens, (total_tokens2, total_tokens)
+
+if __name__ == '__main__':
+    test()

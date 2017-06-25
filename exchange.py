@@ -1,3 +1,4 @@
+from __future__ import division
 import bisect
 from collections import namedtuple
 
@@ -84,7 +85,7 @@ class Exchange(object):
             if not (bo >= so):
                 break
             # match
-            # print 'match', bo, so
+            print 'match', bo, so
             amount = min(bo.amount, so.amount)
             price = (so.price + bo.price) / 2
             # update orders
@@ -95,9 +96,12 @@ class Exchange(object):
             self.ticker.append(Tick(amount=amount, price=price, time=self.time))
 
     def _at_market(self, amount, lst, dryrun=False):
-        # print '_at_market', amount, lst, dryrun
-        if amount > sum(o.amount for o in lst):
-            raise NotAvailable()
+        assert amount > 0
+        print '_at_market', amount, lst, dryrun
+        # if amount > sum(o.amount for o in lst):
+        #     s = sum(o.amount for o in lst)
+        #     print s, amount, amount > s, type(s), type(amount), amount - s > 0
+        #     raise NotAvailable()
         cost = 0
         for o in list(lst):
             a = min(amount, o.amount)
@@ -123,7 +127,7 @@ class Exchange(object):
     def buy_cost(self, amount):
         return self.buy_market(amount, dryrun=True)
 
-    def available(self, cash):
+    def buyable(self, cash, partial=True):
         amount = 0
         for o in self._sell_orders:
             a = min(o.amount, cash / o.price)
@@ -131,17 +135,34 @@ class Exchange(object):
             cash -= a * o.price
             if cash == 0:
                 break
-        if cash > 0:
+        if cash > 0 and not partial:
             raise NotAvailable()
-        return amount
+        return amount, cash
+
+    def sellable(self, amount, partial=True):
+        target = amount
+        cash = 0
+        for o in reversed(self._buy_orders):
+            a = min(o.amount, amount)
+            amount -= a
+            cash += a * o.price
+            if amount == 0:
+                break
+        if amount > 0 and not partial:
+            raise NotAvailable()
+        return target - amount, cash
 
     @property
     def bid(self):
-        return self._buy_orders[-1]
+        if not len(self._buy_orders):
+            raise NotAvailable()
+        return self._buy_orders[-1].price
 
     @property
     def ask(self):
-        return self._sell_orders[0]
+        if not len(self._sell_orders):
+            raise NotAvailable()
+        return self._sell_orders[0].price
 
     @property
     def spread(self):
@@ -208,4 +229,5 @@ def test():
 
     print ex.ticker
 
-test()
+if __name__ == '__main__':
+    test()
