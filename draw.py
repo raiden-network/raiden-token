@@ -1,6 +1,6 @@
 # Learn about API authentication here: https://plot.ly/python/getting-started
 # Find your api_key here: https://plot.ly/settings/api
-
+import collections
 import plotly.plotly as py
 import plotly.graph_objs as go
 from plotly import tools
@@ -8,9 +8,11 @@ from plotly import tools
 
 def draw(ticks):
 
-    if False:  # remove most of initial auction
+    if True:  # remove most of initial auction
         ticks_r = [t for t in ticks if t['CT_Reserve'] > 0]
-        ticks = ticks[-int(len(ticks_r) * 1.1):]
+        ticks = ticks[-int(len(ticks_r) * 1.2):]
+
+    MARKETSIM = bool([t for t in ticks if 'Market_Price' in t])
 
     def tdata(key):
         return [(t['time'], t[key]) for t in ticks if key in t]
@@ -46,29 +48,31 @@ def draw(ticks):
 
     # Supplies
     chart('CT_Supply', traces3)
-    chart('CT_Virtual_Supply', traces3)
-    chart('CT_Virtual_Supply_Auction', traces3)
+    chart('CT_Notional_Supply', traces3)
+    chart('CT_Simulated_Supply', traces3)
     chart('CT_Skipped_Supply', traces3)
-    chart('CT_Reserve_Based_Supply', traces3)
+    chart('CT_Arithmetic_Supply', traces3)
 
     # Changes
-    for key in ['CT_Supply', 'CT_Sale_Price', 'CT_Purchase_Price', 'CT_Spread',
-                'MktCap', 'Valuation', 'CT_Reserve', 'Market_Price']:
-        chart('Change_' + key, traces4)
+    if MARKETSIM:
+        for key in ['CT_Supply', 'CT_Sale_Price', 'CT_Purchase_Price', 'CT_Spread',
+                    'MktCap', 'Valuation', 'CT_Reserve', 'Market_Price']:
+            chart('Change_' + key, traces4)
 
-    fig = tools.make_subplots(rows=4, cols=1,
-                              subplot_titles=('Prices', 'Valuation', 'Supply', 'Changes'))
+    ######
+    SHOW = collections.OrderedDict(
+        Prices=traces1,
+        # Valuation=traces2,
+        # Supply=traces3,
+        # Changes=traces4
+    )
 
-    for t in traces1:
-        fig.append_trace(t, 1, 1)
-    for t in traces2:
-        fig.append_trace(t, 2, 1)
-    for t in traces3:
-        fig.append_trace(t, 3, 1)
-    for t in traces4:
-        fig.append_trace(t, 4, 1)
+    fig = tools.make_subplots(rows=len(SHOW), cols=1,
+                              subplot_titles=SHOW.keys())
 
-    fig['layout'].update(title='Continuous Token Auction')
-    # fig['layout'].update(yaxis=dict(title='price'))
-    # fig['layout'].update(yaxis2=dict(title='value'))
+    for i, traces in enumerate(SHOW.values()):
+        for t in traces:
+            fig.append_trace(t, i + 1, 1)
+
+    fig['layout'].update(title='Continuous Token')
     plot_url = py.plot(fig, filename='continuoustoken')
