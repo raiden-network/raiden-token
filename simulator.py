@@ -88,6 +88,7 @@ class Simulation(object):
                  CT_Arithmetic_Supply=self.ct._arithmetic_supply,
                  CT_Notional_Supply=self.ct._notional_supply,
                  CT_Simulated_Supply=self.ct._simulated_supply,
+                 CT_Simulated_Price=self.ct.curve_price_auction,
                  CT_Skipped_Supply=self.ct._skipped_supply,
                  CT_Spread=self.ct.ask - self.ct.bid
                  )

@@ -10,7 +10,7 @@ def draw(ticks):
 
     if True:  # remove most of initial auction
         ticks_r = [t for t in ticks if t['CT_Reserve'] > 0]
-        ticks = ticks[-int(len(ticks_r) * 1.2):]
+        ticks = ticks[-int(len(ticks_r) * 1.5):]
 
     MARKETSIM = bool([t for t in ticks if 'Market_Price' in t])
 
@@ -48,13 +48,13 @@ def draw(ticks):
 
     # Supplies
     chart('CT_Supply', traces3)
-    chart('CT_Notional_Supply', traces3)
-    chart('CT_Simulated_Supply', traces3)
+    #chart('CT_Notional_Supply', traces3)
+    #chart('CT_Simulated_Supply', traces3)
     chart('CT_Skipped_Supply', traces3)
     chart('CT_Arithmetic_Supply', traces3)
 
     # Changes
-    if MARKETSIM:
+    if False and MARKETSIM:
         for key in ['CT_Supply', 'CT_Sale_Price', 'CT_Purchase_Price', 'CT_Spread',
                     'MktCap', 'Valuation', 'CT_Reserve', 'Market_Price']:
             chart('Change_' + key, traces4)
@@ -62,8 +62,8 @@ def draw(ticks):
     ######
     SHOW = collections.OrderedDict(
         Prices=traces1,
-        # Valuation=traces2,
-        # Supply=traces3,
+        Valuation=traces2,
+        Supply=traces3,
         # Changes=traces4
     )
 
@@ -75,4 +75,4 @@ def draw(ticks):
             fig.append_trace(t, i + 1, 1)
 
     fig['layout'].update(title='Continuous Token')
-    plot_url = py.plot(fig, filename='continuoustoken')
+    plot_url = py.plot(fig, filename='continuoustoken3  ')
