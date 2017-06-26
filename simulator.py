@@ -106,36 +106,54 @@ class Simulation(object):
                 self.report()
                 if not self.investments:
                     break
-            self.tick(CT_Simulated_Price=self.ct.curve_price_auction)
+            self.tick()
             if not self.ct.isauction:
                 break
 
-    def run_trading(self, max_elapsed, stddev, period_factor):
+    def run_trading(self, max_elapsed, stddev, period_factor, initial_valuation=None):
         ct = self.ct
         steps = (max_elapsed - ct.auction.elapsed) / self.step
         median = period_factor ** (1 / steps)
-        mkt_valuation = self.ct.valuation
+        mkt_valuation = initial_valuation or self.ct.valuation
+        assert mkt_valuation > 0
+
         while ct.auction.elapsed < max_elapsed:
             ct.auction.elapsed += self.step
             # random walk on valuation
             mkt_valuation *= random.normalvariate(median, stddev)
             # convert to exchange price
             spread = ct.ask - ct.bid
-            f = mkt_valuation / ct.valuation
+
+            ct_valuation = ct.valuation or ct.max_valuation
+            ct_valuation = ct.max_valuation
+            assert ct_valuation > 0
+
+            f = mkt_valuation / ct_valuation
             ex_price = ct.bid + spread * f
+            print ex_price, ct.ask, spread, f, mkt_valuation, ct_valuation
+
+            if self.ticker:
+                assert self.ticker[-1]['Market_Price'] >= 0.9 * ex_price
+
             if ex_price > ct.ask:
-                assert ct.valuation < mkt_valuation, (ct.valuation, mkt_valuation)
-                added_reserve = (mkt_valuation - ct.valuation) * \
-                    ct.reserve_value / ct.valuation
+                assert ct_valuation < mkt_valuation, (ct_valuation, mkt_valuation)
+                f = (ct.reserve_value / ct_valuation) or 1
+                added_reserve = f * (mkt_valuation - ct_valuation)
+                print added_reserve, f
                 ct.create(added_reserve)
-                assert ct.valuation > mkt_valuation, (ct.valuation, mkt_valuation)
+                # FIXME
+                # assert ct_valuation > mkt_valuation, (ct_valuation, mkt_valuation)
+                print self.ticker[-1]
+                print ex_price, ct.ask, spread, f, mkt_valuation, ct_valuation
+                # assert False
+
             self.tick(Market_Price=ex_price,
                       MktCap=ex_price * ct.token.supply,
                       Valuation=mkt_valuation)
 
 
 def main():
-    random.seed(42)
+    random.seed(43)
     ct = gen_token()
     num_investors = 30
     total_investable = 100 * 10**6
@@ -144,24 +162,18 @@ def main():
     investments = gen_investments(num_investors, total_investable, median_valuation, std_deviation)
 
     sim = Simulation(ct, investments[:])
-    sim.run_auction(3600 * 48)
-    a = sim.ticker[-1]
 
-    print 'max valuation', max(i.valuation for i in investments)
-    print 'min valuation', min(i.valuation for i in investments)
-    print 'avg valuation', sum(i.valuation for i in investments) / len(investments)
-    print 'max investment', max(i.value for i in investments)
-    print 'min investment', min(i.value for i in investments)
-    print 'not invested', len(sim.investments)
-    print len(sim.ticker)
-    print sim.ticker[0]
-    print a
+    if False:
+        sim.run_auction(3600 * 48)
+
+    tstart = len(sim.ticker)
 
     if True:
-        sim.run_trading(ct.auction.elapsed * 1.2 * 1.2, stddev=0.025, period_factor=2)
+        sim.run_trading(3600 * 12, stddev=0.025, period_factor=1.5,
+                        initial_valuation=median_valuation)
 
+    if False:  # calc changes
         e = sim.ticker[-1]
-        tstart = sim.ticker.index(a)
         s = sim.ticker[tstart + 1]
         for i, t in enumerate(sim.ticker):
             for key in ['CT_Supply', 'CT_Sale_Price', 'CT_Purchase_Price', 'CT_Spread',
@@ -172,6 +184,14 @@ def main():
                 else:
                     t[n] = 1
         print e
+
+    print 'max valuation', max(i.valuation for i in investments)
+    print 'min valuation', min(i.valuation for i in investments)
+    print 'avg valuation', sum(i.valuation for i in investments) / len(investments)
+    print 'max investment', max(i.value for i in investments)
+    print 'min investment', min(i.value for i in investments)
+    print 'not invested', len(sim.investments)
+    print len(sim.ticker)
 
     draw(sim.ticker)
 
