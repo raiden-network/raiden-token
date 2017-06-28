@@ -1,6 +1,8 @@
 pragma solidity ^0.4.0;
 
 contract Beneficiary {
+    // Fraction of all issued tokens
+    // This is the source of funding
     uint public fraction;
 
     function Beneficiary(uint issuance_fraction) {
@@ -78,7 +80,7 @@ contract PriceSupplyCurve {
 
 contract Token {
 
-    //accounts (dict)
+    mapping(address => uint256) public accounts;
 
     function Token() {}
 
@@ -90,18 +92,26 @@ contract Token {
     }
 
     function balanceOf(address _owner) constant returns (uint256 balance) {
-        // return self.accounts.get(address, 0)
+        return accounts[_owner];
     }
 
     function transfer(address _to, uint256 _value) returns (bool success) {
-        /*
-        assert self.accounts[_from] >= value
-        self.accounts[_from] -= value
-        self.accounts[_to] += value
-        */
+        // assert self.accounts[_from] >= value
+        if(balanceOf(msg.sender) < _value)
+            throw;
+
+        accounts[msg.sender] -= _value;
+        accounts[_to] += _value;
     }
 
-    function transferFrom(address _from, address _to, uint256 _value) returns (bool success);
+    function transferFrom(address _from, address _to, uint256 _value) returns (bool success) {
+        // assert self.accounts[_from] >= value
+        if(balanceOf(_from) < _value)
+            throw;
+
+        accounts[_from] -= _value;
+        accounts[_to] += _value;
+    }
 
     function approve(address _spender, uint256 _value) returns (bool success);
     function allowance(address _owner, address _spender) returns (uint256 value);
@@ -110,20 +120,18 @@ contract Token {
     event Approval(address indexed _owner, address indexed _spender, uint256 _value);
 
     // Custom functions
-    function issue(uint num, address recipient) {
-        /*
-        if recipient not in self.accounts:
-            self.accounts[recipient] = 0
-        self.accounts[recipient] += num
-        */
+    function issue(uint _num, address _recipient) {
+        if(!accounts[_recipient])
+            accounts[_recipient] = 0;
+        accounts[_recipient] += _num;
     }
 
-	function destroy(uint num, address owner) {
-	    /*
-	    if self.accounts[owner] < num:
-            raise InsufficientFundsError('{} < {}'.format(self.accounts[owner], num))
-        self.accounts[owner] -= num
-        */
+	function destroy(uint _num, address _owner) {
+        // InsufficientFundsError
+        if(accounts[_owner] < _num)
+            throw;
+
+        accounts[_owner] -= _num;
 	}
 
 }
@@ -133,6 +141,9 @@ contract ContinuousToken {
     Auction auction;
     Beneficiary beneficiary;
     Token token = Token();
+
+    // Amount of currency raised from selling/issuing tokens
+    // Cumulated sales price
     uint256 reserve_value = 0;
 
     // uint80 constant None = uint80(0);
@@ -306,7 +317,7 @@ contract ContinuousToken {
     }
 
     function valuation() returns (uint256 value) {
-        return mktcap() - reserve_value();
+        return mktcap() - reserve_value;
     }
 
     function max_mktcap() returns (uint256 value) {
