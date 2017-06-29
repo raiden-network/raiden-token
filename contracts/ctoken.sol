@@ -1,146 +1,14 @@
-pragma solidity ^0.4.0;
-
-contract Beneficiary {
-    // Fraction of all issued tokens
-    // This is the source of funding
-    uint public fraction;
-
-    function Beneficiary(uint issuance_fraction) {
-        fraction = issuance_fraction;
-    }
-}
-
-contract Auction {
-    uint256 factor;
-    uint256 const;
-    uint256 elapsed = 0;
-
-    function Auction(uint256 _factor, uint256 _const) {
-        factor = _factor;
-        _const = const;
-    }
-
-    function price_surcharge() returns(uint256 value) {
-        return factor / elapsed + const;
-    }
-}
-
-contract PriceSupplyCurve {
-    uint256 factor;
-    uint256 public base_price;
-
-    function PriceSupplyCurve(uint256 _factor, uint256 _base_price) {
-        factor = _factor;
-        base_price = _base_price;
-    }
-
-    // supply - no of tokens?
-    function price(uint256 _supply) returns (uint256 value) {
-        return base_price + factor * _supply;
-    }
-
-    // sqrt implementation!
-    function sqrt(uint256 _value) returns (uint256 value);
-
-    // see what this calculates exactly
-    function supply(uint256 _reserve) returns (uint256 value) {
-        return (-base_price + sqrt(base_price**2 + 2 * factor * _reserve)) / factor;
-    }
-
-    function supply_at_price(uint256 _price) returns (uint256 value) {
-        // assert price >= self.b
-        if(_price < base_price)
-            throw;
-
-        return (_price - base_price) / factor;
-    }
-
-    function reserve(uint256 _supply) returns (uint256 value) {
-        return base_price * _supply + factor / 2 * _supply**2;
-    }
-
-    function reserve_at_price(uint256 _price) returns (uint256 value) {
-        // assert price >= 0
-        if(_price < 0)
-            throw;
-
-        return reserve(supply_at_price(_price));
-    }
-
-    function cost(uint256 _supply, uint256 _num) returns (uint256 value) {
-        return reserve(_supply + _num) - reserve(_supply);
-    }
-
-    function issued(uint256 _supply, uint256 _value) returns (uint256 value) {
-        uint256 _reserve = reserve(_supply);
-        return supply(_reserve + _value) - supply(_reserve);
-    }
-}
-
-
-contract Token {
-
-    mapping(address => uint256) public accounts;
-
-    function Token() {}
-
-    // ERC20
-
-    // supply
-    function totalSupply() constant returns (uint256 supply) {
-        // return sum(self.accounts.values())
-    }
-
-    function balanceOf(address _owner) constant returns (uint256 balance) {
-        return accounts[_owner];
-    }
-
-    function transfer(address _to, uint256 _value) returns (bool success) {
-        // assert self.accounts[_from] >= value
-        if(balanceOf(msg.sender) < _value)
-            throw;
-
-        accounts[msg.sender] -= _value;
-        accounts[_to] += _value;
-    }
-
-    function transferFrom(address _from, address _to, uint256 _value) returns (bool success) {
-        // assert self.accounts[_from] >= value
-        if(balanceOf(_from) < _value)
-            throw;
-
-        accounts[_from] -= _value;
-        accounts[_to] += _value;
-    }
-
-    function approve(address _spender, uint256 _value) returns (bool success);
-    function allowance(address _owner, address _spender) returns (uint256 value);
-
-    event Transfer(address indexed _from, address indexed _to, uint256 _value);
-    event Approval(address indexed _owner, address indexed _spender, uint256 _value);
-
-    // Custom functions
-    function issue(uint _num, address _recipient) {
-        if(!accounts[_recipient])
-            accounts[_recipient] = 0;
-        accounts[_recipient] += _num;
-    }
-
-	function destroy(uint _num, address _owner) {
-        // InsufficientFundsError
-        if(accounts[_owner] < _num)
-            throw;
-
-        accounts[_owner] -= _num;
-	}
-
-}
+pragma solidity ^0.4.2;
+import "./token.sol";
+import "./auction.sol";
+import "./beneficiary.sol";
+import "./price_supply_curve.sol";
 
 contract ContinuousToken {
     PriceSupplyCurve curve;
     Auction auction;
     Beneficiary beneficiary;
-    Token token = Token();
+    Token token = new Token();
 
     // Amount of currency raised from selling/issuing tokens
     // Cumulated sales price
@@ -172,14 +40,15 @@ contract ContinuousToken {
     }
 
     // almost_equal
-    function xequal(uint256 _a, uint256 _b, uint256 threshold) returns (bool almost_equal) {
+    function xassert(uint256 _a, uint256 _b) returns (bool almost_equal) {
         // threshold = 0.0001;
+        // uint256 threshold
 
         if(min(_a, _b) > 0) {
-            //assert abs(a - b) / min(a, b) <= threshold, (a, b)
+            //assert(abs(a - b) / min(a, b) <= threshold, (a, b));
         }
 
-        // assert abs(a - b) <= threshold, (a, b)
+        // assert(abs(a - b) <= threshold, (a, b));
         return true;
     }
 
@@ -193,10 +62,7 @@ contract ContinuousToken {
 
     function _skipped_supply() returns (uint256 value) {
         //tokens that were not issued, due to higher prices during the auction
-        //assert self.token.supply <= self.curve.supply(self.reserve_value)
-        if(token.totalSupply() > curve.supply(reserve_value))
-            throw;
-
+        assert(token.totalSupply() <= curve.supply(reserve_value));
         return curve.supply(reserve_value) - token.totalSupply();
     }
 
@@ -206,7 +72,7 @@ contract ContinuousToken {
         note: this is virtual skipped supply,
         so we must not include the skipped supply
         */
-        if(auction.price_surcharge() >= curve.base_price) {
+        if(auction.price_surcharge() >= curve.base_p()) {
             uint256 s = curve.supply_at_price(auction.price_surcharge());
             return max(0, s - _skipped_supply());
         }
@@ -219,20 +85,14 @@ contract ContinuousToken {
 
     // cost of selling, purchasing tokens
     function _sale_cost(uint256 _num) returns (uint256 value) {
-        // assert num >= 0
-        if(_num < 0)
-            throw;
-
-        uint256 added = _num / (1 - beneficiary.fraction);
+        assert(_num >= 0);
+        uint256 added = _num / (1 - beneficiary.get_fraction());
         return curve.cost(_arithmetic_supply(), added);
     }
 
     function _purchase_cost_CURVE(uint256 _num) returns (uint256 value) {
         // the value offered if tokens are bought back
-        // assert num >= 0 and num <= self.token.supply
-        if(_num < 0 && _num > token.totalSupply())
-            throw;
-
+        assert(_num >= 0 && _num <= token.totalSupply());
         uint256 c = -curve.cost(_arithmetic_supply(), -_num);
         return c;
     }
@@ -240,10 +100,7 @@ contract ContinuousToken {
     // _purchase_cost_LINEAR
     function _purchase_cost(uint256 _num) returns (uint256 value) {
         // the value offered if tokens are bought back
-        // assert num >= 0 and num <= self.token.supply
-        if(_num < 0 && _num > token.totalSupply())
-            throw;
-
+        assert(_num >= 0 && _num <= token.totalSupply());
         uint256 c = reserve_value * _num / token.totalSupply();
         return c;
     }
@@ -253,7 +110,7 @@ contract ContinuousToken {
 
     // Public functions
 
-    function isauction() returns (uint256 value) {
+    function isauction() returns (bool value) {
         return _simulated_supply() > 0;
     }
 
@@ -262,7 +119,7 @@ contract ContinuousToken {
 
         uint256 s = _arithmetic_supply();
         uint256 issued = curve.issued(s, _value);
-        uint256 sold = issued * (1 - beneficiary.fraction);
+        uint256 sold = issued * (1 - beneficiary.get_fraction());
         uint256 seigniorage = issued - sold;  // FIXME implement limits
 
         token.issue(sold, _recipient);
@@ -277,10 +134,7 @@ contract ContinuousToken {
         uint256 _value = _purchase_cost(_num);
         token.destroy(_num, _owner);  // can throw
 
-        //assert value < self.reserve_value or xassert(value, self.reserve_value)
-        if(_value > reserve_value || !xequal(_value, reserve_value))
-            throw;
-
+        assert(_value < reserve_value || xassert(_value, reserve_value));
         _value = min(_value, reserve_value);
         reserve_value -= _value;
         return _value;
@@ -293,14 +147,10 @@ contract ContinuousToken {
     }
 
     function bid() returns (uint256 value) {
-        if(!reserve_value)
+        if(reserve_value == 0x0) // ?
             return 0;
         uint256 bid = _purchase_cost(1);
-        //assert bid <= self.ask, (bid, self.ask)
-
-        if(bid > ask())
-            throw;
-
+        assert(bid <= ask());
         return bid;
     }
 
@@ -321,13 +171,13 @@ contract ContinuousToken {
     }
 
     function max_mktcap() returns (uint256 value) {
-        uint256 vsupply = curve.supply_at_price(ask) - _skipped_supply();
+        uint256 vsupply = curve.supply_at_price(ask()) - _skipped_supply();
         return ask() * vsupply;
     }
 
     function max_valuation() returns (uint256 value) {
         // FIXME
-        return max_mktcap() * beneficiary.fraction;
+        return max_mktcap() * beneficiary.get_fraction();
     }
 
 }
