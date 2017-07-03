@@ -77,7 +77,7 @@ contract Auction {
         logAuctionEnded(price, total_issuance);
 
         for(uint i = 0; i < addresses.length; i++) {
-            uint num_issued = total_issuance * bidders[addresses[i]] / token.reserve_value();
+            uint num_issued = SafeMath.mul(total_issuance, bidders[addresses[i]]) / token.reserve_value();
             token._issue(num_issued, addresses[i]);
         }
 
@@ -107,12 +107,12 @@ contract Auction {
             bidders[_recipient] = 0;
             addresses.push(_recipient);
         }
-        bidders[_recipient] += _value;
+        bidders[_recipient] = SafeMath.add(bidders[_recipient], _value);
     }
 
     function price_surcharge() returns(uint) {
-        uint elapsed = block.number - startBlock;
-        return factor / elapsed + const;
+        uint elapsed = SafeMath.sub(block.number, startBlock);
+        return SafeMath.add(factor / elapsed, const);
     }
 
     function ask() returns (uint) {
@@ -120,7 +120,8 @@ contract Auction {
     }
 
     function missing_reserve_to_end_auction() returns (uint) {
-        return SafeMath.max256(0, token.reserve(_simulated_supply()) - token.reserve_value());
+        uint missing_reserve = SafeMath.sub(token.reserve(_simulated_supply()), token.reserve_value());
+        return SafeMath.max256(0, missing_reserve);
     }
 
     function _notional_supply() returns (uint) {
@@ -156,20 +157,20 @@ contract Auction {
 
         // apply beneficiary fraction to wei - bigger number, we lose less when rounding
         uint arithm = _arithmetic_supply();
-        return  token.cost(arithm - token.benfr(arithm) , _num);
+        return token.cost(SafeMath.sub(arithm, token.benfr(arithm)), _num);
     }
 
     function mktcap() returns (uint) {
-        return ask() * token.totalSupply();
+        return SafeMath.mul(ask(), token.totalSupply());
     }
 
     function valuation() returns (uint) {
-        return SafeMath.max256(0, mktcap() - token.reserve_value());
+        return SafeMath.max256(0, SafeMath.sub(mktcap(), token.reserve_value()));
     }
 
     function max_mktcap() returns (uint) {
         uint vsupply = token.supply_at_price(ask());
-        return ask() * vsupply;
+        return SafeMath.mul(ask(), vsupply);
     }
 
     function max_valuation() returns (uint) {

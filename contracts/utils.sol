@@ -38,11 +38,11 @@ library Utils {
         else if (a <= 3)
             return 1;
 
-        uint z = (a + 1) / 2;
+        uint z = SafeMath.add(a, 1) / 2;
         b = a;
         while (z < b) {
             b = z;
-            z = (a / z + z) / 2;
+            z = SafeMath.add(a / z, z) / 2;
         }
     }
 

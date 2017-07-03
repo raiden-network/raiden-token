@@ -46,14 +46,14 @@ contract ContinuousToken is StandardToken {
         if(_value > rest) {
             _value = SafeMath.max256(_value, rest);
         }
-        reserve_value += _value;
+        reserve_value = SafeMath.add(reserve_value, _value);
         auction.order(_recipient, _value);
         if(auction.finalized())
             auction.finalizeAuction();
     }
 
     function _create(uint _value, address _recipient) private returns (uint) {
-        reserve_value += _value;
+        reserve_value = SafeMath.add(reserve_value, _value);
         uint s = supply(reserve_value);
         return _issue(issued(s, _value), _recipient);
     }
@@ -67,13 +67,13 @@ contract ContinuousToken is StandardToken {
         // TODO replace beneficiary.fraction
         // uint sold = _num * (1 - beneficiary.fraction);
         // TODO replace this with fraction from supply
-        uint sold = _num - benfr(_num);
-        uint seigniorage = _num - sold;  // FIXME implement limits
+        uint sold = SafeMath.sub(_num, benfr(_num));
+        uint seigniorage = SafeMath.sub(_num, sold);  // FIXME implement limits
 
         StandardToken.issue(sold, _recipient);
         StandardToken.issue(seigniorage, beneficiary);
         // TODO: do we need this anymore?
-        // reserve_value += _value;
+        // reserve_value = SafeMath.add(reserve_value, _value);
         return sold;
     }
 
@@ -86,7 +86,7 @@ contract ContinuousToken is StandardToken {
         uint _value = purchase_cost(_num);
         assert(_value < reserve_value || Utils.xassert(_value, reserve_value, 0, 0));
         _value = SafeMath.min256(_value, reserve_value);
-        reserve_value -= _value;
+        reserve_value = SafeMath.sub(reserve_value, _value);
         // return _value;
     }
 
@@ -95,7 +95,7 @@ contract ContinuousToken is StandardToken {
             _supply = totalSupply;
         }
         // TODO factor?
-        return base_price + factor(_supply);
+        return SafeMath.add(base_price, factor(_supply));
     }
 
     function supply(uint _reserve) constant returns (uint) {
@@ -103,14 +103,17 @@ contract ContinuousToken is StandardToken {
             _reserve = reserve_value;
         }
         // TODO factor?
-        return (- base_price + Utils.sqrt(base_price**2 + factor(2 * reserve_value))) / factor(1);
+        uint sqrt = Utils.sqrt(
+            SafeMath.add(
+                base_price**2,
+                factor(SafeMath.mul(2, reserve_value))
+            ));
+        return SafeMath.sub(sqrt, base_price) / factor(1);
     }
 
     function supply_at_price(uint _price) constant returns (uint) {
-        assert(_price >= base_price);
-
         // TODO factor?
-        return (_price - base_price) / factor(1);
+        return SafeMath.sub(_price, base_price) / factor(1);
     }
 
     function reserve(uint _supply) constant returns (uint) {
@@ -119,7 +122,10 @@ contract ContinuousToken is StandardToken {
         }
 
         // TODO factor?
-        return base_price * _supply + factor(_supply**2) / 2;
+        return SafeMath.add(
+            SafeMath.mul(base_price, _supply),
+            factor(_supply**2) / 2
+        );
     }
 
     function reserve_at_price(uint _price) constant returns (uint) {
@@ -129,13 +135,19 @@ contract ContinuousToken is StandardToken {
 
     // Calculate cost for a number of tokens
     function cost(uint _supply, uint _num) constant returns (uint) {
-        return reserve(_supply + _num) - reserve(_supply);
+        return SafeMath.sub(
+            reserve(SafeMath.add(_supply, _num)),
+            reserve(_supply)
+        );
     }
 
     // Calculate number of tokens issued for a certain value at a certain supply
     function issued(uint _supply, uint _value) constant returns (uint) {
         uint _reserve = reserve(_supply);
-        return supply(_reserve + _value) - supply(_reserve);
+        return SafeMath.sub(
+            supply(SafeMath.add(_reserve, _value)),
+            supply(_reserve)
+        );
     }
 
     function purchase_cost(uint _num) returns (uint) {
@@ -145,17 +157,33 @@ contract ContinuousToken is StandardToken {
             return 0;
 
         assert(_num >= 0 && _num <= totalSupply);
-        uint c = reserve_value * _num / totalSupply;
+        uint c = SafeMath.mul(reserve_value, _num) / totalSupply;
         return c;
     }
 
+    function mktcap(uint _supply) returns (uint) {
+        return SafeMath.mul(
+            price(totalSupply),
+            totalSupply
+        );
+    }
+
+    // TODO implement this
+    /*function supply_at_mktcap(self, m, skipped=0) returns (uint) {
+        b, f = self.b, self.f
+        f = self.f
+        b = (self.b + skipped * self.f)
+        s = (-b + sqrt(b**2 - 4 * f * -m)) / (2 * f)
+        return s
+    }*/
+
     // We apply this for the supply, in order to lose less when rounding (wei)
     function benfr(uint _supply) public returns (uint) {
-        return _supply * beneficiary_fr / 10**beneficiary_fr_dec;
+        return SafeMath.mul(_supply, beneficiary_fr) / 10**beneficiary_fr_dec;
     }
 
     // We apply this for the supply, in order to lose less when rounding (wei)
     function factor(uint _supply) public returns (uint) {
-        return _supply * price_factor / 10**price_factor_dec;
+        return SafeMath.mul(_supply, price_factor) / 10**price_factor_dec;
     }
 }
