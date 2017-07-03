@@ -3,16 +3,6 @@ pragma solidity ^0.4.11;
 import "./safe_math.sol";
 
 library Utils {
-    using SafeMath for *;
-
-    function min(uint a, uint b) returns (uint) {
-        return SafeMath.min256(a, b);
-    }
-
-    function max(uint a, uint b) returns (uint) {
-        return SafeMath.max256(a, b);
-    }
-
     function num_digits(int number) internal returns (uint) {
         uint digits = 0;
         while (number != 0) {
@@ -22,7 +12,7 @@ library Utils {
         return digits;
     }
 
-    function validate_fr(uint fraction, uint decimals) returns (uint, uint) {
+    function validate_fr(uint fraction, uint decimals) internal returns (uint, uint) {
         uint dec = num_digits(int(fraction));
         if(decimals == 0x0) {
             decimals = dec;
@@ -31,7 +21,7 @@ library Utils {
         return (fraction, decimals);
     }
 
-    function fraction_complement(uint fraction, uint decimals) returns (uint) {
+    function fraction_complement(uint fraction, uint decimals) internal returns (uint) {
         return 10**decimals - fraction;
     }
 
@@ -42,7 +32,7 @@ library Utils {
         return uint(a);
     }
 
-    function sqrt(uint a) returns (uint b) {
+    function sqrt(uint a) internal returns (uint b) {
         if (a == 0)
             return 0;
         else if (a <= 3)
@@ -56,8 +46,8 @@ library Utils {
         }
     }
 
-    function xassert(uint a, uint b, uint threshold, uint threshold_dec) returns (bool) {
-        if(threshold == 0x0) {
+    function xassert(uint a, uint b, uint threshold, uint threshold_dec) internal returns (bool) {
+        if(threshold == 0) {
             // default threshold = 0.0001;
 
             threshold = 1;
@@ -67,8 +57,8 @@ library Utils {
             (threshold, threshold_dec) = validate_fr(threshold, threshold_dec);
         }
 
-        if(min(a, b) > 0) {
-            assert(abs(int(a - b)) / min(a, b) <= threshold);
+        if(SafeMath.min256(a, b) > 0) {
+            assert(abs(int(a - b)) / SafeMath.min256(a, b) <= threshold);
         }
 
         assert(abs(int(a - b)) <= threshold);

@@ -1,55 +1,58 @@
 pragma solidity ^0.4.11;
 
+/// @title Abstract token contract - Functions to be implemented by token contracts.
 contract Token {
+    function transfer(address to, uint256 value) returns (bool success);
+    function transferFrom(address from, address to, uint256 value) returns (bool success);
+    function approve(address spender, uint256 value) returns (bool success);
 
-    uint supply = 0;
-    mapping(address => uint) public accounts;
+    // This is not an abstract function, because solc won't recognize generated getter functions for public variables as functions.
+    function totalSupply() constant returns (uint256 supply) {}
+    function balanceOf(address owner) constant returns (uint256 balance);
+    function allowance(address owner, address spender) constant returns (uint256 remaining);
 
-    function Token() {}
+    event Transfer(address indexed from, address indexed to, uint256 value);
+    event Approval(address indexed owner, address indexed spender, uint256 value);
+}
 
-    // ERC20
+/// @title Standard token contract - Standard token interface implementation.
+contract StandardToken is Token {
+    mapping(address => uint) public balances;
+    uint public totalSupply;
 
-    function totalSupply() constant returns (uint supply) {
-        return supply;
+    /* Events */
+
+    event Issued(address indexed receiver, uint num, uint _totalSupply);
+    event Destroyed(address indexed receiver, uint num, uint _totalSupply);
+
+    function balanceOf(address _owner) constant returns (uint) {
+        return balances[_owner];
     }
 
-    function balanceOf(address _owner) constant returns (uint balance) {
-        return accounts[_owner];
+    function transfer(address _to, uint _value) public returns (bool) {
+        assert(balances[msg.sender] >= _value);
+        balances[msg.sender] -= _value;
+        balances[_to] += _value;
     }
 
-    function transfer(address _to, uint _value) returns (bool success) {
-        assert(accounts[msg.sender] >= _value);
-        accounts[msg.sender] -= _value;
-        accounts[_to] += _value;
+    function transferFrom(address _from, address _to, uint _value) public returns (bool) {
+        assert(balances[_from] >= _value);
+        balances[_from] -= _value;
+        balances[_to] += _value;
     }
 
-    function transferFrom(address _from, address _to, uint _value) returns (bool success) {
-        assert(accounts[_from] >= _value);
-        accounts[_from] -= _value;
-        accounts[_to] += _value;
-    }
-
-    //function approve(address _spender, uint _value) returns (bool success);
-    //function allowance(address _owner, address _spender) returns (uint value);
-
-    event Transfer(address indexed _from, address indexed _to, uint _value);
-    event Approval(address indexed _owner, address indexed _spender, uint _value);
-
-    // Custom functions
-    function issue(uint _num, address _recipient) {
-        if(accounts[_recipient] != 0x0)
-            accounts[_recipient] = 0;
-        accounts[_recipient] += _num;
-        supply += _num;
+    function issue(uint _num, address _recipient) public {
+        if(balances[_recipient] != 0x0)
+            balances[_recipient] = 0;
+        balances[_recipient] += _num;
+        totalSupply += _num;
+        Issued(_recipient, _num, totalSupply);
     }
 
 	function destroy(uint _num, address _owner) {
-        // InsufficientFundsError
-        if(accounts[_owner] < _num)
-            throw;
-
-        accounts[_owner] -= _num;
-        supply -= _num;
+        assert(balances[_owner] >= _num);
+        balances[_owner] -= _num;
+        totalSupply -= _num;
+        Destroyed(_owner, _num, totalSupply);
 	}
-
 }

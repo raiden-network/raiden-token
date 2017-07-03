@@ -1,158 +1,161 @@
 pragma solidity ^0.4.11;
+
 import "./token.sol";
 import "./auction.sol";
-import "./beneficiary.sol";
-import "./price_supply_curve.sol";
 import "./safe_math.sol";
 import "./utils.sol";
 
-contract ContinuousToken {
-    using SafeMath for *;
-    using Utils for *;
+contract ContinuousToken is StandardToken {
 
-    PriceSupplyCurve curve;
-    Auction auction;
-    Beneficiary beneficiary;
-    Token token = new Token();
+    string constant public name = "Continuous Token";
+    string constant public symbol = ""; // TODO
+    uint8 constant public decimals = 18; // TODO
 
     // Amount of currency raised from selling/issuing tokens
     // Cumulated sales price
-    uint reserve_value = 0;
+    uint public reserve_value = 0;
+    uint public base_price;
+    uint public price_factor;
+    uint public price_factor_dec;
+    uint beneficiary_fr;
+    uint beneficiary_fr_dec;
+    Auction auction;
+    address public beneficiary;
 
-    // uint80 constant None = uint80(0);
-
-    function ContinuousToken(PriceSupplyCurve _curve, Beneficiary _beneficiary, Auction _auction) {
-        curve = _curve;
-        beneficiary = _beneficiary;
-        auction = _auction;
+    // TODO: preassigned tokens ?
+    function ContinuousToken(address _auction, uint _base_price, uint _price_factor, uint _price_factor_dec, uint _beneficiary_fr, uint _beneficiary_fr_dec) {
+        auction = Auction(_auction);
+        beneficiary = msg.sender;
+        base_price = _base_price;
+        price_factor = _price_factor;
+        price_factor_dec = _price_factor_dec;
+        beneficiary_fr = _beneficiary_fr;
+        beneficiary_fr_dec = _beneficiary_fr_dec;
+        totalSupply = 0;
     }
 
-    function _notional_supply() returns (uint value) {
-        /*
-        supply according to reserve_value
-        self.token.supply + self._skipped_supply"
-        */
-        return curve.supply(reserve_value);
+    // TODO return something?
+    function create(uint _value, address _recipient) public {
+        if(auction.isauction())
+            _create_during_auction(_value, _recipient);
+        _create(_value, _recipient);
     }
 
-    function _skipped_supply() returns (uint value) {
-        //tokens that were not issued, due to higher prices during the auction
-        assert(token.totalSupply() <= curve.supply(reserve_value));
-        return curve.supply(reserve_value) - token.totalSupply();
-    }
-
-    function _simulated_supply() returns (uint value) {
-        /*
-        current auction price converted to additional supply
-        note: this is virtual skipped supply,
-        so we must not include the skipped supply
-        */
-        if(auction.price_surcharge() >= curve.bprice()) {
-            uint s = curve.supply_at_price(auction.price_surcharge());
-            return Utils.max(0, s - _skipped_supply());
+    function _create_during_auction(uint _value, address _recipient) private {
+        uint rest = auction.missing_reserve_to_end_auction();
+        if(_value > rest) {
+            _value = SafeMath.max256(_value, rest);
         }
-        return 0;
-    }
-
-    function _arithmetic_supply() returns (uint value) {
-        return _notional_supply() + _simulated_supply();
-    }
-
-    // cost of selling, purchasing tokens
-    function _sale_cost(uint _num) returns (uint value) {
-        assert(_num >= 0);
-        uint added = _num / (1 - beneficiary.get_fraction());
-        return curve.cost(_arithmetic_supply(), added);
-    }
-
-    function _purchase_cost_CURVE(uint _num) returns (uint value) {
-        // the value offered if tokens are bought back
-        assert(_num >= 0 && _num <= token.totalSupply());
-        uint c = -curve.cost(_arithmetic_supply(), -_num);
-        return c;
-    }
-
-    // _purchase_cost_LINEAR
-    function _purchase_cost(uint _num) returns (uint value) {
-        // the value offered if tokens are bought back
-        assert(_num >= 0 && _num <= token.totalSupply());
-        uint c = reserve_value * _num / token.totalSupply();
-        return c;
-    }
-
-    //see how this works in Solidity
-    // _purchase_cost = _purchase_cost_LINEAR;
-
-    // Public functions
-
-    function isauction() returns (bool value) {
-        return _simulated_supply() > 0;
-    }
-
-    function create(uint _value, address _recipient) returns (uint value) {
-        // recipient = None (default)
-
-        uint s = _arithmetic_supply();
-        uint issued = curve.issued(s, _value);
-        uint sold = issued * (1 - beneficiary.get_fraction());
-        uint seigniorage = issued - sold;  // FIXME implement limits
-
-        token.issue(sold, _recipient);
-        token.issue(seigniorage, beneficiary);
         reserve_value += _value;
+        auction.order(_recipient, _value);
+        if(auction.finalized())
+            auction.finalizeAuction();
+    }
+
+    function _create(uint _value, address _recipient) private returns (uint) {
+        reserve_value += _value;
+        uint s = supply(reserve_value);
+        return _issue(issued(s, _value), _recipient);
+    }
+
+    // TODO override StandardToken.issue
+    function _issue(uint _num, address _recipient) returns (uint) {
+        // deactivate token.issue until auction has ended
+        // during the auction one would call auction.order
+        assert(!auction.isauction());
+
+        // TODO replace beneficiary.fraction
+        // uint sold = _num * (1 - beneficiary.fraction);
+        // TODO replace this with fraction from supply
+        uint sold = _num - benfr(_num);
+        uint seigniorage = _num - sold;  // FIXME implement limits
+
+        StandardToken.issue(sold, _recipient);
+        StandardToken.issue(seigniorage, beneficiary);
+        // TODO: do we need this anymore?
+        // reserve_value += _value;
         return sold;
     }
 
-    function destroy(uint _num, address _owner) returns (uint value) {
-        // _owner=None
+    function destroy(uint _num, address _owner) public {
+        // tokens can not be destroyed until the auction was finalized
+        assert(auction.finalized());
 
-        uint _value = _purchase_cost(_num);
-        token.destroy(_num, _owner);  // can throw
+        StandardToken.destroy(_num, _owner);  // can throw
 
-        assert(_value < reserve_value || Utils.xassert(_value, reserve_value, 0x0, 0x0));
-        _value = Utils.min(_value, reserve_value);
+        uint _value = purchase_cost(_num);
+        assert(_value < reserve_value || Utils.xassert(_value, reserve_value, 0, 0));
+        _value = SafeMath.min256(_value, reserve_value);
         reserve_value -= _value;
-        return _value;
+        // return _value;
     }
 
-    // Public const functions
-
-    function ask() returns (uint value) {
-        return _sale_cost(1);
+    function price(uint _supply) constant returns (uint) {
+        if(_supply == 0x0) {
+            _supply = totalSupply;
+        }
+        // TODO factor?
+        return base_price + factor(_supply);
     }
 
-    function bid() returns (uint value) {
-        if(reserve_value == 0x0) // ?
+    function supply(uint _reserve) constant returns (uint) {
+        if(_reserve == 0x0) {
+            _reserve = reserve_value;
+        }
+        // TODO factor?
+        return (- base_price + Utils.sqrt(base_price**2 + factor(2 * reserve_value))) / factor(1);
+    }
+
+    function supply_at_price(uint _price) constant returns (uint) {
+        assert(_price >= base_price);
+
+        // TODO factor?
+        return (_price - base_price) / factor(1);
+    }
+
+    function reserve(uint _supply) constant returns (uint) {
+        if(_supply == 0x0) {
+            _supply = totalSupply;
+        }
+
+        // TODO factor?
+        return base_price * _supply + factor(_supply**2) / 2;
+    }
+
+    function reserve_at_price(uint _price) constant returns (uint) {
+        assert(_price >= 0);
+        return reserve(supply_at_price(_price));
+    }
+
+    // Calculate cost for a number of tokens
+    function cost(uint _supply, uint _num) constant returns (uint) {
+        return reserve(_supply + _num) - reserve(_supply);
+    }
+
+    // Calculate number of tokens issued for a certain value at a certain supply
+    function issued(uint _supply, uint _value) constant returns (uint) {
+        uint _reserve = reserve(_supply);
+        return supply(_reserve + _value) - supply(_reserve);
+    }
+
+    function purchase_cost(uint _num) returns (uint) {
+        // the value offered if tokens are bought back
+
+        if(totalSupply == 0)
             return 0;
-        uint bid = _purchase_cost(1);
-        assert(bid <= ask());
-        return bid;
+
+        assert(_num >= 0 && _num <= totalSupply);
+        uint c = reserve_value * _num / totalSupply;
+        return c;
     }
 
-    function curve_price_auction() returns (uint value) {
-        return curve.cost(_arithmetic_supply(), 1);
+    // We apply this for the supply, in order to lose less when rounding (wei)
+    function benfr(uint _supply) public returns (uint) {
+        return _supply * beneficiary_fr / 10**beneficiary_fr_dec;
     }
 
-    function curve_price() returns (uint value) {
-        return curve.cost(_notional_supply(), 1);
+    // We apply this for the supply, in order to lose less when rounding (wei)
+    function factor(uint _supply) public returns (uint) {
+        return _supply * price_factor / 10**price_factor_dec;
     }
-
-    function mktcap() returns (uint value) {
-        return ask() * token.totalSupply();
-    }
-
-    function valuation() returns (uint value) {
-        return mktcap() - reserve_value;
-    }
-
-    function max_mktcap() returns (uint value) {
-        uint vsupply = curve.supply_at_price(ask()) - _skipped_supply();
-        return ask() * vsupply;
-    }
-
-    function max_valuation() returns (uint value) {
-        // FIXME
-        return max_mktcap() * beneficiary.get_fraction();
-    }
-
 }
