@@ -192,6 +192,7 @@ contract ContinuousToken is StandardToken {
     }
 
     function purchase_cost(uint _num)
+        constant
         returns (uint)
     {
         // the value offered if tokens are bought back
@@ -205,6 +206,7 @@ contract ContinuousToken is StandardToken {
     }
 
     function mktcap(uint _supply)
+        constant
         returns (uint)
     {
         return SafeMath.mul(
@@ -213,7 +215,7 @@ contract ContinuousToken is StandardToken {
         );
     }
 
-    // TODO implement this
+    // TODO
     /*function supply_at_mktcap(self, m, skipped=0) returns (uint) {
         b, f = self.b, self.f
         f = self.f
@@ -225,6 +227,7 @@ contract ContinuousToken is StandardToken {
     // We apply this for the supply, in order to lose less when rounding (wei)
     function benfr(uint _supply)
         public
+        constant
         returns (uint)
     {
         return SafeMath.mul(_supply, beneficiary_fr) / 10**beneficiary_fr_dec;
@@ -233,6 +236,7 @@ contract ContinuousToken is StandardToken {
     // We apply this for the supply, in order to lose less when rounding (wei)
     function factor(uint _supply)
         public
+        constant
         returns (uint)
     {
         return SafeMath.mul(_supply, price_factor) / 10**price_factor_dec;

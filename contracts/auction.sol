@@ -13,7 +13,7 @@ contract Auction {
     mapping(address => uint256) public bidders; // value_by_buyer
     // For iterating over the addresses
     address[] addresses;
-	ContinuousToken token;
+    ContinuousToken token;
 
     enum Stages {
         AuctionDeployed,
@@ -107,6 +107,7 @@ contract Auction {
 
     function isauction()
         public
+        constant
         returns (bool)
     {
         return simulated_supply() >= notional_supply();
@@ -114,6 +115,7 @@ contract Auction {
 
     function finalized()
         public
+        constant
         returns (bool)
     {
         return stage == Stages.AuctionEnded;
@@ -132,6 +134,7 @@ contract Auction {
     }
 
     function price_surcharge()
+        constant
         returns(uint)
     {
         uint elapsed = SafeMath.sub(block.number, startBlock);
@@ -140,6 +143,7 @@ contract Auction {
 
     function ask()
         public
+        constant
         returns (uint)
     {
         return _sale_cost(1);
@@ -147,6 +151,7 @@ contract Auction {
 
     function missing_reserve_to_end_auction()
         public
+        constant
         atStage(Stages.AuctionStarted)
         returns (uint)
     {
@@ -159,6 +164,7 @@ contract Auction {
 
     function notional_supply()
         public
+        constant
         returns (uint)
     {
         /*
@@ -169,6 +175,7 @@ contract Auction {
 
     function simulated_supply()
         public
+        constant
         atStage(Stages.AuctionStarted)
         returns (uint)
     {
@@ -184,6 +191,7 @@ contract Auction {
 
     function _arithmetic_supply()
         public
+        constant
         returns (uint)
     {
         if(isauction())
@@ -193,6 +201,7 @@ contract Auction {
 
     // Cost of selling, purchasing tokens
     function _sale_cost(uint _num)
+        constant
         returns (uint)
     {
         // TODO check beneficiary fraction
@@ -210,6 +219,7 @@ contract Auction {
 
     function mktcap()
         public
+        constant
         returns (uint)
     {
         return SafeMath.mul(ask(), token.totalSupply());
@@ -217,6 +227,7 @@ contract Auction {
 
     function valuation()
         public
+        constant
         returns (uint)
     {
         return SafeMath.max256(0, SafeMath.sub(mktcap(), token.reserve_value()));
@@ -224,6 +235,7 @@ contract Auction {
 
     function max_mktcap()
         public
+        constant
         returns (uint)
     {
         uint vsupply = token.supply_at_price(ask());
@@ -232,6 +244,7 @@ contract Auction {
 
     function max_valuation()
         public
+        constant
         returns (uint)
     {
         // FIXME
@@ -241,17 +254,17 @@ contract Auction {
         return token.benfr(max_mktcap());
     }
 
-    /*
     function curve_price_auction()
+        constant
         returns (uint)
     {
         return token.cost(_arithmetic_supply(), 1);
     }
 
     function curve_price()
+        constant
         returns (uint)
     {
         return token.cost(notional_supply(), 1);
     }
-    */
 }
