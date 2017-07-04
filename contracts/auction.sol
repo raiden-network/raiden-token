@@ -1,8 +1,8 @@
 pragma solidity ^0.4.11;
 
-import "./safe_math.sol";
-import "./utils.sol";
-import "./ctoken.sol";
+import './safe_math.sol';
+import './utils.sol';
+import './ctoken.sol';
 
 contract Auction {
     address public owner;
@@ -79,14 +79,14 @@ contract Auction {
         startBlock = block.number;
     }
 
-    // TODO check if call from token
+    // TODO check if call from token; public?
     function finalizeAuction()
         atStage(Stages.AuctionStarted)
     {
-        require(notional_supply() >= simulated_supply());
+        require(reserveSupply() >= simulatedSupply());
 
         uint price = ask();
-        uint total_issuance = notional_supply();
+        uint total_issuance = reserveSupply();
         LogAuctionEnded(price, total_issuance);
 
         for(uint i = 0; i < addresses.length; i++) {
@@ -95,9 +95,8 @@ contract Auction {
         }
 
         Utils.xassert(token.reserve(token.totalSupply()), token.reserve_value(), 0, 0);
-        Utils.xassert(token.totalSupply(), notional_supply(), 0, 0);
+        Utils.xassert(token.totalSupply(), reserveSupply(), 0, 0);
 
-        // assert it is not used anymore, even if tokens would be destroyed
         assert(token.totalSupply() == total_issuance);
         assert(token.totalSupply() > 0);
 
@@ -105,12 +104,12 @@ contract Auction {
         endBlock = now;
     }
 
-    function isauction()
+    function isAuction()
         public
         constant
         returns (bool)
     {
-        return simulated_supply() >= notional_supply();
+        return simulatedSupply() >= reserveSupply();
     }
 
     function finalized()
@@ -133,91 +132,58 @@ contract Auction {
         bidders[_recipient] = SafeMath.add(bidders[_recipient], _value);
     }
 
-    function price_surcharge()
-        constant
-        returns(uint)
-    {
-        uint elapsed = SafeMath.sub(block.number, startBlock);
-        return SafeMath.add(factor / elapsed, const);
-    }
-
     function ask()
         public
         constant
         returns (uint)
     {
-        return _sale_cost(1);
+        return saleCost(1);
     }
 
-    function missing_reserve_to_end_auction()
+    function missingReserveToEndAuction()
         public
         constant
         atStage(Stages.AuctionStarted)
         returns (uint)
     {
         uint missing_reserve = SafeMath.sub(
-            token.reserve(simulated_supply()),
+            token.reserve(simulatedSupply()),
             token.reserve_value()
         );
         return SafeMath.max256(0, missing_reserve);
     }
 
-    function notional_supply()
+    function reserveSupply()
         public
         constant
         returns (uint)
     {
-        /*
-        supply according to reserve_value
-        */
+        // supply according to reserve_value
         return token.supply(token.reserve_value());
     }
 
-    function simulated_supply()
+    function simulatedSupply()
         public
         constant
         atStage(Stages.AuctionStarted)
         returns (uint)
     {
-        /*
-        current auction price converted to additional supply
-        note: this is virtual skipped supply,
-        so we must not include the skipped supply
-        */
-        if(isauction() && price_surcharge() >= token.base_price())
-            return token.supply_at_price(price_surcharge());
+        // get supply based on the simulated price at current timestamp
+        if(isAuction() && priceSurcharge() >= token.base_price()) {
+            return token.supplyAtPrice(priceSurcharge());
+        }
         return 0;
     }
 
-    function _arithmetic_supply()
+    function maxSupply()
         public
         constant
         returns (uint)
     {
-        if(isauction())
-            return simulated_supply();
-        return notional_supply();
+        return SafeMax.max256(simulatedSupply(), reserveSupply());
     }
 
-    // Cost of selling, purchasing tokens
-    function _sale_cost(uint _num)
-        constant
-        returns (uint)
-    {
-        // TODO check beneficiary fraction
-        // uint added = _num / (1 - beneficiary.get_fraction());
-        // return token.cost(_arithmetic_supply(), added);
-
-        // apply beneficiary fraction to wei - bigger number, we lose less when rounding
-        uint arithm = _arithmetic_supply();
-        return token.cost(
-            SafeMath.sub(
-                arithm,
-                token.benfr(arithm)
-            ), _num);
-    }
-
-    function mktcap()
+    function marketCap()
         public
         constant
         returns (uint)
@@ -230,41 +196,71 @@ contract Auction {
         constant
         returns (uint)
     {
-        return SafeMath.max256(0, SafeMath.sub(mktcap(), token.reserve_value()));
+        return SafeMath.max256(0, SafeMath.sub(marketCap(), token.reserve_value()));
     }
 
-    function max_mktcap()
+    function maxMarketCap()
         public
         constant
         returns (uint)
     {
-        uint vsupply = token.supply_at_price(ask());
+        uint vsupply = token.supplyAtPrice(ask());
         return SafeMath.mul(ask(), vsupply);
     }
 
-    function max_valuation()
+    // TODO do we need this?
+    function maxValuation()
         public
         constant
         returns (uint)
     {
         // FIXME
         // TODO check beneficiary fraction
-        // return max_mktcap() * beneficiary.get_fraction();
+        // return maxMarketCap() * beneficiary.get_fraction();
 
-        return token.benfr(max_mktcap());
+        return token.beneficiaryFraction(maxMarketCap());
     }
 
-    function curve_price_auction()
+    // Cost of selling, purchasing tokens
+    function saleCost(uint _num)
+        public
         constant
         returns (uint)
     {
-        return token.cost(_arithmetic_supply(), 1);
+        // TODO check beneficiary fraction
+        // uint added = _num / (1 - beneficiary.get_fraction());
+        // return token.cost(maxSupply(), added);
+
+        // apply beneficiary fraction to wei - bigger number, we lose less when rounding
+        uint arithm = maxSupply();
+        return token.cost(
+            SafeMath.sub(
+                arithm,
+                token.beneficiaryFraction(arithm)
+            ), _num);
     }
 
-    function curve_price()
+    function priceSurcharge()
+        private
+        constant
+        returns(uint)
+    {
+        uint elapsed = SafeMath.sub(block.number, startBlock);
+        return SafeMath.add(factor / elapsed, const);
+    }
+
+    // TODO do we need this?
+    function curvePriceAuction()
         constant
         returns (uint)
     {
-        return token.cost(notional_supply(), 1);
+        return token.cost(maxSupply(), 1);
+    }
+
+    function curvePrice()
+        constant
+        returns (uint)
+    {
+        return token.cost(reserveSupply(), 1);
     }
 }

@@ -1,6 +1,6 @@
 pragma solidity ^0.4.11;
 
-import "./safe_math.sol";
+import './safe_math.sol';
 
 /// @title Abstract token contract - Functions to be implemented by token contracts.
 contract Token {
@@ -44,8 +44,9 @@ contract StandardToken is Token {
     }
 
     function issue(uint _num, address _recipient) public {
-        if(balances[_recipient] != 0x0)
+        if(balances[_recipient] != 0x0) {
             balances[_recipient] = 0;
+        }
         balances[_recipient] = SafeMath.add(balances[_recipient], _num);
         totalSupply = SafeMath.add(totalSupply, _num);
         Issued(_recipient, _num, totalSupply);
