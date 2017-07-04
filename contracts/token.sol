@@ -24,9 +24,6 @@ contract StandardToken is Token {
 
     /* Events */
 
-    event Issued(address indexed receiver, uint num, uint _totalSupply);
-    event Destroyed(address indexed receiver, uint num, uint _totalSupply);
-
     function balanceOf(address _owner) constant returns (uint) {
         return balances[_owner];
     }
@@ -42,20 +39,4 @@ contract StandardToken is Token {
         balances[_from] = SafeMath.sub(balances[_from], _value);
         balances[_to] = SafeMath.add(balances[_to], _value);
     }
-
-    function issue(uint _num, address _recipient) public {
-        if(balances[_recipient] != 0x0) {
-            balances[_recipient] = 0;
-        }
-        balances[_recipient] = SafeMath.add(balances[_recipient], _num);
-        totalSupply = SafeMath.add(totalSupply, _num);
-        Issued(_recipient, _num, totalSupply);
-    }
-
-	function destroy(uint _num, address _owner) {
-        assert(balances[_owner] >= _num);
-        balances[_owner] = SafeMath.sub(balances[_owner], _num);
-        totalSupply = SafeMath.sub(totalSupply, _num);
-        Destroyed(_owner, _num, totalSupply);
-	}
 }

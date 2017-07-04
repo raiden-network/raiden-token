@@ -2,36 +2,32 @@ pragma solidity ^0.4.11;
 
 import './safe_math.sol';
 import './utils.sol';
-import './ctoken.sol';
+import './mint.sol';
 
 contract Auction {
     address public owner;
+    Mint mint;
     uint factor;
     uint const;
-    uint public startBlock;
-    uint public endBlock;
-    mapping(address => uint256) public bidders; // value_by_buyer
-    // For iterating over the addresses
-    address[] addresses;
-    ContinuousToken token;
+    uint public startTimestamp;
+    uint public endTimestamp;
+    uint received_value = 0;
+    uint total_issuance = 0;
+    uint issued_value = 0;
+    mapping(address => uint256) public bidders;
 
     enum Stages {
         AuctionDeployed,
         AuctionSetUp,
         AuctionStarted,
         AuctionEnded,
-        TradingStarted
+        AuctionSettled
     }
 
     Stages public stage;
 
     modifier isOwner() {
         require(msg.sender == owner);
-        _;
-    }
-
-    modifier isToken() {
-        require(msg.sender == address(token));
         _;
     }
 
@@ -54,20 +50,20 @@ contract Auction {
         owner = msg.sender;
     }
 
-    function setup(address _token)
+    // Fallback function
+    function() {
+        order();
+    }
+
+    function setup(address _mint)
         public
         isOwner
         atStage(Stages.AuctionDeployed)
     {
 
-        // Register token
-        require(_token != 0x0);
-        token = ContinuousToken(_token);
-
+        require(_mint != 0x0);
+        mint = Mint(_mint);
         stage = Stages.AuctionSetUp;
-
-        require(address(token) == _token);
-        require(stage == Stages.AuctionSetUp);
     }
 
     function startAuction()
@@ -76,42 +72,65 @@ contract Auction {
         atStage(Stages.AuctionSetUp)
     {
         stage = Stages.AuctionStarted;
-        startBlock = block.number;
+        startTimestamp = now;
     }
 
-    // TODO check if call from token; public?
-    function finalizeAuction()
+    function order()
+        public
+        payable
+        isValidPayload
         atStage(Stages.AuctionStarted)
     {
-        require(reserveSupply() >= simulatedSupply());
-
-        uint price = ask();
-        uint total_issuance = reserveSupply();
-        LogAuctionEnded(price, total_issuance);
-
-        for(uint i = 0; i < addresses.length; i++) {
-            uint num_issued = SafeMath.mul(total_issuance, bidders[addresses[i]]) / token.reserve_value();
-            token._issue(num_issued, addresses[i]);
+        if(bidders[msg.sender] == 0) {
+            // TODO is this needed?
+            bidders[msg.sender] = 0;
+        }
+        uint accepted_value = SafeMath.max256(missingReserveToEndAuction(), msg.value);
+        if (accepted_value < msg.value) {
+            //TODO refund excess ETH
+            finalizeAuction();
         }
 
-        Utils.xassert(token.reserve(token.totalSupply()), token.reserve_value(), 0, 0);
-        Utils.xassert(token.totalSupply(), reserveSupply(), 0, 0);
+        bidders[msg.sender] = SafeMath.add(bidders[msg.sender], accepted_value);
+    }
 
-        assert(token.totalSupply() == total_issuance);
-        assert(token.totalSupply() > 0);
+    function finalizeAuction()
+        private
+        atStage(Stages.AuctionStarted)
+    {
+        require(price() <= mint.price(this.balance));
+
+        // memorize received funds
+        received_value = this.balance;
+        total_issuance = mint.supply(received_value + mint.balance) - mint.totalSupply();
+
+        // send funds to mint
+        mint.fundsFromAuction.value(this.balance);
 
         stage = Stages.AuctionEnded;
-        endBlock = now;
+        endTimestamp = now;
+        LogAuctionEnded(received_value, total_issuance);
     }
 
-    function isAuction()
+    function claimTokens(address[] recipients)
         public
-        constant
-        returns (bool)
+        atStage(Stages.AuctionEnded)
     {
-        return simulatedSupply() >= reserveSupply();
+        // called multiple times (gas limit!) until all bidders got their tokens
+        for(uint i = 0; i < recipients.length; i++) {
+            uint num = bidders[recipients[i]] * total_issuance / received_value;
+            issued_value += bidders[recipients[i]];
+            bidders[recipients[i]] = 0;
+            mint.issueFromAuction(recipients[i], num);
+        }
+
+        if (issued_value == received_value) {
+            stage = Stages.AuctionSettled;
+            mint.startTrading();
+        }
     }
 
+    // TODO delete this?
     function finalized()
         public
         constant
@@ -120,95 +139,52 @@ contract Auction {
         return stage == Stages.AuctionEnded;
     }
 
-    function order(address _recipient, uint _value)
-        public
-        isToken
-    {
-        // TODO optimal way?
-        if(bidders[_recipient] == 0) {
-            bidders[_recipient] = 0;
-            addresses.push(_recipient);
-        }
-        bidders[_recipient] = SafeMath.add(bidders[_recipient], _value);
-    }
-
-    function ask()
+    function price()
         public
         constant
-        returns (uint)
+        returns(uint)
     {
-        return saleCost(1);
+        uint elapsed = SafeMath.sub(now, startTimestamp);
+        return SafeMath.add(factor / elapsed, const);
     }
 
+    // TODO
+    function isactive()
+        constant
+    {
+        // true if this.price > mint.curve_price_at_reserve(this.balance)
+        // modelled as atStage(Stages.AuctionStarted)
+    }
+
+    // TODO
     function missingReserveToEndAuction()
         public
         constant
         atStage(Stages.AuctionStarted)
         returns (uint)
     {
-        uint missing_reserve = SafeMath.sub(
-            token.reserve(simulatedSupply()),
-            token.reserve_value()
+        uint vreserve = mint.reserveAtPrice(price());
+        return SafeMath.sub(
+            SafeMath.sub(
+                vreserve,
+                this.balance
+
+            // mint reserve
+            ), mint.balance
         );
-        return SafeMath.max256(0, missing_reserve);
     }
 
-    function reserveSupply()
-        public
-        constant
-        returns (uint)
-    {
-        // supply according to reserve_value
-        return token.supply(token.reserve_value());
-    }
-
-    function simulatedSupply()
-        public
-        constant
-        atStage(Stages.AuctionStarted)
-        returns (uint)
-    {
-        // get supply based on the simulated price at current timestamp
-        if(isAuction() && priceSurcharge() >= token.base_price()) {
-            return token.supplyAtPrice(priceSurcharge());
-        }
-        return 0;
-    }
-
-    function maxSupply()
-        public
-        constant
-        returns (uint)
-    {
-        return SafeMax.max256(simulatedSupply(), reserveSupply());
-    }
-
-    function marketCap()
-        public
-        constant
-        returns (uint)
-    {
-        return SafeMath.mul(ask(), token.totalSupply());
-    }
-
-    function valuation()
-        public
-        constant
-        returns (uint)
-    {
-        return SafeMath.max256(0, SafeMath.sub(marketCap(), token.reserve_value()));
-    }
-
+    // the mktcap if the auction would end at the current price
     function maxMarketCap()
         public
         constant
         returns (uint)
     {
-        uint vsupply = token.supplyAtPrice(ask());
-        return SafeMath.mul(ask(), vsupply);
+        uint vsupply = mint.supplyAtPrice(mint.ask());
+        return SafeMath.mul(mint.ask(), vsupply);
     }
 
-    // TODO do we need this?
+    // the valuation if the auction would end at the current price
     function maxValuation()
         public
         constant
@@ -218,49 +194,6 @@ contract Auction {
         // TODO check beneficiary fraction
         // return maxMarketCap() * beneficiary.get_fraction();
 
-        return token.beneficiaryFraction(maxMarketCap());
-    }
-
-    // Cost of selling, purchasing tokens
-    function saleCost(uint _num)
-        public
-        constant
-        returns (uint)
-    {
-        // TODO check beneficiary fraction
-        // uint added = _num / (1 - beneficiary.get_fraction());
-        // return token.cost(maxSupply(), added);
-
-        // apply beneficiary fraction to wei - bigger number, we lose less when rounding
-        uint arithm = maxSupply();
-        return token.cost(
-            SafeMath.sub(
-                arithm,
-                token.beneficiaryFraction(arithm)
-            ), _num);
-    }
-
-    function priceSurcharge()
-        private
-        constant
-        returns(uint)
-    {
-        uint elapsed = SafeMath.sub(block.number, startBlock);
-        return SafeMath.add(factor / elapsed, const);
-    }
-
-    // TODO do we need this?
-    function curvePriceAuction()
-        constant
-        returns (uint)
-    {
-        return token.cost(maxSupply(), 1);
-    }
-
-    function curvePrice()
-        constant
-        returns (uint)
-    {
-        return token.cost(reserveSupply(), 1);
+        return mint.ownerFraction(maxMarketCap());
     }
 }
