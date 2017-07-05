@@ -10,7 +10,6 @@ contract Mint {
     ContinuousToken token;
     uint base_price;
     uint price_factor;
-    uint price_factor_dec;
     uint owner_fr;
     uint owner_fr_dec;
 
@@ -44,18 +43,19 @@ contract Mint {
     }
 
     function Mint(
-        uint _base_price,
-        uint _price_factor,
-        uint _price_factor_dec,
+        uint _base_price, // 24 decimals
+        uint _price_factor, // 24 decimals
         uint _owner_fr,
         uint _owner_fr_dec)
     {
         owner = msg.sender;
         base_price = _base_price;
         price_factor = _price_factor;
-        price_factor_dec = _price_factor_dec;
         owner_fr = _owner_fr;
         owner_fr_dec = _owner_fr_dec;
+
+        // Example (10, 2) means 10%, we cannot have 1000%
+        assert(Utils.num_digits(owner_fr) <= owner_fr_dec);
 
         stage = Stages.MintDeployed;
     }
@@ -73,6 +73,22 @@ contract Mint {
         auction = Auction(_auction);
         token = ContinuousToken(_token);
         stage = Stages.MintSetUp;
+    }
+
+    function changeSettings(
+        uint _base_price,
+        uint _price_factor,
+        uint _owner_fr,
+        uint _owner_fr_dec)
+
+        public
+        isOwner
+        atStage(Stages.MintSetUp)
+    {
+        base_price = _base_price;
+        price_factor = _price_factor;
+        owner_fr = _owner_fr;
+        owner_fr_dec = _owner_fr_dec;
     }
 
     function buyPreAuction(address recipient)
@@ -142,38 +158,35 @@ contract Mint {
         constant
         returns (uint)
     {
-        // TODO factor?
-        return SafeMath.add(base_price, priceFactor(_supply));
+        return SafeMath.add(
+            base_price,
+            SafeMath.mul(_supply, price_factor)
+        );
     }
 
     function supply(uint _reserve)
         constant
         returns (uint)
     {
-        if(_reserve == 0x0) {
-            _reserve = this.balance;
-        }
-        // TODO factor?
         uint sqrt = Utils.sqrt(
             SafeMath.add(
                 base_price**2,
-                priceFactor(SafeMath.mul(2, _reserve))
-            ));
-        return SafeMath.sub(sqrt, base_price) / priceFactor(1);
+                SafeMath.mul(
+                    SafeMath.mul(2, _reserve),
+                    price_factor)
+        ));
+        return SafeMath.sub(sqrt, base_price) / price_factor;
     }
 
     function reserve(uint _supply)
         constant
         returns (uint)
     {
-        if(_supply == 0x0) {
-            _supply = totalSupply();
-        }
-
-        // TODO factor?
         return SafeMath.add(
             SafeMath.mul(base_price, _supply),
-            priceFactor(_supply**2) / 2
+            SafeMath.mul(
+                SafeMath.div(price_factor, 2),
+                _supply**2)
         );
     }
 
@@ -181,8 +194,8 @@ contract Mint {
         constant
         returns (uint)
     {
-        // TODO factor?
-        return SafeMath.sub(_price, base_price) / priceFactor(1);
+        assert(_price >= base_price);
+        return SafeMath.sub(_price, base_price) / price_factor;
     }
 
     function reserveAtPrice(uint _price)
@@ -206,17 +219,6 @@ contract Mint {
 
     // TODO
     // function curve_newly_issuable(supply, added_reserve) constant {};
-
-    // TODO why 2 marketCaps?
-    function curveMarketCap(uint _supply)
-        constant
-        returns (uint)
-    {
-        return SafeMath.mul(
-            price(totalSupply()),
-            totalSupply()
-        );
-    }
 
     function marketCap()
         public
@@ -290,21 +292,12 @@ contract Mint {
         return SafeMath.max256(0, SafeMath.sub(marketCap(), this.balance));
     }
 
-    // We apply this for the supply, in order to lose less when rounding (wei)
-    function ownerFraction(uint _supply)
+    // We apply this on the currency value to lose less when rounding
+    function ownerFraction(uint _value)
         public
         constant
         returns (uint)
     {
-        return SafeMath.mul(_supply, owner_fr) / 10**owner_fr_dec;
-    }
-
-    // We apply this for the supply, in order to lose less when rounding (wei)
-    function priceFactor(uint _supply)
-        public
-        constant
-        returns (uint)
-    {
-        return SafeMath.mul(_supply, price_factor) / 10**price_factor_dec;
+        return SafeMath.mul(_value, owner_fr) / 10**owner_fr_dec;
     }
 }

@@ -3,7 +3,7 @@ pragma solidity ^0.4.11;
 import "./safe_math.sol";
 
 library Utils {
-    function num_digits(int number) internal returns (uint) {
+    function num_digits(uint number) internal returns (uint) {
         uint digits = 0;
         while (number != 0) {
             number /= 10;
@@ -13,7 +13,7 @@ library Utils {
     }
 
     function validate_fr(uint fraction, uint decimals) internal returns (uint, uint) {
-        uint dec = num_digits(int(fraction));
+        uint dec = num_digits(fraction);
         if(decimals == 0x0) {
             decimals = dec;
         }

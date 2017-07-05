@@ -60,19 +60,21 @@ contract Auction {
         isOwner
         atStage(Stages.AuctionDeployed)
     {
-
         require(_mint != 0x0);
         mint = Mint(_mint);
         stage = Stages.AuctionSetUp;
     }
 
-    function startAuction()
+    // TODO determine how last_call should work
+    function startAuction(bool last_call)
         public
         isOwner
         atStage(Stages.AuctionSetUp)
     {
-        stage = Stages.AuctionStarted;
-        startTimestamp = now;
+        if(last_call) {
+            stage = Stages.AuctionStarted;
+            startTimestamp = now;
+        }
     }
 
     function order()
@@ -81,13 +83,11 @@ contract Auction {
         isValidPayload
         atStage(Stages.AuctionStarted)
     {
-        if(bidders[msg.sender] == 0) {
-            // TODO is this needed?
-            bidders[msg.sender] = 0;
-        }
-        uint accepted_value = SafeMath.max256(missingReserveToEndAuction(), msg.value);
+        uint accepted_value = SafeMath.min256(missingReserveToEndAuction(), msg.value);
         if (accepted_value < msg.value) {
-            //TODO refund excess ETH
+            msg.sender.transfer(SafeMath.sub(
+                msg.value,
+                accepted_value));
             finalizeAuction();
         }
 
