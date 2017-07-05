@@ -16,7 +16,7 @@ contract Mint {
     enum Stages {
         MintDeployed,
         MintSetUp,
-        AuctionEnded, // after Auction called
+        AuctionEnded,
         TradingStarted
     }
 
@@ -61,7 +61,9 @@ contract Mint {
     }
 
     // Fallback function
-    function() {
+    function()
+        payable
+    {
         buy();
     }
 
@@ -100,7 +102,7 @@ contract Mint {
     {
         // Calculate no of tokens based on curve price
         uint num = SafeMath.div(msg.value, price(totalSupply()));
-        token.issue(recipient, num);
+        issue(recipient, num);
     }
 
     function buy()
@@ -110,10 +112,9 @@ contract Mint {
         atStage(Stages.TradingStarted)
     {
 
-        // TODO verify; calc the num of newly issued tokens based on the eth amount sent
-        uint num = supply(msg.value);
-
-        token.issue(msg.sender, num);
+        // calculate the num of newly issued tokens based on the added reserve (sent currency)
+        uint num = issued(reserveSupply(), msg.value);
+        issue(msg.sender, num);
     }
 
     function sell(uint num)
@@ -129,6 +130,21 @@ contract Mint {
         returns (uint)
     {
         return token.totalSupply();
+    }
+
+    // Issuing tokens pre-auction or post-auction
+    function issue(address recipient, uint num)
+        private
+        returns (uint)
+    {
+        require(stage == Stages.MintSetUp || stage == Stages.TradingStarted);
+        uint owner_num = ownerFraction(num);
+        uint recipient_num = SafeMath.sub(num, owner_num);
+
+        token.issue(recipient, recipient_num);
+        token.issue(owner, owner_num);
+
+        return recipient_num;
     }
 
     function startTrading()
@@ -151,17 +167,25 @@ contract Mint {
         isAuction
         atStage(Stages.AuctionEnded)
     {
-        token.issue(recipient, num);
+        issue(recipient, num);
     }
 
     function price(uint _supply)
         constant
         returns (uint)
     {
-        return SafeMath.add(
+         uint price_value = SafeMath.add(
             base_price,
             SafeMath.mul(_supply, price_factor)
         );
+        return price_value;
+    }
+
+    function priceAtReserve(uint _reserve)
+        constant
+        returns (uint)
+    {
+        return price(supply(_reserve));
     }
 
     function supply(uint _reserve)
@@ -175,19 +199,21 @@ contract Mint {
                     SafeMath.mul(2, _reserve),
                     price_factor)
         ));
-        return SafeMath.sub(sqrt, base_price) / price_factor;
+        uint supply_value = SafeMath.sub(sqrt, base_price) / price_factor;
+        return supply_value;
     }
 
     function reserve(uint _supply)
         constant
         returns (uint)
     {
-        return SafeMath.add(
+        uint reserve_value = SafeMath.add(
             SafeMath.mul(base_price, _supply),
             SafeMath.mul(
                 SafeMath.div(price_factor, 2),
                 _supply**2)
         );
+        return reserve_value;
     }
 
     function supplyAtPrice(uint _price)
@@ -196,6 +222,13 @@ contract Mint {
     {
         assert(_price >= base_price);
         return SafeMath.sub(_price, base_price) / price_factor;
+    }
+
+    function reserveSupply()
+        constant
+        returns (uint)
+    {
+        return supply(this.balance);
     }
 
     function reserveAtPrice(uint _price)
@@ -211,10 +244,24 @@ contract Mint {
         constant
         returns (uint)
     {
-        return SafeMath.sub(
+        uint cost_value = SafeMath.sub(
             reserve(SafeMath.add(_supply, _num)),
             reserve(_supply)
         );
+        return cost_value;
+    }
+
+    // Calculate number of tokens issued for a certain value at a certain supply
+    function issued(uint _supply, uint added_reserve)
+        constant
+        returns (uint)
+    {
+        uint reserve_value = reserve(_supply);
+        uint issued_tokens = SafeMath.sub(
+            supply(SafeMath.add(reserve_value, added_reserve)),
+            supply(reserve_value)
+        );
+        return issued_tokens;
     }
 
     // TODO
@@ -226,6 +273,15 @@ contract Mint {
         returns (uint)
     {
         return SafeMath.mul(ask(), token.totalSupply());
+    }
+
+    // TODO why do we need 2 marketCap functions
+    function curveMarketCap(uint _supply)
+        public
+        constant
+        returns (uint)
+    {
+        return SafeMath.mul(price(_supply), _supply);
     }
 
     // TODO function curve_supply_at_mktcap(m) constant {}
@@ -250,13 +306,14 @@ contract Mint {
         // TODO check beneficiary fraction
         // apply beneficiary fraction to wei - bigger number, we lose less when rounding
 
-        return cost(
+        uint sale_cost = cost(
             SafeMath.sub(
                 maxSupply,
                 ownerFraction(maxSupply)
             ),
             num
         );
+        return sale_cost;
     }
 
     // TODO function purchase_cost(num, supply) constant {}; //
@@ -271,8 +328,8 @@ contract Mint {
         }
 
         assert(_num >= 0 && _num <= totalSupply());
-        uint c = SafeMath.mul(this.balance, _num) / totalSupply();
-        return c;
+        uint purchase_cost = SafeMath.mul(this.balance, _num) / totalSupply();
+        return purchase_cost;
     }
 
     function ask()
@@ -289,7 +346,8 @@ contract Mint {
         constant
         returns (uint)
     {
-        return SafeMath.max256(0, SafeMath.sub(marketCap(), this.balance));
+        uint val = SafeMath.max256(0, SafeMath.sub(marketCap(), this.balance));
+        return val;
     }
 
     // We apply this on the currency value to lose less when rounding

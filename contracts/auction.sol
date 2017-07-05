@@ -51,7 +51,9 @@ contract Auction {
     }
 
     // Fallback function
-    function() {
+    function()
+        payable
+    {
         order();
     }
 
@@ -164,7 +166,7 @@ contract Auction {
         returns (uint)
     {
         uint vreserve = mint.reserveAtPrice(price());
-        return SafeMath.sub(
+        uint mreserve = SafeMath.sub(
             SafeMath.sub(
                 vreserve,
                 this.balance
@@ -172,6 +174,7 @@ contract Auction {
             // mint reserve
             ), mint.balance
         );
+        return mreserve;
     }
 
     // the mktcap if the auction would end at the current price

@@ -39,15 +39,12 @@ contract ContinuousToken is StandardToken {
         public
         isMint
     {
-        if(balances[_recipient] != 0x0) {
-            balances[_recipient] = 0;
-        }
         balances[_recipient] = SafeMath.add(balances[_recipient], _num);
         totalSupply = SafeMath.add(totalSupply, _num);
         Issued(_recipient, _num, totalSupply);
     }
 
-	function destroy(address _owner, uint _num)
+    function destroy(address _owner, uint _num)
         public
         isMint
     {
@@ -55,5 +52,5 @@ contract ContinuousToken is StandardToken {
         balances[_owner] = SafeMath.sub(balances[_owner], _num);
         totalSupply = SafeMath.sub(totalSupply, _num);
         Destroyed(_owner, _num, totalSupply);
-	}
+    }
 }

@@ -32,9 +32,8 @@ def test_price(mint_contract):
 
 def test_supply(mint_contract):
     for p in params:
-        print(*p[0])
-        mint_contract.call().changeSettings(*p[0])
-        assert mint_contract.call().supply(p[1].supply[0]) == p[1].supply[1]
+        # mint_contract.call().changeSettings(*p[0])
+        assert mint_contract.call().supply(p[1]['supply'][0]) == p[1]['supply'][1]
     # (-p[0] + math.sqrt(p[0]**2 + 2*p[1]*1000)) / p[1]
 
 def test_reserve(mint_contract):
