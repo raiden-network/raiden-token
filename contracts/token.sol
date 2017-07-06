@@ -24,38 +24,28 @@ contract StandardToken is Token {
 
     /* Events */
 
-    event Issued(address indexed receiver, uint num, uint _totalSupply);
-    event Destroyed(address indexed receiver, uint num, uint _totalSupply);
-
-    function balanceOf(address _owner) constant returns (uint) {
+    function balanceOf(address _owner)
+        constant
+        returns (uint)
+    {
         return balances[_owner];
     }
 
-    function transfer(address _to, uint _value) public returns (bool) {
+    function transfer(address _to, uint _value)
+        public
+        returns (bool)
+    {
         assert(balances[msg.sender] >= _value);
         balances[msg.sender] = SafeMath.sub(balances[msg.sender], _value);
         balances[_to] = SafeMath.add(balances[_to], _value);
     }
 
-    function transferFrom(address _from, address _to, uint _value) public returns (bool) {
+    function transferFrom(address _from, address _to, uint _value)
+        public
+        returns (bool)
+    {
         assert(balances[_from] >= _value);
         balances[_from] = SafeMath.sub(balances[_from], _value);
         balances[_to] = SafeMath.add(balances[_to], _value);
     }
-
-    function issue(uint _num, address _recipient) public {
-        if(balances[_recipient] != 0x0) {
-            balances[_recipient] = 0;
-        }
-        balances[_recipient] = SafeMath.add(balances[_recipient], _num);
-        totalSupply = SafeMath.add(totalSupply, _num);
-        Issued(_recipient, _num, totalSupply);
-    }
-
-	function destroy(uint _num, address _owner) {
-        assert(balances[_owner] >= _num);
-        balances[_owner] = SafeMath.sub(balances[_owner], _num);
-        totalSupply = SafeMath.sub(totalSupply, _num);
-        Destroyed(_owner, _num, totalSupply);
-	}
 }
