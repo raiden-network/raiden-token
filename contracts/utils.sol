@@ -12,19 +12,6 @@ library Utils {
         return digits;
     }
 
-    function validate_fr(uint fraction, uint decimals) internal returns (uint, uint) {
-        uint dec = num_digits(fraction);
-        if(decimals == 0x0) {
-            decimals = dec;
-        }
-        assert(decimals >= dec);
-        return (fraction, decimals);
-    }
-
-    function fraction_complement(uint fraction, uint decimals) internal returns (uint) {
-        return 10**decimals - fraction;
-    }
-
     function abs(int a) returns (uint){
         if (a < 0) {
             return uint(-a);
@@ -44,24 +31,5 @@ library Utils {
             b = z;
             z = SafeMath.add(a / z, z) / 2;
         }
-    }
-
-    function xassert(uint a, uint b, uint threshold, uint threshold_dec) internal returns (bool) {
-        if(threshold == 0) {
-            // default threshold = 0.0001;
-
-            threshold = 1;
-            threshold_dec = 4;
-        }
-        else {
-            (threshold, threshold_dec) = validate_fr(threshold, threshold_dec);
-        }
-
-        if(SafeMath.min256(a, b) > 0) {
-            assert(abs(int(a - b)) / SafeMath.min256(a, b) <= threshold);
-        }
-
-        assert(abs(int(a - b)) <= threshold);
-        return true;
     }
 }

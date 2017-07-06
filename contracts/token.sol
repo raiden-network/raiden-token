@@ -24,17 +24,26 @@ contract StandardToken is Token {
 
     /* Events */
 
-    function balanceOf(address _owner) constant returns (uint) {
+    function balanceOf(address _owner)
+        constant
+        returns (uint)
+    {
         return balances[_owner];
     }
 
-    function transfer(address _to, uint _value) public returns (bool) {
+    function transfer(address _to, uint _value)
+        public
+        returns (bool)
+    {
         assert(balances[msg.sender] >= _value);
         balances[msg.sender] = SafeMath.sub(balances[msg.sender], _value);
         balances[_to] = SafeMath.add(balances[_to], _value);
     }
 
-    function transferFrom(address _from, address _to, uint _value) public returns (bool) {
+    function transferFrom(address _from, address _to, uint _value)
+        public
+        returns (bool)
+    {
         assert(balances[_from] >= _value);
         balances[_from] = SafeMath.sub(balances[_from], _value);
         balances[_to] = SafeMath.add(balances[_to], _value);

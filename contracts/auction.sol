@@ -96,24 +96,6 @@ contract Auction {
         bidders[msg.sender] = SafeMath.add(bidders[msg.sender], accepted_value);
     }
 
-    function finalizeAuction()
-        private
-        atStage(Stages.AuctionStarted)
-    {
-        require(price() <= mint.price(this.balance));
-
-        // memorize received funds
-        received_value = this.balance;
-        total_issuance = mint.supply(received_value + mint.balance) - mint.totalSupply();
-
-        // send funds to mint
-        mint.fundsFromAuction.value(this.balance);
-
-        stage = Stages.AuctionEnded;
-        endTimestamp = now;
-        LogAuctionEnded(received_value, total_issuance);
-    }
-
     function claimTokens(address[] recipients)
         public
         atStage(Stages.AuctionEnded)
@@ -132,15 +114,6 @@ contract Auction {
         }
     }
 
-    // TODO delete this?
-    function finalized()
-        public
-        constant
-        returns (bool)
-    {
-        return stage == Stages.AuctionEnded;
-    }
-
     function price()
         public
         constant
@@ -150,31 +123,34 @@ contract Auction {
         return SafeMath.add(factor / elapsed, const);
     }
 
-    // TODO
+    // TODO do we need this?
     function isactive()
+        public
         constant
     {
-        // true if this.price > mint.curve_price_at_reserve(this.balance)
+        // true if this.price > mint.curvePriceAtReserve(this.balance)
         // modelled as atStage(Stages.AuctionStarted)
     }
 
-    // TODO
     function missingReserveToEndAuction()
         public
         constant
         atStage(Stages.AuctionStarted)
         returns (uint)
     {
-        uint vreserve = mint.reserveAtPrice(price());
-        uint mreserve = SafeMath.sub(
-            SafeMath.sub(
-                vreserve,
-                this.balance
+        // Calculate reserve at the current auction price
+        uint auction_price = price();
+        auction_price -= mint.ownerFraction(auction_price);
+        uint simulated_reserve = mint.curveReserveAtPrice(auction_price);
 
-            // mint reserve
-            ), mint.balance
-        );
-        return mreserve;
+        // Calculate current reserve (auction + preallocated mint reserve)
+        uint current_reserve = SafeMath.add(this.balance, mint.balance);
+
+        // Auction ends when simulated auction reserve is < the current reserve
+        if(simulated_reserve < current_reserve) {
+            return 0;
+        }
+        return SafeMath.sub(simulated_reserve, current_reserve);
     }
 
     // the mktcap if the auction would end at the current price
@@ -183,7 +159,7 @@ contract Auction {
         constant
         returns (uint)
     {
-        uint vsupply = mint.supplyAtPrice(mint.ask());
+        uint vsupply = mint.curveSupplyAtPrice(mint.ask());
         return SafeMath.mul(mint.ask(), vsupply);
     }
 
@@ -198,5 +174,31 @@ contract Auction {
         // return maxMarketCap() * beneficiary.get_fraction();
 
         return mint.ownerFraction(maxMarketCap());
+    }
+
+    function finalizeAuction()
+        private
+        atStage(Stages.AuctionStarted)
+    {
+        // TODO do we need this? - private, called only from order()
+        uint mint_ask = mint.curvePriceAtReserve(this.balance);
+        mint_ask -= mint.ownerFraction(mint_ask);
+        require(price() <= mint_ask);
+
+        // memorize received funds
+        received_value = this.balance;
+        total_issuance = SafeMath.sub(
+            mint.curveSupplyAtReserve(SafeMath.add(
+                received_value,
+                mint.balance)),
+            mint.totalSupply()
+        );
+
+        // send funds to mint
+        mint.fundsFromAuction.value(this.balance);
+
+        stage = Stages.AuctionEnded;
+        endTimestamp = now;
+        LogAuctionEnded(received_value, total_issuance);
     }
 }

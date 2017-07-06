@@ -43,8 +43,8 @@ contract Mint {
     }
 
     function Mint(
-        uint _base_price, // 24 decimals
-        uint _price_factor, // 24 decimals
+        uint _base_price,
+        uint _price_factor,
         uint _owner_fr,
         uint _owner_fr_dec)
     {
@@ -101,7 +101,10 @@ contract Mint {
         atStage(Stages.MintSetUp)
     {
         // Calculate no of tokens based on curve price
-        uint num = SafeMath.div(msg.value, price(totalSupply()));
+        uint num = SafeMath.sub(
+            curveSupplyAtReserve(SafeMath.add(this.balance, msg.value)),
+            curveSupplyAtReserve(this.balance)
+        );
         issue(recipient, num);
     }
 
@@ -113,15 +116,23 @@ contract Mint {
     {
 
         // calculate the num of newly issued tokens based on the added reserve (sent currency)
-        uint num = issued(reserveSupply(), msg.value);
+        uint num = curveIssuable(supplyAtReserve(), msg.value);
         issue(msg.sender, num);
     }
 
     function sell(uint num)
+        public
         atStage(Stages.TradingStarted)
     {
         token.destroy(msg.sender, num);
         msg.sender.transfer(purchaseCost(num));
+    }
+
+    function burn(uint num)
+        public
+        atStage(Stages.TradingStarted)
+    {
+        token.destroy(msg.sender, num);
     }
 
     function totalSupply()
@@ -132,22 +143,8 @@ contract Mint {
         return token.totalSupply();
     }
 
-    // Issuing tokens pre-auction or post-auction
-    function issue(address recipient, uint num)
-        private
-        returns (uint)
-    {
-        require(stage == Stages.MintSetUp || stage == Stages.TradingStarted);
-        uint owner_num = ownerFraction(num);
-        uint recipient_num = SafeMath.sub(num, owner_num);
-
-        token.issue(recipient, recipient_num);
-        token.issue(owner, owner_num);
-
-        return recipient_num;
-    }
-
     function startTrading()
+        public
         isAuction
         atStage(Stages.AuctionEnded)
     {
@@ -164,13 +161,15 @@ contract Mint {
     }
 
     function issueFromAuction(address recipient, uint num)
+        public
         isAuction
         atStage(Stages.AuctionEnded)
     {
         issue(recipient, num);
     }
 
-    function price(uint _supply)
+    function curvePriceAtSupply(uint _supply)
+        public
         constant
         returns (uint)
     {
@@ -181,14 +180,16 @@ contract Mint {
         return price_value;
     }
 
-    function priceAtReserve(uint _reserve)
+    function curvePriceAtReserve(uint _reserve)
+        public
         constant
         returns (uint)
     {
-        return price(supply(_reserve));
+        return curvePriceAtSupply(curveSupplyAtReserve(_reserve));
     }
 
-    function supply(uint _reserve)
+    function curveSupplyAtReserve(uint _reserve)
+        public
         constant
         returns (uint)
     {
@@ -203,7 +204,8 @@ contract Mint {
         return supply_value;
     }
 
-    function reserve(uint _supply)
+    function curveReserveAtSupply(uint _supply)
+        public
         constant
         returns (uint)
     {
@@ -216,7 +218,8 @@ contract Mint {
         return reserve_value;
     }
 
-    function supplyAtPrice(uint _price)
+    function curveSupplyAtPrice(uint _price)
+        public
         constant
         returns (uint)
     {
@@ -224,48 +227,68 @@ contract Mint {
         return SafeMath.sub(_price, base_price) / price_factor;
     }
 
-    function reserveSupply()
-        constant
-        returns (uint)
-    {
-        return supply(this.balance);
-    }
-
-    function reserveAtPrice(uint _price)
+    function curveReserveAtPrice(uint _price)
+        public
         constant
         returns (uint)
     {
         assert(_price >= 0);
-        return reserve(supplyAtPrice(_price));
+        return curveReserveAtSupply(curveSupplyAtPrice(_price));
     }
 
     // Calculate cost for a number of tokens
-    function cost(uint _supply, uint _num)
+    // curveAddedReserveAtAddedSupply ?
+    function curveCost(uint _supply, uint _num)
+        public
         constant
         returns (uint)
     {
         uint cost_value = SafeMath.sub(
-            reserve(SafeMath.add(_supply, _num)),
-            reserve(_supply)
+            curveReserveAtSupply(SafeMath.add(_supply, _num)),
+            curveReserveAtSupply(_supply)
         );
         return cost_value;
     }
 
     // Calculate number of tokens issued for a certain value at a certain supply
-    function issued(uint _supply, uint added_reserve)
+    // curveAddedSupplyAtAddedReserve ?
+    function curveIssuable(uint _supply, uint added_reserve)
+        public
         constant
         returns (uint)
     {
-        uint reserve_value = reserve(_supply);
+        uint reserve_value = curveReserveAtSupply(_supply);
         uint issued_tokens = SafeMath.sub(
-            supply(SafeMath.add(reserve_value, added_reserve)),
-            supply(reserve_value)
+            curveSupplyAtReserve(SafeMath.add(reserve_value, added_reserve)),
+            _supply
         );
         return issued_tokens;
     }
 
-    // TODO
-    // function curve_newly_issuable(supply, added_reserve) constant {};
+    function curveMarketCapAtSupply(uint _supply)
+        public
+        constant
+        returns (uint)
+    {
+        return SafeMath.mul(curvePriceAtSupply(_supply), _supply);
+    }
+
+    // TODO function curve_supply_at_mktcap(m) constant {}
+    /*function curveSupplyAtMarketCap(m, skipped=0) returns (uint) {
+        b, f = self.b, self.f
+        f = self.f
+        b = (self.b + skipped * self.f)
+        s = (-b + sqrt(b**2 - 4 * f * -m)) / (2 * f)
+        return s
+    }*/
+
+    function supplyAtReserve()
+        public
+        constant
+        returns (uint)
+    {
+        return curveSupplyAtReserve(this.balance);
+    }
 
     function marketCap()
         public
@@ -275,49 +298,28 @@ contract Mint {
         return SafeMath.mul(ask(), token.totalSupply());
     }
 
-    // TODO why do we need 2 marketCap functions
-    function curveMarketCap(uint _supply)
+    function ask()
         public
         constant
         returns (uint)
     {
-        return SafeMath.mul(price(_supply), _supply);
+        return saleCost(1);
     }
-
-    // TODO function curve_supply_at_mktcap(m) constant {}
-    /*function supplyAtMarketCap(self, m, skipped=0) returns (uint) {
-        b, f = self.b, self.f
-        f = self.f
-        b = (self.b + skipped * self.f)
-        s = (-b + sqrt(b**2 - 4 * f * -m)) / (2 * f)
-        return s
-    }*/
 
     function saleCost(uint num)
         public
         constant
         returns (uint)
     {
-        // TODO check this
-        uint maxSupply = SafeMath.max256(
-            supply(supplyAtPrice(auction.price())), supply(this.balance)
-        );
-
-        // TODO check beneficiary fraction
-        // apply beneficiary fraction to wei - bigger number, we lose less when rounding
-
-        uint sale_cost = cost(
-            SafeMath.sub(
-                maxSupply,
-                ownerFraction(maxSupply)
-            ),
-            num
+        uint sale_cost = curveCost(
+            supplyAtReserve(),
+            SafeMath.sub(num, ownerFraction(num))
         );
         return sale_cost;
     }
 
-    // TODO function purchase_cost(num, supply) constant {}; //
     function purchaseCost(uint _num)
+        public
         constant
         returns (uint)
     {
@@ -327,17 +329,9 @@ contract Mint {
             return 0;
         }
 
-        assert(_num >= 0 && _num <= totalSupply());
+        assert(_num <= totalSupply());
         uint purchase_cost = SafeMath.mul(this.balance, _num) / totalSupply();
         return purchase_cost;
-    }
-
-    function ask()
-        public
-        constant
-        returns (uint)
-    {
-        return saleCost(1);
     }
 
     // TODO: function valuation() constant {}; //  # (ask - bid) * supply
@@ -357,5 +351,20 @@ contract Mint {
         returns (uint)
     {
         return SafeMath.mul(_value, owner_fr) / 10**owner_fr_dec;
+    }
+
+    // Issuing tokens pre-auction or post-auction
+    function issue(address recipient, uint num)
+        private
+        returns (uint)
+    {
+        require(stage == Stages.MintSetUp || stage == Stages.TradingStarted);
+        uint owner_num = ownerFraction(num);
+        uint recipient_num = SafeMath.sub(num, owner_num);
+
+        token.issue(recipient, recipient_num);
+        token.issue(owner, owner_num);
+
+        return recipient_num;
     }
 }
