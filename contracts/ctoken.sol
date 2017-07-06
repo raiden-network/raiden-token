@@ -32,7 +32,6 @@ contract ContinuousToken is StandardToken {
     {
         owner = msg.sender;
         mint = Mint(_mint);
-        totalSupply = 0;
     }
 
     function issue(address _recipient, uint _num)

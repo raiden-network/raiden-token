@@ -7,13 +7,25 @@ import './mint.sol';
 contract Auction {
     address public owner;
     Mint mint;
-    uint factor;
-    uint const;
+
+    // Price function parameters
+    uint public price_factor;
+    uint public price_const;
+
+    // For calculating elapsed time for price
     uint public startTimestamp;
     uint public endTimestamp;
-    uint received_value = 0;
-    uint total_issuance = 0;
-    uint issued_value = 0;
+
+    // When auction ends, we memorize total value, tokens issued
+    uint public received_value = 0;
+    uint public total_issuance = 0;
+
+    // Keep track of how many tokens were assigned to buyers
+    uint public issued_value = 0;
+
+    // No more auctions if this flag is true
+    bool final_auction = false;
+
     mapping(address => uint256) public bidders;
 
     enum Stages {
@@ -42,10 +54,11 @@ contract Auction {
     }
 
     event LogAuctionEnded(uint price, uint issuance);
+    event LogAuctionPrice(uint price);
 
-    function Auction(uint _factor, uint _const) {
-        factor = _factor;
-        const = _const;
+    function Auction(uint _price_factor, uint _price_const) {
+        price_factor = _price_factor;
+        price_const = _price_const;
         stage = Stages.AuctionDeployed;
         owner = msg.sender;
     }
@@ -67,18 +80,30 @@ contract Auction {
         stage = Stages.AuctionSetUp;
     }
 
-    // TODO determine how last_call should work
-    function startAuction(bool last_call)
+    function changeSettings(
+        uint _price_factor,
+        uint _price_const,
+        bool _final_auction)
+
         public
         isOwner
         atStage(Stages.AuctionSetUp)
     {
-        if(last_call) {
-            stage = Stages.AuctionStarted;
-            startTimestamp = now;
-        }
+        price_factor = _price_factor;
+        price_const = _price_const;
+        final_auction = _final_auction;
     }
 
+    function startAuction()
+        public
+        isOwner
+        atStage(Stages.AuctionSetUp)
+    {
+        stage = Stages.AuctionStarted;
+        startTimestamp = now;
+    }
+
+    // This is the function used by bidders
     function order()
         public
         payable
@@ -96,42 +121,55 @@ contract Auction {
         bidders[msg.sender] = SafeMath.add(bidders[msg.sender], accepted_value);
     }
 
-    function claimTokens(address[] recipients)
+    //
+    function claimTokens(address recipient)
         public
+        isValidPayload
         atStage(Stages.AuctionEnded)
     {
-        // called multiple times (gas limit!) until all bidders got their tokens
-        for(uint i = 0; i < recipients.length; i++) {
-            uint num = bidders[recipients[i]] * total_issuance / received_value;
-            issued_value += bidders[recipients[i]];
-            bidders[recipients[i]] = 0;
-            mint.issueFromAuction(recipients[i], num);
-        }
+        // Calculate number of tokens that will be issued for the amount paid, based on the final auction price
+        uint num = bidders[recipient] * total_issuance / received_value;
 
+        // Keep track of claimed tokens
+        issued_value += bidders[recipient];
+        bidders[recipient] = 0;
+
+        // Mint contract issues the tokens
+        mint.issueFromAuction(recipient, num);
+
+        // If all of the tokens from the previous auction have been issued,
+        // we can start minting new tokens
         if (issued_value == received_value) {
             stage = Stages.AuctionSettled;
-            mint.startTrading();
+            mint.startMinting();
         }
     }
 
+    // Price function used in Dutch Auction; price starts high and decreases over time
     function price()
         public
         constant
         returns(uint)
     {
         uint elapsed = SafeMath.sub(now, startTimestamp);
-        return SafeMath.add(factor / elapsed, const);
+        return SafeMath.add(price_factor / elapsed, price_const);
     }
 
-    // TODO do we need this?
-    function isactive()
+    // TODO remove? we do not need this anymore,
+    // we apply missingReserveToEndAuction() in order() to see if auction has ended
+    function auctionIsActive()
         public
         constant
+        atStage(Stages.AuctionStarted)
+        returns (bool)
     {
-        // true if this.price > mint.curvePriceAtReserve(this.balance)
-        // modelled as atStage(Stages.AuctionStarted)
+        if(price() > mint.curvePriceAtReserve(mint.totalReserve()))
+            return true;
+        return false;
     }
 
+    // Calculate how much currency we need to attain
+    // a reserve / balance that would end the auction
     function missingReserveToEndAuction()
         public
         constant
@@ -142,59 +180,57 @@ contract Auction {
         uint auction_price = price();
         auction_price -= mint.ownerFraction(auction_price);
         uint simulated_reserve = mint.curveReserveAtPrice(auction_price);
+        uint current_reserve = mint.totalReserve();
 
-        // Calculate current reserve (auction + preallocated mint reserve)
-        uint current_reserve = SafeMath.add(this.balance, mint.balance);
-
-        // Auction ends when simulated auction reserve is < the current reserve
+        // Auction ends when simulated auction reserve is < the current reserve (auction + mint reserve)
         if(simulated_reserve < current_reserve) {
             return 0;
         }
         return SafeMath.sub(simulated_reserve, current_reserve);
     }
 
-    // the mktcap if the auction would end at the current price
-    function maxMarketCap()
+    // The market cap if the auction would end at the current price
+    function auctionMarketCap()
         public
         constant
         returns (uint)
     {
-        uint vsupply = mint.curveSupplyAtPrice(mint.ask());
-        return SafeMath.mul(mint.ask(), vsupply);
+        uint auction_price = price();
+
+        // We calculate the supply based on the current auction price
+        uint auction_supply = mint.curveSupplyAtPrice(auction_price);
+
+        return SafeMath.mul(auction_price, auction_supply);
     }
 
-    // the valuation if the auction would end at the current price
-    function maxValuation()
+    // The valuation if the auction would end at the current price
+    function auctionValuation()
         public
         constant
         returns (uint)
     {
-        // FIXME
-        // TODO check beneficiary fraction
-        // return maxMarketCap() * beneficiary.get_fraction();
-
-        return mint.ownerFraction(maxMarketCap());
+        return mint.ownerFraction(auctionMarketCap());
     }
 
+    // Auction has ended, we calculate total reserve and supply
     function finalizeAuction()
         private
         atStage(Stages.AuctionStarted)
     {
-        // TODO do we need this? - private, called only from order()
-        uint mint_ask = mint.curvePriceAtReserve(this.balance);
-        mint_ask -= mint.ownerFraction(mint_ask);
-        require(price() <= mint_ask);
+        uint mint_price = mint.curvePriceAtReserve(mint.totalReserve());
+        mint_price -= mint.ownerFraction(mint_price);
+        require(price() <= mint_price);
 
-        // memorize received funds
+        // Memorize received funds
         received_value = this.balance;
+
+        // Calculate total number of tokens based on the received reserve
         total_issuance = SafeMath.sub(
-            mint.curveSupplyAtReserve(SafeMath.add(
-                received_value,
-                mint.balance)),
+            mint.curveSupplyAtReserve(mint.totalReserve()),
             mint.totalSupply()
         );
 
-        // send funds to mint
+        // Send all funds to mint
         mint.fundsFromAuction.value(this.balance);
 
         stage = Stages.AuctionEnded;
