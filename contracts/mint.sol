@@ -3,6 +3,7 @@ pragma solidity ^0.4.11;
 import './auction.sol';
 import './ctoken.sol';
 import './safe_math.sol';
+import './utils.sol';
 
 contract Mint {
     address public owner;
@@ -101,21 +102,6 @@ contract Mint {
         assert(Utils.num_digits(owner_fr) <= owner_fr_dec);
     }
 
-    function buyPreAuction(address recipient)
-        public
-        payable
-        isOwner
-        isValidPayload
-        atStage(Stages.MintSetUp)
-    {
-        // Calculate no of tokens based on curve price
-        uint num = SafeMath.sub(
-            curveSupplyAtReserve(SafeMath.add(this.balance, msg.value)),
-            curveSupplyAtReserve(this.balance)
-        );
-        issue(recipient, num);
-    }
-
     // When minting is activated (no auction), buyers use this function
     function buy()
         public
@@ -134,6 +120,7 @@ contract Mint {
         public
         atStage(Stages.MintingActive)
     {
+        assert(num > 0);
         token.destroy(msg.sender, num);
         msg.sender.transfer(purchaseCost(num));
     }

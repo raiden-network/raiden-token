@@ -53,6 +53,12 @@ contract Auction {
         _;
     }
 
+    modifier auctionSettingsCanBeSetUp() {
+        require(final_auction == false);
+        require(stage == Stages.AuctionSetUp || stage == Stages.AuctionSettled);
+        _;
+    }
+
     event LogAuctionEnded(uint price, uint issuance);
     event LogAuctionPrice(uint price);
 
@@ -87,11 +93,12 @@ contract Auction {
 
         public
         isOwner
-        atStage(Stages.AuctionSetUp)
+        auctionSettingsCanBeSetUp
     {
         price_factor = _price_factor;
         price_const = _price_const;
         final_auction = _final_auction;
+        stage = Stages.AuctionSetUp;
     }
 
     function startAuction()
@@ -110,15 +117,23 @@ contract Auction {
         isValidPayload
         atStage(Stages.AuctionStarted)
     {
-        uint accepted_value = SafeMath.min256(missingReserveToEndAuction(), msg.value);
+        uint missing_reserve = missingReserveToEndAuction();
+        uint accepted_value = SafeMath.min256(missing_reserve, msg.value);
+
+        // Add value to bidder
+        bidders[msg.sender] = SafeMath.add(bidders[msg.sender], accepted_value);
+
+        // Send back funds if order is bigger than max auction reserve
         if (accepted_value < msg.value) {
-            msg.sender.transfer(SafeMath.sub(
-                msg.value,
-                accepted_value));
+            uint send_back = SafeMath.sub(msg.value, accepted_value);
+            msg.sender.transfer(send_back);
+        }
+
+        if (missing_reserve <= msg.value) {
             finalizeAuction();
         }
 
-        bidders[msg.sender] = SafeMath.add(bidders[msg.sender], accepted_value);
+
     }
 
     //
@@ -155,8 +170,7 @@ contract Auction {
         return SafeMath.add(price_factor / elapsed, price_const);
     }
 
-    // TODO remove? we do not need this anymore,
-    // we apply missingReserveToEndAuction() in order() to see if auction has ended
+    // TODO
     function auctionIsActive()
         public
         constant
@@ -212,14 +226,22 @@ contract Auction {
         return mint.ownerFraction(auctionMarketCap());
     }
 
+    function mintAsk()
+        private
+        returns (uint)
+    {
+        uint mint_price = mint.curvePriceAtReserve(mint.totalReserve());
+        mint_price -= mint.ownerFraction(mint_price);
+        return mint_price;
+    }
+
     // Auction has ended, we calculate total reserve and supply
     function finalizeAuction()
         private
         atStage(Stages.AuctionStarted)
     {
-        uint mint_price = mint.curvePriceAtReserve(mint.totalReserve());
-        mint_price -= mint.ownerFraction(mint_price);
-        require(price() <= mint_price);
+        // TODO
+        // Utils.xassert(price(), mintAsk())
 
         // Memorize received funds
         received_value = this.balance;
