@@ -78,6 +78,8 @@ contract Mint {
         isOwner
         atStage(Stages.MintDeployed)
     {
+        require(_auction != 0x0);
+        require(_token != 0x0);
         auction = Auction(_auction);
         token = ContinuousToken(_token);
         stage = Stages.MintSetUp;
