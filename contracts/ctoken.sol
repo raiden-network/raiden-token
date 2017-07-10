@@ -1,7 +1,6 @@
 pragma solidity ^0.4.11;
 
 import './safe_math.sol';
-import './utils.sol';
 import './token.sol';
 import './mint.sol';
 
