@@ -23,14 +23,15 @@ contract ContinuousToken is StandardToken {
         _;
     }
 
+    event Deployed(address indexed _token);
     event Issued(address indexed receiver, uint num, uint _totalSupply);
     event Destroyed(address indexed receiver, uint num, uint _totalSupply);
-    event LogMintFundsReceived(uint value, uint balance);
 
     function ContinuousToken(address _mint)
     {
         owner = msg.sender;
         mint = Mint(_mint);
+        Deployed(this);
     }
 
     function issue(address _recipient, uint _num)

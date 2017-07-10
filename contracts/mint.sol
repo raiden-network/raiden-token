@@ -48,6 +48,18 @@ contract Mint {
         _;
     }
 
+    event Deployed(address indexed _mint);
+    event Setup(uint indexed _stage, address indexed _auction, address indexed _token);
+    event SettingsChanged(uint indexed _stage, uint indexed _base_price, uint indexed _price_factor, uint _owner_fr, uint _owner_fr_dec);
+    event StartedMinting(uint indexed _stage);
+    event ReceivedAuctionFunds(uint indexed _stage);
+    event IssuedFromAuction(address indexed _recipient, uint indexed _num);
+    event Issued(address indexed _owner, uint _owner_num, address indexed _recipient, uint _recipient_num);
+    event Bought(address indexed _recipient, uint indexed _value, uint indexed _num);
+    event Sold(address indexed _recipient, uint indexed _num, uint indexed _purchase_cost);
+    event Burnt(address indexed _recipient, uint indexed _num);
+
+
     function Mint(
         uint _base_price,
         uint _price_factor,
@@ -64,12 +76,11 @@ contract Mint {
         assert(Utils.num_digits(owner_fr) <= owner_fr_dec);
 
         stage = Stages.MintDeployed;
+        Deployed(this);
     }
 
     // Fallback function
-    function()
-        payable
-    {
+    function() payable {
         buy();
     }
 
@@ -83,6 +94,7 @@ contract Mint {
         auction = Auction(_auction);
         token = ContinuousToken(_token);
         stage = Stages.MintSetUp;
+        Setup(uint(stage), _auction, _token);
     }
 
     function changeSettings(
@@ -102,6 +114,8 @@ contract Mint {
 
         // Example (10, 2) means 10%, we cannot have 1000%
         assert(Utils.num_digits(owner_fr) <= owner_fr_dec);
+
+        SettingsChanged(uint(stage), _base_price, _price_factor, _owner_fr, _owner_fr_dec);
     }
 
     // When minting is activated (no auction), buyers use this function
@@ -114,6 +128,9 @@ contract Mint {
 
         // calculate the num of newly issued tokens based on the added reserve (sent currency)
         uint num = curveIssuable(supplyAtReserve(), msg.value);
+
+        Bought(msg.sender, msg.value, num);
+
         issue(msg.sender, num);
     }
 
@@ -124,7 +141,9 @@ contract Mint {
     {
         assert(num > 0);
         token.destroy(msg.sender, num);
-        msg.sender.transfer(purchaseCost(num));
+        uint purchase_cost = purchaseCost(num);
+        msg.sender.transfer(purchase_cost);
+        Sold(msg.sender, num, purchase_cost);
     }
 
     // Destroy tokens with no currency transfer
@@ -133,9 +152,10 @@ contract Mint {
         atStage(Stages.MintingActive)
     {
         token.destroy(msg.sender, num);
+        Burnt(msg.sender, num);
     }
 
-    function totalSupply()
+    function issuedSupply()
         public
         constant
         returns (uint)
@@ -144,7 +164,7 @@ contract Mint {
     }
 
     // Current reserve from mint and auction
-    function totalReserve()
+    function combinedReserve()
         public
         constant
         returns (uint)
@@ -160,6 +180,7 @@ contract Mint {
         atStage(Stages.AuctionEnded)
     {
         stage = Stages.MintingActive;
+        StartedMinting(uint(stage));
     }
 
     // Called from Auction after it has ended;
@@ -171,6 +192,7 @@ contract Mint {
         atStage(Stages.MintSetUp)
     {
         stage = Stages.AuctionEnded;
+        ReceivedAuctionFunds(uint(stage));
     }
 
     // Called from Auction.claimTokens(); issues auction tokens to bidders
@@ -180,6 +202,7 @@ contract Mint {
         atStage(Stages.AuctionEnded)
     {
         issue(recipient, num);
+        IssuedFromAuction(recipient, num);
     }
 
     // Curve functions are named as "curveOutputAtInput"
@@ -336,7 +359,7 @@ contract Mint {
         constant
         returns (uint)
     {
-        return curveSupplyAtReserve(totalReserve());
+        return curveSupplyAtReserve(combinedReserve());
     }
 
     // Get marketCap for the actual issued supply
@@ -380,12 +403,12 @@ contract Mint {
         constant
         returns (uint)
     {
-        if(totalSupply() == 0) {
+        if(token.totalSupply() == 0) {
             return 0;
         }
 
-        assert(_num <= totalSupply());
-        uint purchase_cost = SafeMath.mul(totalReserve(), _num) / totalSupply();
+        assert(_num <= token.totalSupply());
+        uint purchase_cost = SafeMath.mul(combinedReserve(), _num) / token.totalSupply();
         return purchase_cost;
     }
 
@@ -397,7 +420,7 @@ contract Mint {
     {
         uint val = SafeMath.max256(
             0,
-            SafeMath.sub(marketCap(), totalReserve())
+            SafeMath.sub(marketCap(), combinedReserve())
         );
         return val;
     }
@@ -422,6 +445,8 @@ contract Mint {
 
         token.issue(recipient, recipient_num);
         token.issue(owner, owner_num);
+
+        Issued(owner, owner_num, recipient, recipient_num);
 
         return recipient_num;
     }
