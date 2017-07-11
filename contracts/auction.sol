@@ -118,6 +118,7 @@ contract Auction {
         isOwner
         atStage(Stages.AuctionSetUp)
     {
+        mint.auctionStarted();
         stage = Stages.AuctionStarted;
         startTimestamp = now;
 
@@ -299,8 +300,10 @@ contract Auction {
         AuctionEnded(uint(stage), received_value, total_issuance);
 
         // No need to claimTokens
-        if(total_issuance == 0) {
-            settleAuction();
+        if(received_value == 0) {
+            stage = Stages.AuctionSettled;
+            AuctionSettled(uint(stage));
+            mint.startMinting();
         }
     }
 
@@ -310,8 +313,7 @@ contract Auction {
     {
         assert(issued_value == received_value);
         stage = Stages.AuctionSettled;
-        mint.startMinting();
-
         AuctionSettled(uint(stage));
+        mint.startMinting();
     }
 }

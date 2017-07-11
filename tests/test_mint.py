@@ -5,7 +5,9 @@ from test_fixtures import (
     auction_contract,
     mint_contract,
     get_token_contract,
-    accounts
+    accounts,
+    xassert,
+    xassert_threshold_price
 )
 
 
@@ -17,7 +19,9 @@ def token_contract(chain, get_token_contract, mint_contract):
 
 def test_mint_curve(mint_contract, web3):
     mint = mint_contract
-    reserve = 100000
+    price_thresh = xassert_threshold_price
+
+    reserve = 2 * 10**12
     bp = mint.call().base_price()
     supply = mint.call().curveSupplyAtReserve(reserve)
     price = mint.call().curvePriceAtSupply(supply)
@@ -40,9 +44,9 @@ def test_mint_curve(mint_contract, web3):
     # Test supply-price-reserve transformations
     assert mint.call().curveReserveAtSupply(supply) == mint.call().curveReserveAtPrice(price)
 
-    # TODO
-    # assert reserve == mint.call().curveReserveAtSupply(supply)
-    # assert reserve == mint.call().curveReserveAtPrice(price)
+    # TODO if values involved are small, we lose when dividing (round to uint)
+    xassert(reserve, mint.call().curveReserveAtSupply(supply), price_thresh)
+    xassert(reserve, mint.call().curveReserveAtPrice(price), price_thresh)
 
     assert supply == mint.call().curveSupplyAtPrice(price)
     assert price == mint.call().curvePriceAtReserve(reserve)
@@ -51,8 +55,12 @@ def test_mint_curve(mint_contract, web3):
     num = 1000
     token_cost = mint.call().curveCost(supply, num)
     assert token_cost > 0
-    # TODO
-    # assert num == mint.call().curveIssuable(supply, token_cost)
+    total_reserve = mint.call().curveReserveAtSupply(supply)
+    total_supply = mint.call().curveSupplyAtReserve(total_reserve + token_cost)
+    issued_tokens = total_supply - supply
+    # FIXME
+    assert num == issued_tokens
+    assert num == mint.call().curveIssuable(supply, token_cost)
 
     # Test market cap
     market_cap = mint.call().curveMarketCapAtSupply(supply)
@@ -60,7 +68,7 @@ def test_mint_curve(mint_contract, web3):
     assert supply == mint.call().curveSupplyAtMarketCap(market_cap)
 
 
-def test_mint(web3, mint_contract, auction_contract, token_contract):
+def test_mint_basic(web3, mint_contract, auction_contract, token_contract):
     mint = mint_contract
 
     web3.testing.mine(3)
@@ -73,10 +81,19 @@ def test_mint(web3, mint_contract, auction_contract, token_contract):
     mint_contract.call().changeSettings(200, 15, 10, 2)
     assert mint.call().stage() == 1  # MintSetUp
 
+    # Basic curve functions test
+    supply = 1000
+    base_price = 100
+    price_factor = 15
+    mint.transact().changeSettings(base_price, price_factor, 10, 2)
 
-'''
+    reserve = mint.call().curveReserveAtSupply(supply)
+    price = mint.call().curvePriceAtSupply(supply)
+    print(reserve, price, mint.call().base_price(), mint.call().price_factor())
+    assert reserve == 7600000
+    assert price == 15100
+
+
 def test_ownerFraction(mint_contract):
-    #for i in range(len(mint_contract)):
     assert mint_contract.call().ownerFraction(100000) == 10000
     assert mint_contract.call().ownerFraction(123456) == 12345
-'''

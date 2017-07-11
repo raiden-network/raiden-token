@@ -118,6 +118,14 @@ contract Mint {
         SettingsChanged(uint(stage), _base_price, _price_factor, _owner_fr, _owner_fr_dec);
     }
 
+    function auctionStarted()
+        public
+        isAuction
+    {
+        require(stage == Stages.MintSetUp || stage == Stages.MintingActive);
+        stage = Stages.AuctionStarted;
+    }
+
     // When minting is activated (no auction), buyers use this function
     function buy()
         public
@@ -189,7 +197,7 @@ contract Mint {
         public
         payable
         isAuction
-        atStage(Stages.MintSetUp)
+        atStage(Stages.AuctionStarted)
     {
         require(auction.balance == 0);
         require(this.balance >= msg.value);

@@ -1,14 +1,29 @@
 import pytest
 
-mint_args = (100, 15, 10, 2)
+# base_price, price_factor, owner issuance fraction, owner issuance fraction decimals
+mint_args = (10**9, 15, 10, 2)
+
+# price_factor, price_const
+auction_args = [
+    (2 * 10**12, 10000),
+    (3 * 10**10, 10000)
+]
+
+# auction order values for accounts; to be corelated with the above
+accounts_orders = [
+    (10 * 10**11, ),
+    (15 * 10**11, ),
+    (25 * 10**10, ),
+    (60 * 10**10, ),
+]
+
+xassert_threshold_price = 10**9
 
 
 @pytest.fixture()
 def auction_contract(chain):
     Auction = chain.provider.get_contract_factory('Auction')
-    auction_contract = create_contract(chain, Auction, [
-        200000, 100
-    ])
+    auction_contract = create_contract(chain, Auction, auction_args[0])
 
     print_logs(auction_contract, 'Deployed', 'Auction')
     print_logs(auction_contract, 'Setup', 'Auction')
@@ -85,3 +100,10 @@ def print_logs(contract, event, name=''):
 
     transfer_filter.watch(lambda x: print('--(', name, ') event ', event, x['args']))
 
+
+# Almost equal
+def xassert(a, b, threshold=0.0001):
+    if min(a, b) > 0:
+        assert abs(a - b) / min(a, b) <= threshold, (a, b)
+    assert abs(a - b) <= threshold, (a, b)
+    return True
