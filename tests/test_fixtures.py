@@ -7,7 +7,7 @@ mint_args = (100, 15, 10, 2)
 def auction_contract(chain):
     Auction = chain.provider.get_contract_factory('Auction')
     auction_contract = create_contract(chain, Auction, [
-        10000, 100
+        200000, 100
     ])
 
     print_logs(auction_contract, 'Deployed', 'Auction')

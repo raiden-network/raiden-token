@@ -35,6 +35,7 @@ contract StandardToken is Token {
         assert(balances[msg.sender] >= _value);
         balances[msg.sender] = SafeMath.sub(balances[msg.sender], _value);
         balances[_to] = SafeMath.add(balances[_to], _value);
+        Transfer(msg.sender, _to, _value);
     }
 
     function transferFrom(address _from, address _to, uint _value)
@@ -44,5 +45,6 @@ contract StandardToken is Token {
         assert(balances[_from] >= _value);
         balances[_from] = SafeMath.sub(balances[_from], _value);
         balances[_to] = SafeMath.add(balances[_to], _value);
+        Transfer(msg.sender, _to, _value);
     }
 }

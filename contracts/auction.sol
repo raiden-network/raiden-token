@@ -69,7 +69,7 @@ contract Auction {
     event AuctionEnded(uint indexed _stage, uint indexed _received_value, uint indexed  _total_issuance);
     event AuctionSettled(uint indexed _stage);
     event AuctionPrice(uint indexed _price, uint indexed _timestamp);
-    event MissingReserve(uint indexed _missing_reserve, uint indexed _timestamp);
+    event MissingReserve(uint indexed _balance, uint indexed _missing_reserve, uint indexed _timestamp);
 
     function Auction(uint _price_factor, uint _price_const) {
         price_factor = _price_factor;
@@ -131,7 +131,9 @@ contract Auction {
         isValidPayload
         atStage(Stages.AuctionStarted)
     {
-        uint missing_reserve = missingReserveToEndAuction();
+        // Calculate missing balance until auction should end
+        // !! at this point, auction balance contains the order value
+        uint missing_reserve = missingReserveToEndAuction(mint.combinedReserve() - msg.value);
         uint accepted_value = SafeMath.min256(missing_reserve, msg.value);
 
         // Add value to bidder
@@ -209,11 +211,21 @@ contract Auction {
         atStage(Stages.AuctionStarted)
         returns (uint)
     {
+        return missingReserveToEndAuction(mint.combinedReserve());
+    }
+
+    // We have 2 functions here, because order() already updates the balance
+    // We need to calculate missing reserve without the order value
+    function missingReserveToEndAuction(uint current_reserve)
+        public
+        constant
+        atStage(Stages.AuctionStarted)
+        returns (uint)
+    {
         // Calculate reserve at the current auction price
         uint auction_price = price();
         auction_price -= mint.ownerFraction(auction_price);
         uint simulated_reserve = mint.curveReserveAtPrice(auction_price);
-        uint current_reserve = mint.combinedReserve();
 
         // Auction ends when simulated auction reserve is < the current reserve (auction + mint reserve)
         if(simulated_reserve < current_reserve) {
@@ -221,7 +233,7 @@ contract Auction {
         }
 
         uint missing_reserve = SafeMath.sub(simulated_reserve, current_reserve);
-        MissingReserve(missing_reserve, now);
+        MissingReserve(current_reserve, missing_reserve, now);
 
         return missing_reserve;
     }
@@ -280,7 +292,7 @@ contract Auction {
         received_value = this.balance;
 
         // Send all funds to mint
-        mint.fundsFromAuction.value(received_value);
+        mint.fundsFromAuction.value(received_value)();
 
         stage = Stages.AuctionEnded;
         endTimestamp = now;

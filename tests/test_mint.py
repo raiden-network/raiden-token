@@ -17,15 +17,18 @@ def token_contract(chain, get_token_contract, mint_contract):
 
 def test_mint_curve(mint_contract, web3):
     mint = mint_contract
+    reserve = 100000
     bp = mint.call().base_price()
-    supply = 10000
+    supply = mint.call().curveSupplyAtReserve(reserve)
+    price = mint.call().curvePriceAtSupply(supply)
 
+    # Test initial state
     assert mint.call().curvePriceAtSupply(0) == mint.call().curvePriceAtReserve(0) == bp
     assert mint.call().curveReserveAtSupply(0) == mint.call().curveSupplyAtReserve(0) == 0
 
     assert mint.call().curveSupplyAtPrice(bp) == 0
     with pytest.raises(tester.TransactionFailed):
-        assert mint.call().curveSupplyAtPrice(0) == 0
+        assert mint.call().curveSupplyAtPrice(0)
 
     web3.testing.mine(1)
 
@@ -34,16 +37,27 @@ def test_mint_curve(mint_contract, web3):
 
     web3.testing.mine(1)
 
-    price = mint.call().curvePriceAtSupply(supply)
-    reserve = mint.call().curveReserveAtSupply(supply)
-    print('price', price, 'reserve', reserve)
+    # Test supply-price-reserve transformations
+    assert mint.call().curveReserveAtSupply(supply) == mint.call().curveReserveAtPrice(price)
 
-    assert mint.call().curveSupplyAtPrice(price) == supply
+    # TODO
+    # assert reserve == mint.call().curveReserveAtSupply(supply)
+    # assert reserve == mint.call().curveReserveAtPrice(price)
 
-    # TODO see why this does not work
-    # assert mint.call().curveSupplyAtReserve(reserve) == supply
-    # assert mint.call().curvePriceAtReserve(reserve) == price
-    assert mint.call().curveReserveAtPrice(price) == reserve
+    assert supply == mint.call().curveSupplyAtPrice(price)
+    assert price == mint.call().curvePriceAtReserve(reserve)
+
+    # Test cost calculations
+    num = 1000
+    token_cost = mint.call().curveCost(supply, num)
+    assert token_cost > 0
+    # TODO
+    # assert num == mint.call().curveIssuable(supply, token_cost)
+
+    # Test market cap
+    market_cap = mint.call().curveMarketCapAtSupply(supply)
+    assert market_cap == supply * price
+    assert supply == mint.call().curveSupplyAtMarketCap(market_cap)
 
 
 def test_mint(web3, mint_contract, auction_contract, token_contract):
@@ -56,7 +70,8 @@ def test_mint(web3, mint_contract, auction_contract, token_contract):
     assert mint.call().stage() == 1  # MintSetUp
 
     assert mint.call({'from': web3.eth.coinbase}).issuedSupply() == 0
-    # mint_contract.call().changeSettings(200, 15, 10, 2)
+    mint_contract.call().changeSettings(200, 15, 10, 2)
+    assert mint.call().stage() == 1  # MintSetUp
 
 
 '''

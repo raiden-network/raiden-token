@@ -22,6 +22,7 @@ def token_contract(chain, get_token_contract, proxy_contract):
 
 
 # TODO generalize this for any method - send bytes instead of args
+# see contracts/proxies.sol
 @pytest.fixture
 def issue(web3, proxy_contract, token_contract):
     def get(to, num):
@@ -54,23 +55,25 @@ def test_ctoken(chain, web3, accounts, issue, destroy, token_contract):
     assert token.call().totalSupply() == 10
 
     issue(B, 14)
-
     assert token.call().totalSupply() == 24
     assert token.call().balanceOf(A) == 10
     assert token.call().balanceOf(B) == 14
 
     destroy(A, 2)
     destroy(B, 3)
-
     assert token.call().totalSupply() == 19
     assert token.call().balanceOf(A) == 8
     assert token.call().balanceOf(B) == 11
 
     token.transact({'from': A}).transfer(B, 2)
     token.transact({'from': A}).transferFrom(A, B, 1)
-
     assert token.call().totalSupply() == 19
     assert token.call().balanceOf(A) == 5
     assert token.call().balanceOf(B) == 14
+
+    token.transact({'from': B}).transfer(A, 4)
+    assert token.call().totalSupply() == 19
+    assert token.call().balanceOf(A) == 9
+    assert token.call().balanceOf(B) == 10
 
     # assert False

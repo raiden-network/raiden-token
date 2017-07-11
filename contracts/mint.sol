@@ -191,6 +191,9 @@ contract Mint {
         isAuction
         atStage(Stages.MintSetUp)
     {
+        assert(auction.balance == 0);
+        assert(this.balance >= msg.value);
+
         stage = Stages.AuctionEnded;
         ReceivedAuctionFunds(uint(stage));
     }
