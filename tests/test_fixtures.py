@@ -83,4 +83,5 @@ def print_logs(contract, event, name=''):
     if len(events):
         print('--(', name, ') events for ', event, events)
 
-    transfer_filter.watch(lambda x: print('--(', name, ') log', event, x['args']))
+    transfer_filter.watch(lambda x: print('--(', name, ') event ', event, x['args']))
+

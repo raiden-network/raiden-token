@@ -162,11 +162,11 @@ contract Auction {
         // Calculate number of tokens that will be issued for the amount paid, based on the final auction price
         uint num = bidders[recipient] * total_issuance / received_value;
 
+        ClaimedTokens(recipient, bidders[recipient], num);
+
         // Keep track of claimed tokens
         issued_value += bidders[recipient];
         bidders[recipient] = 0;
-
-        ClaimedTokens(recipient, bidders[recipient], num);
 
         // Mint contract issues the tokens
         mint.issueFromAuction(recipient, num);

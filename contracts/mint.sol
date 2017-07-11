@@ -52,7 +52,7 @@ contract Mint {
     event Setup(uint indexed _stage, address indexed _auction, address indexed _token);
     event SettingsChanged(uint indexed _stage, uint indexed _base_price, uint indexed _price_factor, uint _owner_fr, uint _owner_fr_dec);
     event StartedMinting(uint indexed _stage);
-    event ReceivedAuctionFunds(uint indexed _stage);
+    event ReceivedAuctionFunds(uint indexed _stage, uint _funds);
     event IssuedFromAuction(address indexed _recipient, uint indexed _num);
     event Issued(address indexed _owner, uint _owner_num, address indexed _recipient, uint _recipient_num);
     event Bought(address indexed _recipient, uint indexed _value, uint indexed _num);
@@ -191,11 +191,11 @@ contract Mint {
         isAuction
         atStage(Stages.MintSetUp)
     {
-        assert(auction.balance == 0);
-        assert(this.balance >= msg.value);
+        require(auction.balance == 0);
+        require(this.balance >= msg.value);
 
         stage = Stages.AuctionEnded;
-        ReceivedAuctionFunds(uint(stage));
+        ReceivedAuctionFunds(uint(stage), msg.value);
     }
 
     // Called from Auction.claimTokens(); issues auction tokens to bidders
@@ -442,14 +442,15 @@ contract Mint {
         private
         returns (uint)
     {
-        require(stage == Stages.MintSetUp || stage == Stages.MintingActive);
+        require(stage == Stages.AuctionEnded || stage == Stages.MintingActive);
+
         uint owner_num = ownerFraction(num);
         uint recipient_num = SafeMath.sub(num, owner_num);
 
+        Issued(owner, owner_num, recipient, recipient_num);
+
         token.issue(recipient, recipient_num);
         token.issue(owner, owner_num);
-
-        Issued(owner, owner_num, recipient, recipient_num);
 
         return recipient_num;
     }
