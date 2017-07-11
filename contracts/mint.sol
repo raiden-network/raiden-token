@@ -147,7 +147,7 @@ contract Mint {
         public
         atStage(Stages.MintingActive)
     {
-        assert(num > 0);
+        require(num > 0);
         token.destroy(msg.sender, num);
         uint purchase_cost = purchaseCost(num);
         msg.sender.transfer(purchase_cost);
@@ -159,6 +159,7 @@ contract Mint {
         public
         atStage(Stages.MintingActive)
     {
+        require(num > 0);
         token.destroy(msg.sender, num);
         Burnt(msg.sender, num);
     }
