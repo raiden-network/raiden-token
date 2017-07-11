@@ -240,12 +240,12 @@ contract Mint {
         constant
         returns (uint)
     {
-        uint reserve_value = SafeMath.add(
-            SafeMath.mul(base_price, _supply),
-            SafeMath.mul(
-                SafeMath.div(price_factor, 2),
-                _supply**2)
+        uint var_1 = SafeMath.mul(base_price, _supply);
+        uint var_2 = SafeMath.div(
+            SafeMath.mul(price_factor, _supply**2),
+            2
         );
+        uint reserve_value = SafeMath.add(var_1, var_2);
         return reserve_value;
     }
 
