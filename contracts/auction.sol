@@ -192,15 +192,18 @@ contract Auction {
         return auction_price;
     }
 
-    // TODO
+    // Implements the price requirement for the auction to be active
+    // TODO this is not used currently,
+    // to be removed or used at the next code review
     function auctionIsActive()
         public
         constant
         atStage(Stages.AuctionStarted)
         returns (bool)
     {
-        if(price() > mint.curvePriceAtReserve(mint.combinedReserve()))
+        if(price() > mint.curvePriceAtReserve(mint.combinedReserve())) {
             return true;
+        }
         return false;
     }
 
