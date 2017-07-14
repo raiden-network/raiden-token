@@ -1,0 +1,26 @@
+{
+  "name": "ontrack",
+  "version": "1.0.0",
+  "description": "Descentralized app for creating contracts with deadlines and observers.",
+  "private": true,
+  "scripts": {
+    "start": "meteor run"
+  },
+  "repository": "https://github.com/loredanacirstea/ontrack-dapp",
+  "author": "Loredana Cirstea <loredana.cirstea@gmail.com>",
+  "license": "GPL-3.0",
+  "dependencies": {
+    "babel-runtime": "^6.20.0",
+    "d3": "^4.9.1",
+    "jquery": "^3.2.1",
+    "meteor-node-stubs": "~0.2.4",
+    "react": "^15.6.1",
+    "react-dom": "^15.6.1",
+    "react-stockcharts": "^0.6.1",
+    "simpl-schema": "^0.3.1",
+    "web3": "^0.19.0"
+  },
+  "devDependencies": {
+    "eslint": "^4.0.0"
+  }
+}
