@@ -1,20 +1,40 @@
 # Continous Token
 
-Smart Contracts, Unittests and Infrastructure.
+## Smart Contracts, Unittests and Infrastructure.
 
-## Installation
+### Installation
 
-### Prerequisites
+#### Prerequisites
 
  * Python 3.6
  * [pip](https://pip.pypa.io/en/stable/)
 
-### Setup
+#### Setup
 
  * pip install -r requirements.txt
 
-### Usage
+#### Usage
 
  * populus compile
  * pytest
  * populus deploy
+
+## Web App
+
+### Installation
+
+#### Prerequisites
+
+ * Meteor 1.5
+
+#### Setup
+
+```
+meteor npm install
+```
+
+#### Usage
+
+```
+meteor
+```
