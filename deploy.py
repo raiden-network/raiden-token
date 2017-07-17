@@ -9,7 +9,7 @@ from web3 import Web3
 mint_args = [10**9, 15, 10, 2]
 
 # price_factor, price_const
-auction_args = [2 * 10**12, 10000]
+auction_args = [2 * 10**12, 10**9]
 
 def check_succesful_tx(web3: Web3, txid: str, timeout=180) -> dict:
 
@@ -28,24 +28,22 @@ def main():
     # This is configured in populus.json
     # We are working on a testnet
     chain_name = "ropsten"
-    chain_name = "testrpc"
-    chain_name = "testrpclocal"
+    # chain_name = "testrpc"
+    # chain_name = "testrpclocal"
 
     with project.get_chain(chain_name) as chain:
         print('chain', chain)
-        # web3 = chain.web3
-        web3 = Web3
+        web3 = chain.web3
+        #web3 = Web3
         print("Web3 provider is", web3.currentProvider)
 
         Auction = chain.provider.get_contract_factory('Auction')
         Mint = chain.provider.get_contract_factory('Mint')
         Token = chain.provider.get_contract_factory('ContinuousToken')
 
-        web3 = chain.web3
-        print("Web3 provider is", web3.currentProvider)
-
         # The address who will be the owner of the contracts
         beneficiary = web3.eth.coinbase
+        print('beneficiary', beneficiary)
         assert beneficiary, "Make sure your node has coinbase account created"
 
         # Deploy Auction
@@ -84,7 +82,7 @@ def main():
         # Do some contract reads to see everything looks ok
         print("Token total supply is", token.call().totalSupply())
         print("Mint total supply is", mint.call().issuedSupply())
-        print("Auction price is", auction.call().price())
+        print("Auction stage is", auction.call().stage())
 
 if __name__ == "__main__":
     main()
