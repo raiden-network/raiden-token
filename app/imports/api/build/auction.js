@@ -1,6 +1,8 @@
 export default Auction = {
-    address: '0x3fde1c0aec3731a01de2ba45fa0ea665f8bc49f2',
-    transactionHash: '0x4e94dec3a9010b04128560070b7e369ba5e0f7a37453be9df691b49d61786f4d',
+    //address: '0xb0d701a30db45ed6b0fe4a413be94d6318dace94',
+    //transactionHash: '0x3cae8d379a596a62ac2427b8789fec6ed5949fb38e64e954e7defce2b1da4a49',
+    address: '0x459a2d62f17ae21db9e5e6f2695c6093609b21c7',
+    transactionHash: '0x9af71ebd26419208404360b038af8741737aa18d535f9c7ffa2e4f8649508264',
     abi: [
       {
         "constant": true,
@@ -33,6 +35,19 @@ export default Auction = {
         ],
         "name": "changeSettings",
         "outputs": [],
+        "payable": false,
+        "type": "function"
+      },
+      {
+        "constant": true,
+        "inputs": [],
+        "name": "maxMarketCap",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
         "payable": false,
         "type": "function"
       },
@@ -85,6 +100,24 @@ export default Auction = {
       },
       {
         "constant": true,
+        "inputs": [
+          {
+            "name": "recipient",
+            "type": "address"
+          }
+        ],
+        "name": "balanceOf",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "payable": false,
+        "type": "function"
+      },
+      {
+        "constant": true,
         "inputs": [],
         "name": "total_issuance",
         "outputs": [
@@ -113,6 +146,19 @@ export default Auction = {
         "constant": true,
         "inputs": [],
         "name": "price",
+        "outputs": [
+          {
+            "name": "",
+            "type": "uint256"
+          }
+        ],
+        "payable": false,
+        "type": "function"
+      },
+      {
+        "constant": true,
+        "inputs": [],
+        "name": "maxValuation",
         "outputs": [
           {
             "name": "",
@@ -164,32 +210,6 @@ export default Auction = {
           {
             "name": "",
             "type": "uint8"
-          }
-        ],
-        "payable": false,
-        "type": "function"
-      },
-      {
-        "constant": true,
-        "inputs": [],
-        "name": "auctionMarketCap",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
-          }
-        ],
-        "payable": false,
-        "type": "function"
-      },
-      {
-        "constant": true,
-        "inputs": [],
-        "name": "auctionValuation",
-        "outputs": [
-          {
-            "name": "",
-            "type": "uint256"
           }
         ],
         "payable": false,
@@ -361,7 +381,7 @@ export default Auction = {
           {
             "indexed": false,
             "name": "_final_auction",
-            "type": "bool"
+            "type": "uint256"
           }
         ],
         "name": "SettingsChanged",
@@ -471,6 +491,11 @@ export default Auction = {
             "type": "uint256"
           },
           {
+            "indexed": false,
+            "name": "_supply",
+            "type": "uint256"
+          },
+          {
             "indexed": true,
             "name": "_timestamp",
             "type": "uint256"
@@ -499,6 +524,45 @@ export default Auction = {
           }
         ],
         "name": "MissingReserve",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": false,
+            "name": "_market_cap",
+            "type": "uint256"
+          },
+          {
+            "indexed": false,
+            "name": "_supply",
+            "type": "uint256"
+          },
+          {
+            "indexed": true,
+            "name": "_timestamp",
+            "type": "uint256"
+          }
+        ],
+        "name": "MaxMarketCap",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": false,
+            "name": "_valuation",
+            "type": "uint256"
+          },
+          {
+            "indexed": true,
+            "name": "_timestamp",
+            "type": "uint256"
+          }
+        ],
+        "name": "MaxValuation",
         "type": "event"
       }
     ]

@@ -30,11 +30,13 @@
 #### Setup
 
 ```
+cd app
 meteor npm install
 ```
 
 #### Usage
 
 ```
+cd app
 meteor
 ```

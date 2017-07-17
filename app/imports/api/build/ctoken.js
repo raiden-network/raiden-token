@@ -1,5 +1,6 @@
 export default ContinuousToken = {
-    address: '0xd8e34da6a7a2c2d7441db34621ed518c7e440d82',
+    //address: '0x5b8530518ff20314c4c7cfa48b2e61c1908b592f',
+    address: '0xae00954e5379fca4bfc722819a60737af290cd77',
     abi: [
       {
         "constant": true,

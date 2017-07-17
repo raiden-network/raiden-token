@@ -1,5 +1,6 @@
 export default Mint = {
-    address: '0xdc312ceb159e5955e5c49d0a750ba9330811f23a',
+    //address: '0x6f3380f5ecd9c799e14a47267fbbc62781755ed0',
+    address: '0x66bedfcffab61e20a5ca9cc1b8d8bb9eb2544111',
     abi: [
       {
         "constant": true,
@@ -468,7 +469,7 @@ export default Mint = {
         "constant": true,
         "inputs": [
           {
-            "name": "_num",
+            "name": "num",
             "type": "uint256"
           }
         ],
@@ -740,6 +741,99 @@ export default Mint = {
           }
         ],
         "name": "Burnt",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "name": "_num",
+            "type": "uint256"
+          },
+          {
+            "indexed": false,
+            "name": "_cost",
+            "type": "uint256"
+          },
+          {
+            "indexed": false,
+            "name": "_supply",
+            "type": "uint256"
+          },
+          {
+            "indexed": true,
+            "name": "_timestamp",
+            "type": "uint256"
+          }
+        ],
+        "name": "SaleCost",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": true,
+            "name": "_num",
+            "type": "uint256"
+          },
+          {
+            "indexed": false,
+            "name": "_cost",
+            "type": "uint256"
+          },
+          {
+            "indexed": false,
+            "name": "_supply",
+            "type": "uint256"
+          },
+          {
+            "indexed": true,
+            "name": "_timestamp",
+            "type": "uint256"
+          }
+        ],
+        "name": "PurchaseCost",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": false,
+            "name": "_valuation",
+            "type": "uint256"
+          },
+          {
+            "indexed": true,
+            "name": "_timestamp",
+            "type": "uint256"
+          }
+        ],
+        "name": "Valuation",
+        "type": "event"
+      },
+      {
+        "anonymous": false,
+        "inputs": [
+          {
+            "indexed": false,
+            "name": "_market_cap",
+            "type": "uint256"
+          },
+          {
+            "indexed": false,
+            "name": "_supply",
+            "type": "uint256"
+          },
+          {
+            "indexed": true,
+            "name": "_timestamp",
+            "type": "uint256"
+          }
+        ],
+        "name": "MarketCap",
         "type": "event"
       }
     ]
