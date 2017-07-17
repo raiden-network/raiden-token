@@ -120,6 +120,27 @@ contract ReserveToken is StandardToken {
     uint8 constant public decimals = 18;
 
     address auction_address;
+    Stages public stage;
+
+    /*
+     *  Enums
+     */
+    enum Stages {
+        TokenSetUp,
+        ReceivedReserve,
+        TradingStarted
+    }
+
+    /*
+     *  Modifiers
+     */
+    modifier atStage(Stages _stage) {
+        if (stage != _stage) {
+            // Contract not in expected stage
+            throw;
+        }
+        _;
+    }
 
     event Redeemed(address indexed receiver, uint num, uint _totalSupply);
     event ReceivedReserve(uint num);
@@ -143,33 +164,42 @@ contract ReserveToken is StandardToken {
         balances[auction] = 9000000 * 10**18;
         Transfer(0, auction, balances[auction]);
         uint assignedTokens = balances[auction];
+
         for (uint i=0; i<owners.length; i++) {
-            if (owners[i] == 0)
+            if (owners[i] == 0) {
                 // Address should not be null.
                 throw;
+            }
             balances[owners[i]] += tokens[i];
             Transfer(0, owners[i], tokens[i]);
             assignedTokens += tokens[i];
         }
-        if (assignedTokens != totalSupply)
+        if (assignedTokens != totalSupply) {
             throw;
+        }
+        stage = Stages.TokenSetUp;
     }
 
     /// @dev called from auction after it has ended to transfer the reserve
     function receiveReserve()
         public
         payable
+        atStage(Stages.TokenSetUp)
     {
         require(msg.sender == auction_address);
         ReceivedReserve(msg.value);
+        stage = Stages.TradingStarted;
     }
 
     /// @dev allows to destroy tokens and receive the corresponding amount of ether, implements the floor price
     function redeem(uint num)
         public
+        atStage(Stages.TradingStarted)
     {
         require(num > 0);
         assert(balances[msg.sender] >= num);
+        assert(this.balance > 0);
+
         balances[msg.sender] -= num;
         uint unlocked = this.balance * num / totalSupply;
         totalSupply -= num;
