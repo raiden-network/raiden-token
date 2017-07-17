@@ -1,5 +1,6 @@
-pragma solidity 0.4.10;
+pragma solidity ^0.4.11;
 
+import './safe_math.sol';
 
 /// @title Abstract token contract - Functions to be implemented by token contracts.
 contract Token {
@@ -65,7 +66,7 @@ contract DutchAuction {
      */
     modifier atStage(Stages _stage) {
         if (stage != _stage)
-            // Contract not in expected state
+            // Contract not in expected stage
             throw;
         _;
     }
@@ -91,10 +92,12 @@ contract DutchAuction {
     }
 
     modifier timedTransitions() {
-        if (stage == Stages.AuctionStarted && calcTokenPrice() <= calcStopPrice())
+        if (stage == Stages.AuctionStarted && calcTokenPrice() <= calcStopPrice()) {
             finalizeAuction();
-        if (stage == Stages.AuctionEnded && now > endTime + WAITING_PERIOD)
+        }
+        if (stage == Stages.AuctionEnded && now > endTime + WAITING_PERIOD) {
             stage = Stages.TradingStarted;
+        }
         _;
     }
 
@@ -209,7 +212,7 @@ contract DutchAuction {
         bids[receiver] = 0;
         theToken.transfer(receiver, num);
         if (totalDistributed == totalReceived) {
-            state = Stages.TokensDistributed;
+            stage = Stages.TokensDistributed;
             transferReserve();
         }
     }
@@ -233,8 +236,9 @@ contract DutchAuction {
         timedTransitions
         atStage(Stages.TokensDistributed)
     {
-        if (!theToken.send(this.value))
+        if (!theToken.send(this.balance)) {
             throw;
+        }
     }
 
 
@@ -305,7 +309,18 @@ contract DutchAuction {
         public
         returns (uint)
     {
-        return max(0, reserveAtPrice() - totalReceived);
+        return SafeMath.max256(0, reserveAtPrice() - totalReceived);
+    }
+
+    // TODO
+    /// @dev Calculates the auction price at which the auction should end
+    /// @return Returns the auction stop price
+    function calcStopPrice()
+        constant
+        public
+        returns (uint)
+    {
+        return 1;
     }
 
 }

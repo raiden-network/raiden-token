@@ -128,7 +128,7 @@
     }
   },
   "compilation": {
-    "contracts_source_dir": "./contracts",
+    "contracts_source_dir": "./simple_auction",
     "settings": {
       "optimize": true
     }

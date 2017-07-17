@@ -1,5 +1,4 @@
-pragma solidity 0.4.10;
-
+pragma solidity ^0.4.11;
 
 /// @title Abstract token contract - Functions to be implemented by token contracts.
 contract Token {
@@ -120,6 +119,8 @@ contract ReserveToken is StandardToken {
     string constant public symbol = "TKN";
     uint8 constant public decimals = 18;
 
+    address auction_address;
+
     event Redeemed(address indexed receiver, uint num, uint _totalSupply);
     event ReceivedReserve(uint num);
 
@@ -133,9 +134,11 @@ contract ReserveToken is StandardToken {
     function ReserveToken(address auction, address[] owners, uint[] tokens)
         public
     {
-        if (auction == 0)
+        if (auction == 0) {
             // Address should not be null.
             throw;
+        }
+        auction_address = auction;
         totalSupply = 10000000 * 10**18;
         balances[auction] = 9000000 * 10**18;
         Transfer(0, auction, balances[auction]);
@@ -157,7 +160,7 @@ contract ReserveToken is StandardToken {
         public
         payable
     {
-        require(msg.sender == auction);
+        require(msg.sender == auction_address);
         ReceivedReserve(msg.value);
     }
 
@@ -166,12 +169,12 @@ contract ReserveToken is StandardToken {
         public
     {
         require(num > 0);
-        assert(balances[msg.sender] >= _num);
-        balances[msg.sender] -=num;
-        uint unlocked = this.value * num / totalSupply;
-        totalSupply = -=num;
+        assert(balances[msg.sender] >= num);
+        balances[msg.sender] -= num;
+        uint unlocked = this.balance * num / totalSupply;
+        totalSupply -= num;
         msg.sender.transfer(unlocked);
-        Redeemed(msg.sender, _num, totalSupply);
+        Redeemed(msg.sender, num, totalSupply);
     }
 
 }
