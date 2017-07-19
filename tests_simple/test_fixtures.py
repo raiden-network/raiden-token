@@ -1,20 +1,17 @@
 import pytest
 
-# base_price, price_factor, owner issuance fraction, owner issuance fraction decimals
-mint_args = (10**9, 15, 10, 2)
-
-# price_factor, price_const
+# price_factor
 auction_args = [
-    (2 * 10**12, 10000),
-    (3 * 10**10, 10000)
+    [2],
+    [3]
 ]
 
 # auction order values for accounts; to be corelated with the above
 accounts_orders = [
-    (10 * 10**11, ),
-    (15 * 10**11, ),
-    (25 * 10**10, ),
-    (60 * 10**10, ),
+    (10 * 10**18, ),
+    (15 * 10**18, ),
+    (25 * 10**18, ),
+    (60 * 10**18, ),
 ]
 
 xassert_threshold_price = 10**9
@@ -22,8 +19,9 @@ xassert_threshold_price = 10**9
 
 @pytest.fixture()
 def auction_contract(chain):
-    Auction = chain.provider.get_contract_factory('Auction')
+    Auction = chain.provider.get_contract_factory('DutchAuction')
     auction_contract = create_contract(chain, Auction, auction_args[0])
+
     '''
     print_logs(auction_contract, 'Deployed', 'Auction')
     print_logs(auction_contract, 'Setup', 'Auction')
@@ -41,13 +39,14 @@ def auction_contract(chain):
 
 @pytest.fixture()
 def get_token_contract(chain):
-    # contract can be mint_contract or proxy_contract
+    # contract can be auction contract or proxy contract
     def get(arguments):
         ReserveToken = chain.provider.get_contract_factory('ReserveToken')
         token_contract = create_contract(chain, ReserveToken, arguments)
 
         print_logs(token_contract, 'Redeemed', 'ReserveToken')
         print_logs(token_contract, 'Transfer', 'ReserveToken')
+        print_logs(token_contract, 'ReceivedReserve', 'ReserveToken')
 
         return token_contract
     return get

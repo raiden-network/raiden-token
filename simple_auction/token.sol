@@ -37,10 +37,8 @@ contract StandardToken is Token {
         public
         returns (bool)
     {
-        if (balances[msg.sender] < _value) {
-            // Balance too low
-            throw;
-        }
+        require(balances[msg.sender] >= _value);
+
         balances[msg.sender] -= _value;
         balances[_to] += _value;
         Transfer(msg.sender, _to, _value);
@@ -56,10 +54,9 @@ contract StandardToken is Token {
         public
         returns (bool)
     {
-        if (balances[_from] < _value || allowed[_from][msg.sender] < _value) {
-            // Balance or allowance too low
-            throw;
-        }
+        require(balances[_from] >= _value);
+        require(allowed[_from][msg.sender] >= _value);
+
         balances[_to] += _value;
         balances[_from] -= _value;
         allowed[_from][msg.sender] -= _value;
@@ -118,31 +115,11 @@ contract ReserveToken is StandardToken {
     string constant public name = "The Token";
     string constant public symbol = "TKN";
     uint8 constant public decimals = 18;
+    uint constant multiplier = 10**18;
 
     address auction_address;
-    Stages public stage;
 
-    /*
-     *  Enums
-     */
-    enum Stages {
-        TokenSetUp,
-        ReceivedReserve,
-        TradingStarted
-    }
-
-    /*
-     *  Modifiers
-     */
-    modifier atStage(Stages _stage) {
-        if (stage != _stage) {
-            // Contract not in expected stage
-            throw;
-        }
-        _;
-    }
-
-    event Redeemed(address indexed receiver, uint num, uint _totalSupply);
+    event Redeemed(address indexed receiver, uint num, uint unlocked, uint _totalSupply);
     event ReceivedReserve(uint num);
 
     /*
@@ -155,46 +132,38 @@ contract ReserveToken is StandardToken {
     function ReserveToken(address auction, address[] owners, uint[] tokens)
         public
     {
-        if (auction == 0) {
-            // Address should not be null.
-            throw;
-        }
+        // Auction address should not be null.
+        require(auction != 0x0);
+
         auction_address = auction;
-        totalSupply = 10000000 * 10**18;
-        balances[auction] = 9000000 * 10**18;
+        totalSupply = 10000000 * multiplier;
+        balances[auction] = 9000000 * multiplier;
         Transfer(0, auction, balances[auction]);
         uint assignedTokens = balances[auction];
 
         for (uint i=0; i<owners.length; i++) {
-            if (owners[i] == 0) {
-                // Address should not be null.
-                throw;
-            }
+            // Address should not be null.
+            require(owners[i] != 0x0);
+
             balances[owners[i]] += tokens[i];
             Transfer(0, owners[i], tokens[i]);
             assignedTokens += tokens[i];
         }
-        if (assignedTokens != totalSupply) {
-            throw;
-        }
-        stage = Stages.TokenSetUp;
+        assert(assignedTokens == totalSupply);
     }
 
     /// @dev called from auction after it has ended to transfer the reserve
     function receiveReserve()
         public
         payable
-        atStage(Stages.TokenSetUp)
     {
         require(msg.sender == auction_address);
         ReceivedReserve(msg.value);
-        stage = Stages.TradingStarted;
     }
 
     /// @dev allows to destroy tokens and receive the corresponding amount of ether, implements the floor price
     function redeem(uint num)
         public
-        atStage(Stages.TradingStarted)
     {
         require(num > 0);
         assert(balances[msg.sender] >= num);
@@ -202,9 +171,10 @@ contract ReserveToken is StandardToken {
 
         balances[msg.sender] -= num;
         uint unlocked = this.balance * num / totalSupply;
+        Redeemed(msg.sender, msg.sender.balance, unlocked, totalSupply);
         totalSupply -= num;
         msg.sender.transfer(unlocked);
-        Redeemed(msg.sender, num, totalSupply);
+        Redeemed(msg.sender, num, unlocked, totalSupply);
     }
 
 }

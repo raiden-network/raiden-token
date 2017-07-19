@@ -7,17 +7,19 @@ contract Proxy {
     event Payable(address to, uint value, string function_string);
     function Proxy() {}
 
+    function fund() public payable {}
+
     function proxy(address to, string func, address data, uint num)
         returns (bool)
     {
         return to.call(bytes4(sha3(func)), data, num);
     }
 
-    function proxyPayable(address to, string function_string, uint value)
+    function proxyPayable(address to, string function_string)
         payable
         returns (bool)
     {
-        Payable(to, value, function_string);
-        return to.call.value(value)(bytes4(sha3(function_string)));
+        Payable(to, msg.value, function_string);
+        return to.call.value(msg.value)(bytes4(sha3(function_string)));
     }
 }
