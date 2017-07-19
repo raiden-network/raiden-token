@@ -184,7 +184,9 @@ contract DutchAuction {
         atStage(Stages.AuctionEnded)
     {
         require(receiver != 0x0);
-        uint num = bids[receiver] * multiplier / final_price;
+        require(bids[receiver] > 0);
+
+        uint num = bids[receiver] / final_price;
         funds_claimed += bids[receiver];
 
         ClaimedTokens(receiver, bids[receiver], num);

@@ -10,6 +10,9 @@ from test_fixtures import (
     auction_args
 )
 import math
+from functools import (
+    reduce
+)
 
 
 def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
@@ -110,11 +113,25 @@ def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
     print('total_tokens_claimable', total_tokens_claimable)
     assert total_tokens_claimable == auction.call().MAX_TOKENS_SOLD()
 
+    allocs = len(prealloc)
     for i in range(0, len(bidders)):
         bidder = bidders[i]
-        claimable = auction.call().bids(bidder) * multiplier / final_price
-        preallocation = prealloc[i] or 0
-        auction.transact({'from': bidder}).claimTokens()
+
+        # without // I got a case like
+        # claimable = 89981237506524656 (in Python tests)
+        # claimable = 89981237506524657 (in Solidity & online big number calculators)
+        # even with claimable = math.floor(claimable)
+        claimable = auction.call().bids(bidder) // final_price
+
+        if i < allocs:
+            preallocation = math.floor(prealloc[i])
+        else:
+            preallocation = 0
+
+        # print(i, 'bidder', bidder, auction.call().bids(bidder), claimable, math.floor(claimable), preallocation)
+
+        if auction.call().bids(bidder):
+            auction.transact({'from': bidder}).claimTokens()
         assert token.call().balanceOf(bidder) == claimable + preallocation
 
         # Bidder cannot claim tokens again
@@ -122,7 +139,8 @@ def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
             auction.transact({'from': bidder}).claimTokens()
 
     # Check if all the auction tokens have been claimed
-    assert token.call().totalSupply() == auction.call().MAX_TOKENS_SOLD()
+    total_tokens = auction.call().MAX_TOKENS_SOLD() + reduce((lambda x, y: x + y), prealloc)
+    assert token.call().totalSupply() == total_tokens
 
     # Test if Auction funds have been transfered to Token
     funds_claimed = auction.call().funds_claimed()
