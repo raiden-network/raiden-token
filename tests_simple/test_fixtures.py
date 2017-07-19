@@ -22,18 +22,15 @@ def auction_contract(chain):
     Auction = chain.provider.get_contract_factory('DutchAuction')
     auction_contract = create_contract(chain, Auction, auction_args[0])
 
-    '''
-    print_logs(auction_contract, 'Deployed', 'Auction')
-    print_logs(auction_contract, 'Setup', 'Auction')
-    print_logs(auction_contract, 'SettingsChanged', 'Auction')
-    print_logs(auction_contract, 'AuctionStarted', 'Auction')
-    print_logs(auction_contract, 'Ordered', 'Auction')
-    print_logs(auction_contract, 'ClaimedTokens', 'Auction')
-    print_logs(auction_contract, 'AuctionEnded', 'Auction')
-    print_logs(auction_contract, 'AuctionSettled', 'Auction')
-    print_logs(auction_contract, 'AuctionPrice', 'Auction')
-    print_logs(auction_contract, 'MissingReserve', 'Auction')
-    '''
+    print_logs(auction_contract, 'Deployed', 'DutchAuction')
+    print_logs(auction_contract, 'Setup', 'DutchAuction')
+    print_logs(auction_contract, 'SettingsChanged', 'DutchAuction')
+    print_logs(auction_contract, 'AuctionStarted', 'DutchAuction')
+    print_logs(auction_contract, 'BidSubmission', 'DutchAuction')
+    print_logs(auction_contract, 'AuctionEnded', 'DutchAuction')
+    print_logs(auction_contract, 'ClaimedTokens', 'DutchAuction')
+    print_logs(auction_contract, 'TokensDistributed', 'DutchAuction')
+    print_logs(auction_contract, 'TradingStarted', 'DutchAuction')
 
     return auction_contract
 
