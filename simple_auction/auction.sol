@@ -36,8 +36,7 @@ contract DutchAuction {
     // Price for full token = final_price * multiplier
     uint public final_price;
 
-    // Owner issuance fraction = % of tokens assigned to owner from the total supply
-    // Example: 10% owner fraction = 10/10**2 -> owner_fr = 10; owner_fr_dec = 2;
+    // Owner issuance fraction = % of tokens assigned to owner from the total auction supply
     uint public owner_fr;
     uint public owner_fr_dec;
 
@@ -91,9 +90,17 @@ contract DutchAuction {
     /*
      *  Public functions
      */
+
     /// @dev Contract constructor function sets owner.
     /// @param _price_factor Auction price factor.
-    function DutchAuction(uint _price_factor, uint _price_const, uint _owner_fr, uint _owner_fr_dec)
+    /// @param _price_const Auction price divisor constant.
+    /// @param _owner_fr Auction owner issuance fraction (e.g. 15 for 0.15).
+    /// @param _owner_fr_dec Auction owner issuance fraction decimals (e.g. 2 for 0.15).
+    function DutchAuction(
+        uint _price_factor,
+        uint _price_const,
+        uint _owner_fr,
+        uint _owner_fr_dec)
         public
     {
         require(_price_factor != 0);
@@ -101,7 +108,7 @@ contract DutchAuction {
         require(_owner_fr != 0);
         require(_owner_fr_dec != 0);
 
-        // Example (10, 2) means 10%, we cannot have 1000%
+        // Example (15, 2) means 15%, we cannot have 1500%
         require(Utils.num_digits(owner_fr) <= owner_fr_dec);
 
         owner = msg.sender;
@@ -115,7 +122,7 @@ contract DutchAuction {
     }
 
     /// @dev Setup function sets external contracts' addresses.
-    /// @param _token token address.
+    /// @param _token Token address.
     function setup(address _token)
         public
         isOwner
@@ -132,8 +139,15 @@ contract DutchAuction {
     }
 
     /// @dev Changes auction start price factor before auction is started.
-    /// @param _price_factor Updated start price factor.
-    function changeSettings(uint _price_factor, uint _price_const, uint _owner_fr, uint _owner_fr_dec)
+    /// @param _price_factor Updated price factor.
+    /// @param _price_const Updated price divisor constant.
+    /// @param _owner_fr Updated owner issuance fraction (e.g. 15 for 0.15).
+    /// @param _owner_fr_dec Updated owner issuance fraction decimals (e.g. 2 for 0.15).
+    function changeSettings(
+        uint _price_factor,
+        uint _price_const,
+        uint _owner_fr,
+        uint _owner_fr_dec)
         public
         atStage(Stages.AuctionSetUp)
     {
@@ -240,8 +254,9 @@ contract DutchAuction {
         }
     }
 
-    /// @dev Get the owner issuance fraction from the provided supply / number of tokens
-    /// @param supply Number of tokens
+    /// @dev Get the owner issuance fraction from the provided supply / number of tokens.
+    /// @param supply Number of tokens.
+    /// @return Returns number of tokens issued for the auction owner.
     function ownerFraction(uint supply)
         public
         constant
@@ -254,19 +269,18 @@ contract DutchAuction {
      *  Private functions
      */
 
-    /// @dev Finalize auction and set the final token price
+    /// @dev Finalize auction and set the final token price.
     function finalizeAuction()
         private
         atStage(Stages.AuctionStarted)
     {
-        // TODO block number as argument
         final_price = calcTokenPrice();
         end_time = now;
         stage = Stages.AuctionEnded;
         AuctionEnded(final_price);
     }
 
-    /// @dev Transfer auction balance to the token
+    /// @dev Transfer auction balance to the token.
     function transferReserveToToken()
         private
         atStage(Stages.TokensDistributed)
@@ -276,10 +290,22 @@ contract DutchAuction {
         TradingStarted();
     }
 
+    /// @dev Calculates the token price at the current timestamp during the auction.
+    /// @return Returns the token price - Wei per token unit
+    function calcTokenPrice()
+        constant
+        private
+        atStage(Stages.AuctionStarted)
+        returns (uint)
+    {
+        uint elapsed = now - start_time;
+        return price_factor / (elapsed + price_const) + 1;
+    }
+
     /// --------------------------------- Price Functions -------------------------------------------
 
     /// @dev Calculates current token price.
-    /// @return Returns token price.
+    /// @return Returns num Wei per token unit.
     function price()
         public
         constant
@@ -291,20 +317,8 @@ contract DutchAuction {
         return calcTokenPrice();
     }
 
-    /// @dev Calculates the token price at the current timestamp during the auction
-    /// @return Returns the token price - Wei / token
-    function calcTokenPrice()
-        constant
-        public
-        atStage(Stages.AuctionStarted)
-        returns (uint)
-    {
-        uint elapsed = now - start_time;
-        return price_factor / (elapsed + price_const) + 1;
-    }
-
-    /// @dev Calculates the simulated reserve at the current price
-    /// @return Returns the simulated reserve amount
+    /// @dev Calculates the simulated reserve at the current price.
+    /// @return Returns the simulated reserve amount.
     function reserveAtPrice()
         constant
         public
@@ -313,8 +327,8 @@ contract DutchAuction {
         return tokens_auctioned * price();
     }
 
-    /// @dev The added reserve amount necessary to end the auction at the current price
-    /// @return Returns the reserve amount
+    /// @dev The missing reserve amount necessary to end the auction at the current price.
+    /// @return Returns the missing reserve amount.
     function missingReserveToEndAuction()
         constant
         public
@@ -323,9 +337,9 @@ contract DutchAuction {
         return missingReserveToEndAuction(this.balance);
     }
 
-    /// @dev The added reserve amount necessary to end the auction at the current price, for a provided reserve/balance
-    /// @param reserve Reserve amount - might be current balance or current balance without current bid value for bid()
-    /// @return Returns the additional reserve amount needed
+    /// @dev The missing reserve amount necessary to end the auction at the current price, for a provided reserve/balance.
+    /// @param reserve Reserve amount - might be current balance or current balance without current bid value for bid().
+    /// @return Returns the missing reserve amount.
     function missingReserveToEndAuction(uint reserve)
         constant
         public

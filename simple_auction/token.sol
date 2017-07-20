@@ -152,7 +152,7 @@ contract RaidenToken is StandardToken {
         assert(assignedTokens == totalSupply);
     }
 
-    /// @dev called from auction after it has ended to transfer the reserve
+    /// @dev Transfers auction's reserve; called from auction after it has ended.
     function receiveReserve()
         public
         payable
@@ -161,7 +161,8 @@ contract RaidenToken is StandardToken {
         ReceivedReserve(msg.value);
     }
 
-    /// @dev allows to destroy tokens and receive the corresponding amount of ether, implements the floor price
+    /// @dev Allows to destroy tokens and receive the corresponding amount of ether, implements the floor price
+    /// @param num Number of tokens to redeem
     function redeem(uint num)
         public
     {

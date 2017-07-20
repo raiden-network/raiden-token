@@ -1,5 +1,4 @@
 import pytest
-import math
 
 # multiplier based on token decimals
 decimals = 18
@@ -52,6 +51,7 @@ def auction_contract(chain):
     print_logs(auction_contract, 'TradingStarted', 'DutchAuction')
 
     return auction_contract
+
 
 @pytest.fixture()
 def get_token_contract(chain):

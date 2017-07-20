@@ -16,6 +16,7 @@ from functools import (
     reduce
 )
 
+
 def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
     # Buyers accounts
     (Owner, A, B, C, D) = accounts(5)
@@ -103,21 +104,15 @@ def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
     print('total_tokens_claimable', total_tokens_claimable)
     assert total_tokens_claimable == auction.call().tokens_auctioned()
 
-    allocs = len(prealloc)
     owner_balance = token.call().balanceOf(Owner)
     for i in range(0, len(bidders)):
         bidder = bidders[i]
-
-        if i < allocs:
-            preallocation = math.floor(prealloc[i])
-        else:
-            preallocation = 0
 
         if auction.call().bids(bidder):
             claimable = auction.call().bids(bidder) // final_price
             owner_fraction = auction.call().ownerFraction(claimable)
             bidder_balance = token.call().balanceOf(bidder)
-            #print('^^^^claimable', claimable, owner_fraction, claimable / 10)
+            # print('^^^^claimable', claimable, owner_fraction, claimable / 10)
 
             auction.transact({'from': bidder}).claimTokens()
 
@@ -155,4 +150,5 @@ def test_ownerFraction(accounts, auction_contract, token_contract):
     assert auction.call().ownerFraction(123456) == 12345
 
     auction.transact().changeSettings(*auction_args[1])
-    assert auction.call().ownerFraction(100000) == 100000 * auction_args[1][2] / math.pow(10, auction_args[1][3])
+    owner_fr = 100000 * auction_args[1][2] / math.pow(10, auction_args[1][3])
+    assert auction.call().ownerFraction(100000) == owner_fr

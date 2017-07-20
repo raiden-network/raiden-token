@@ -44,10 +44,9 @@ def test_ctoken(chain, web3, accounts, get_token_contract, proxy_contract, recei
     (A, B, C, D) = accounts(4)
     auction = proxy_contract
     eth = web3.eth
-    gas_price = eth.gasPrice
 
     # Test preallocation > than initial supply - auction supply
-    assert auction_supply + reduce((lambda x, y: x + y), bad_prealloc)  != initial_supply
+    assert auction_supply + reduce((lambda x, y: x + y), bad_prealloc) != initial_supply
     with pytest.raises(tester.TransactionFailed):
         token = get_token_contract([
             auction.address,
@@ -58,7 +57,7 @@ def test_ctoken(chain, web3, accounts, get_token_contract, proxy_contract, recei
     # TODO - Token initalization with no preallocation of tokens? - fails
 
     # Token initalization + preallocation of tokens
-    assert auction_supply + reduce((lambda x, y: x + y), prealloc)  == initial_supply
+    assert auction_supply + reduce((lambda x, y: x + y), prealloc) == initial_supply
     token = get_token_contract([
         auction.address,
         [A, B, C, D],
@@ -88,7 +87,7 @@ def test_ctoken(chain, web3, accounts, get_token_contract, proxy_contract, recei
     # Cannot destroy more tokens than existing balance
     tokens_A = token.call().balanceOf(A)
     with pytest.raises(tester.TransactionFailed):
-        token.transact({'from': A}).redeem(tokens_A+1)
+        token.transact({'from': A}).redeem(tokens_A + 1)
 
     # Cannot destroy tokens before token receives auction balance
     with pytest.raises(tester.TransactionFailed):
@@ -107,14 +106,13 @@ def test_ctoken(chain, web3, accounts, get_token_contract, proxy_contract, recei
 
     # Check token destruction & currency transfer
     tokens_A = token.call().balanceOf(A)
-    balance_A = eth.getBalance(A)
     redeemed = 250 * multiplier
-    expected_payment = eth.getBalance(token.address) * redeemed / initial_supply
-    print('+++++++++ token balance', eth.getBalance(token.address), 'initial_supply', initial_supply, 'expected_payment', expected_payment)
+    # balance_A = eth.getBalance(A)
+    # expected_payment = eth.getBalance(token.address) * redeemed / initial_supply
 
     txn_hash = token.transact({'from': A}).redeem(redeemed)
     # receipt = chain.wait.for_receipt(txn_hash)
-    # receive_back = receipt['gasUsed'] * gas_price
+    # receive_back = receipt['gasUsed'] * eth.gasPrice
     assert token.call().totalSupply() == initial_supply - redeemed
     assert token.call().balanceOf(A) == tokens_A - redeemed
     # TODO add transaction cost
