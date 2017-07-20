@@ -12,19 +12,28 @@ contract DutchAuction {
      *  Constants
      */
     uint constant multiplier = 10**18;
-    uint constant public MAX_TOKENS_SOLD = 9000000 * multiplier; // 9M
-    uint constant public WAITING_PERIOD = 7 days;
+    uint constant public tokens_auctioned = 9000000 * multiplier; // 9M
 
     /*
      *  Storage
      */
-    ReserveToken public token;
+    RaidenToken public token;
     address public owner;
+
+    // Price function parameters
     uint public price_factor;
     uint public price_const;
-    uint public start_block;
+
+    // For calculating elapsed time for price
+    uint public start_time;
     uint public end_time;
+    uint public start_block;
+
+    // Keep track of funds claimed after auction has ended
     uint public funds_claimed;
+
+    // Wei per token fragment
+    // Price for full token = final_price * multiplier
     uint public final_price;
 
     // Owner issuance fraction = % of tokens assigned to owner from the total supply
@@ -65,16 +74,6 @@ contract DutchAuction {
         _;
     }
 
-    modifier timedTransitions() {
-        if (stage == Stages.AuctionStarted && calcTokenPrice() <= calcStopPrice()) {
-            finalizeAuction();
-        }
-        if (stage == Stages.AuctionEnded && now > end_time + WAITING_PERIOD) {
-            stage = Stages.TradingStarted;
-        }
-        _;
-    }
-
     /*
      *  Events
      */
@@ -82,7 +81,7 @@ contract DutchAuction {
     event Deployed(address indexed auction, uint indexed price_factor, uint indexed price_const, uint owner_fr, uint owner_fr_dec);
     event Setup();
     event SettingsChanged(uint indexed price_factor, uint indexed price_const, uint owner_fr, uint owner_fr_dec);
-    event AuctionStarted(uint indexed block_number);
+    event AuctionStarted(uint indexed start_time, uint indexed block_number);
     event BidSubmission(address indexed sender, uint amount, uint returned_amount, uint indexed missing_reserve);
     event ClaimedTokens(address indexed recipient, uint sent_amount, uint num, uint recipient_num, uint owner_num);
     event AuctionEnded(uint indexed final_price);
@@ -123,10 +122,10 @@ contract DutchAuction {
         atStage(Stages.AuctionDeployed)
     {
         require(_token != 0x0);
-        token = ReserveToken(_token);
+        token = RaidenToken(_token);
 
         // Validate token balance
-        assert(token.balanceOf(this) == MAX_TOKENS_SOLD);
+        require(token.balanceOf(this) == tokens_auctioned);
 
         stage = Stages.AuctionSetUp;
         Setup();
@@ -153,15 +152,16 @@ contract DutchAuction {
         SettingsChanged(price_factor, price_const, owner_fr, owner_fr_dec);
     }
 
-    /// @dev Starts auction and sets start_block.
+    /// @dev Starts auction and sets start_time.
     function startAuction()
         public
         isOwner
         atStage(Stages.AuctionSetUp)
     {
         stage = Stages.AuctionStarted;
+        start_time = now;
         start_block = block.number;
-        AuctionStarted(start_block);
+        AuctionStarted(start_time, start_block);
     }
 
     /// --------------------------------- Auction Functions -------------------------------------------
@@ -170,11 +170,21 @@ contract DutchAuction {
     function bid()
         public
         payable
-        isValidPayload
-        //timedTransitions
         atStage(Stages.AuctionStarted)
     {
-        // calcTokenPrice() <= calcStopPrice() -> finalizeAuction (timedTransitions)
+        bid(msg.sender);
+    }
+
+    /// @dev Allows to send a bid to the auction.
+    /// @param receiver Bidder account address.
+    function bid(address receiver)
+        public
+        payable
+        isValidPayload
+        atStage(Stages.AuctionStarted)
+    {
+        require(receiver != 0x0);
+
         uint amount = msg.value;
         uint maxWei = missingReserveToEndAuction(this.balance - amount);
 
@@ -182,10 +192,10 @@ contract DutchAuction {
         if (amount > maxWei) {
             amount = maxWei;
             // Send change back to receiver address.
-            msg.sender.transfer(msg.value - amount);
+            receiver.transfer(msg.value - amount);
         }
-        bids[msg.sender] += amount;
-        BidSubmission(msg.sender, amount, msg.value - amount, maxWei);
+        bids[receiver] += amount;
+        BidSubmission(receiver, amount, msg.value - amount, maxWei);
 
         if (maxWei == amount) {
             // When maxWei is equal to the big amount the auction is ended and finalizeAuction is triggered.
@@ -196,7 +206,6 @@ contract DutchAuction {
     /// @dev Claims tokens for bidder after auction. To be used if tokens can be claimed by bidders, individually.
     function claimTokens()
         public
-        //timedTransitions
         atStage(Stages.AuctionEnded)
     {
         claimTokens(msg.sender);
@@ -221,8 +230,8 @@ contract DutchAuction {
 
         bids[receiver] = 0;
 
-        assert(token.transfer(owner, owner_num));
-        assert(token.transfer(receiver, recipient_num));
+        token.transfer(owner, owner_num);
+        token.transfer(receiver, recipient_num);
 
         if (funds_claimed == this.balance) {
             stage = Stages.TokensDistributed;
@@ -252,7 +261,6 @@ contract DutchAuction {
     {
         // TODO block number as argument
         final_price = calcTokenPrice();
-        assert(final_price == this.balance / MAX_TOKENS_SOLD); // remove afer testing!!! use just one func to not get stuck!
         end_time = now;
         stage = Stages.AuctionEnded;
         AuctionEnded(final_price);
@@ -277,60 +285,36 @@ contract DutchAuction {
         constant
         returns (uint)
     {
-        if (stage != Stages.AuctionStarted) {
+        if (stage == Stages.AuctionEnded) {
             return final_price;
         }
         return calcTokenPrice();
     }
 
-
-    /// @dev Calculates the token price at the current block heightm during the auction
-    /// @return Returns the token price
+    /// @dev Calculates the token price at the current timestamp during the auction
+    /// @return Returns the token price - Wei / token
     function calcTokenPrice()
         constant
         public
         atStage(Stages.AuctionStarted)
         returns (uint)
     {
-        return price_factor * multiplier / (block.number - start_block + price_const) + 1;
+        uint elapsed = now - start_time;
+        return price_factor / (elapsed + price_const) + 1;
     }
 
-
-    // @dev The marketcap at the current price
-    // @return
-    function mktcapAtPrice()
-        constant
-        public
-        returns (uint)
-    {
-        return token.totalSupply() * price();
-    }
-
-
-    // @dev valuation is the difference between the marketcap and the reserve
-    // @return
-    function valuationAtPrice()
-        constant
-        public
-        returns (uint)
-    {
-        return mktcapAtPrice() - reserveAtPrice(); // assuming no pre auction reserve
-    }
-
-
-    // @dev the required added reserve at the current price
-    // @return
+    /// @dev Calculates the simulated reserve at the current price
+    /// @return Returns the simulated reserve amount
     function reserveAtPrice()
         constant
         public
         returns (uint)
     {
-        return MAX_TOKENS_SOLD * price();
+        return tokens_auctioned * price();
     }
 
-
-    // @dev the reserve amount necessary to end the auction at the current price
-    // @return
+    /// @dev The added reserve amount necessary to end the auction at the current price
+    /// @return Returns the reserve amount
     function missingReserveToEndAuction()
         constant
         public
@@ -339,9 +323,9 @@ contract DutchAuction {
         return missingReserveToEndAuction(this.balance);
     }
 
-    // @dev the reserve amount necessary to end the auction at the current price
-    // @dev 2 function definitions because order() already updates the reserve
-    // @return
+    /// @dev The added reserve amount necessary to end the auction at the current price, for a provided reserve/balance
+    /// @param reserve Reserve amount - might be current balance or current balance without current bid value for bid()
+    /// @return Returns the additional reserve amount needed
     function missingReserveToEndAuction(uint reserve)
         constant
         public
@@ -349,16 +333,4 @@ contract DutchAuction {
     {
         return SafeMath.max256(0, reserveAtPrice() - reserve);
     }
-
-    // TODO
-    /// @dev Calculates the auction price at which the auction should end
-    /// @return Returns the auction stop price
-    function calcStopPrice()
-        constant
-        public
-        returns (uint)
-    {
-        return 1;
-    }
-
 }

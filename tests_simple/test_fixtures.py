@@ -1,4 +1,23 @@
 import pytest
+import math
+
+# multiplier based on token decimals
+decimals = 18
+multiplier = 10**18
+initial_supply = 10000000 * multiplier
+auction_supply = 9000000 * multiplier
+prealloc = [
+    200000 * multiplier,
+    300000 * multiplier,
+    400000 * multiplier,
+    100000 * multiplier
+]
+bad_prealloc = [
+    200001 * multiplier,
+    300000 * multiplier,
+    400000 * multiplier,
+    100000 * multiplier
+]
 
 # price_factor, _price_const, _owner_fr, _owner_fr_dec
 auction_args = [
@@ -8,10 +27,10 @@ auction_args = [
 
 # auction order values for accounts; to be corelated with the above
 accounts_orders = [
-    (10 * 10**18, ),
-    (15 * 10**18, ),
-    (25 * 10**18, ),
-    (60 * 10**18, ),
+    [10 * multiplier],
+    [15 * multiplier],
+    [25 * multiplier],
+    [60 * multiplier],
 ]
 
 xassert_threshold_price = 10**9
@@ -38,12 +57,12 @@ def auction_contract(chain):
 def get_token_contract(chain):
     # contract can be auction contract or proxy contract
     def get(arguments):
-        ReserveToken = chain.provider.get_contract_factory('ReserveToken')
-        token_contract = create_contract(chain, ReserveToken, arguments)
+        RaidenToken = chain.provider.get_contract_factory('RaidenToken')
+        token_contract = create_contract(chain, RaidenToken, arguments)
 
-        print_logs(token_contract, 'Redeemed', 'ReserveToken')
-        print_logs(token_contract, 'Transfer', 'ReserveToken')
-        print_logs(token_contract, 'ReceivedReserve', 'ReserveToken')
+        print_logs(token_contract, 'Redeemed', 'RaidenToken')
+        print_logs(token_contract, 'Transfer', 'RaidenToken')
+        print_logs(token_contract, 'ReceivedReserve', 'RaidenToken')
 
         return token_contract
     return get

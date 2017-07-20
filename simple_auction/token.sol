@@ -107,13 +107,13 @@ contract StandardToken is Token {
 
 /// @title Gnosis token contract
 /// @author [..] credits to Stefan George - <stefan.george@consensys.net>
-contract ReserveToken is StandardToken {
+contract RaidenToken is StandardToken {
 
     /*
      *  Token meta data
      */
-    string constant public name = "The Token";
-    string constant public symbol = "TKN";
+    string constant public name = "Raiden Token";
+    string constant public symbol = "RDN";
     uint8 constant public decimals = 18;
     uint constant multiplier = 10**18;
 
@@ -129,7 +129,7 @@ contract ReserveToken is StandardToken {
     /// @param auction Address of dutch auction contract.
     /// @param owners Array of addresses receiving preassigned tokens.
     /// @param tokens Array of preassigned token amounts.
-    function ReserveToken(address auction, address[] owners, uint[] tokens)
+    function RaidenToken(address auction, address[] owners, uint[] tokens)
         public
     {
         // Auction address should not be null.

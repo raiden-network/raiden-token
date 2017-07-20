@@ -4,7 +4,12 @@ from test_fixtures import (
     get_token_contract,
     accounts,
     create_contract,
-    print_logs
+    print_logs,
+    multiplier,
+    initial_supply,
+    auction_supply,
+    prealloc,
+    bad_prealloc
 )
 from functools import (
     reduce
@@ -40,22 +45,6 @@ def test_ctoken(chain, web3, accounts, get_token_contract, proxy_contract, recei
     auction = proxy_contract
     eth = web3.eth
     gas_price = eth.gasPrice
-
-    multiplier = 10**18
-    initial_supply = 10000000 * multiplier
-    auction_supply = 9000000 * multiplier
-    prealloc = [
-        200000 * multiplier,
-        300000 * multiplier,
-        400000 * multiplier,
-        100000 * multiplier,
-    ]
-    bad_prealloc = [
-        200001 * multiplier,
-        300000 * multiplier,
-        400000 * multiplier,
-        100000 * multiplier,
-    ]
 
     # Test preallocation > than initial supply - auction supply
     assert auction_supply + reduce((lambda x, y: x + y), bad_prealloc)  != initial_supply

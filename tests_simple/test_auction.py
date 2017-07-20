@@ -6,26 +6,15 @@ from test_fixtures import (
     token_contract,
     accounts,
     accounts_orders,
-    xassert,
-    xassert_threshold_price,
-    auction_args
+    auction_args,
+    auction_supply,
+    initial_supply,
+    prealloc
 )
 import math
 from functools import (
     reduce
 )
-
-
-multiplier = 10**18
-initial_supply = 10000000 * multiplier
-auction_supply = 9000000 * multiplier
-prealloc = [
-    200000 * multiplier,
-    300000 * multiplier,
-    400000 * multiplier,
-    100000 * multiplier,
-]
-
 
 def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
     # Buyers accounts
@@ -112,7 +101,7 @@ def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
     total_tokens_claimable = eth.getBalance(auction.address) / final_price
     print('FINAL PRICE', final_price)
     print('total_tokens_claimable', total_tokens_claimable)
-    assert total_tokens_claimable == auction.call().MAX_TOKENS_SOLD()
+    assert total_tokens_claimable == auction.call().tokens_auctioned()
 
     allocs = len(prealloc)
     owner_balance = token.call().balanceOf(Owner)
@@ -143,7 +132,7 @@ def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
             auction.transact({'from': bidder}).claimTokens()
 
     # Check if all the auction tokens have been claimed
-    total_tokens = auction.call().MAX_TOKENS_SOLD() + reduce((lambda x, y: x + y), prealloc)
+    total_tokens = auction.call().tokens_auctioned() + reduce((lambda x, y: x + y), prealloc)
     assert token.call().totalSupply() == total_tokens
     # FIXME
     # assert token.call().balanceOf(Owner) == owner_balance
