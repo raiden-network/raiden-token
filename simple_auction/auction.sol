@@ -28,8 +28,7 @@ contract DutchAuction {
     // Total number of tokens that will be auctioned
     uint public tokens_auctioned;
 
-    // Wei per token fragment
-    // Price for full token = final_price * multiplier
+    // Wei per TKN (Tei * multiplier)
     uint public final_price;
 
     // Owner issuance fraction = % of tokens assigned to owner from the total auction supply
@@ -242,8 +241,8 @@ contract DutchAuction {
         require(receiver != 0x0);
         require(bids[receiver] > 0);
 
-        // Number of Tei = wei / wei-per-Tei
-        uint num = bids[receiver] / final_price;
+        // Number of Tei = bidded_wei / wei_per_TKN * multiplier
+        uint num = bids[receiver] * multiplier / final_price;
         uint owner_num = ownerFraction(num);
         uint recipient_num = num - owner_num;
         funds_claimed += bids[receiver];
@@ -307,13 +306,13 @@ contract DutchAuction {
         returns (uint)
     {
         uint elapsed = now - start_time;
-        return price_factor / (elapsed + price_const) + 1;
+        return price_factor * multiplier / (elapsed + price_const) + 1;
     }
 
     /// --------------------------------- Price Functions -------------------------------------------
 
     /// @dev Calculates current token price.
-    /// @return Returns num Wei per Tei.
+    /// @return Returns num Wei per TKN (Tei * multiplier).
     function price()
         public
         constant
@@ -332,7 +331,7 @@ contract DutchAuction {
         public
         returns (uint)
     {
-        return tokens_auctioned * price();
+        return tokens_auctioned * price() / multiplier;
     }
 
     /// @dev The missing reserve amount necessary to end the auction at the current price.

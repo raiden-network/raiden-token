@@ -1,7 +1,6 @@
 import pytest
 
-# multiplier based on token decimals
-decimals = 18
+# multiplier based on token decimals: 10^decimals
 multiplier = 10**18
 initial_supply = 10000000 * multiplier
 auction_supply = 9000000 * multiplier
@@ -31,8 +30,6 @@ accounts_orders = [
     [25 * multiplier],
     [60 * multiplier],
 ]
-
-xassert_threshold_price = 10**9
 
 
 @pytest.fixture()
