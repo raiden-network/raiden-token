@@ -1,9 +1,9 @@
 import pytest
 
-# price_factor
+# price_factor, _price_const, _owner_fr, _owner_fr_dec
 auction_args = [
-    [2],
-    [3]
+    [2, 7500, 10, 2],
+    [3, 7500, 555, 3]
 ]
 
 # auction order values for accounts; to be corelated with the above
@@ -45,6 +45,19 @@ def get_token_contract(chain):
         print_logs(token_contract, 'Transfer', 'ReserveToken')
         print_logs(token_contract, 'ReceivedReserve', 'ReserveToken')
 
+        return token_contract
+    return get
+
+
+@pytest.fixture()
+def token_contract(chain, get_token_contract):
+    def get(owners, prealloc, auction):
+        token_contract = get_token_contract([
+            auction.address,
+            owners,
+            prealloc
+        ])
+        auction.transact().setup(token_contract.address)
         return token_contract
     return get
 

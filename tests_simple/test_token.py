@@ -59,12 +59,12 @@ def test_ctoken(chain, web3, accounts, get_token_contract, proxy_contract, recei
 
     # Test preallocation > than initial supply - auction supply
     assert auction_supply + reduce((lambda x, y: x + y), bad_prealloc)  != initial_supply
-    '''with pytest.raises(tester.TransactionFailed):
+    with pytest.raises(tester.TransactionFailed):
         token = get_token_contract([
             auction.address,
             [A, B, C, D],
             bad_prealloc
-        ])'''
+        ])
 
     # TODO - Token initalization with no preallocation of tokens? - fails
 
