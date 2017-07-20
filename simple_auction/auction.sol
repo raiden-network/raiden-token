@@ -7,13 +7,6 @@ import './token.sol';
 /// @title Dutch auction contract - distribution of tokens using an auction.
 /// @author [..] credits to Stefan George - <stefan.george@consensys.net>
 contract DutchAuction {
-
-    /*
-     *  Constants
-     */
-    uint constant multiplier = 10**18;
-    uint constant public tokens_auctioned = 9000000 * multiplier; // 9M
-
     /*
      *  Storage
      */
@@ -32,6 +25,9 @@ contract DutchAuction {
     // Keep track of funds claimed after auction has ended
     uint public funds_claimed;
 
+    // Total number of tokens that will be auctioned
+    uint public tokens_auctioned;
+
     // Wei per token fragment
     // Price for full token = final_price * multiplier
     uint public final_price;
@@ -42,6 +38,12 @@ contract DutchAuction {
 
     mapping (address => uint) public bids;
     Stages public stage;
+
+    // Terminology:
+    // 1 token unit = Tei
+    // 1 token = TKN = Tei * multiplier
+    // multiplier set from token's number of decimals (i.e. 10**decimals)
+    uint multiplier;
 
     /*
      *  Enums
@@ -131,8 +133,11 @@ contract DutchAuction {
         require(_token != 0x0);
         token = RaidenToken(_token);
 
-        // Validate token balance
-        require(token.balanceOf(this) == tokens_auctioned);
+        // Get number of tokens to be auctioned from token auction balance
+        tokens_auctioned = token.balanceOf(this);
+
+        // Set number of tokens multiplier from token decimals
+        multiplier = 10**uint(token.decimals());
 
         stage = Stages.AuctionSetUp;
         Setup();
@@ -200,6 +205,8 @@ contract DutchAuction {
         require(receiver != 0x0);
 
         uint amount = msg.value;
+
+        // Missing reserve without the current bid amount
         uint maxWei = missingReserveToEndAuction(this.balance - amount);
 
         // Only invest maximum possible amount.
@@ -235,6 +242,7 @@ contract DutchAuction {
         require(receiver != 0x0);
         require(bids[receiver] > 0);
 
+        // Number of Tei = wei / wei-per-Tei
         uint num = bids[receiver] / final_price;
         uint owner_num = ownerFraction(num);
         uint recipient_num = num - owner_num;
@@ -291,7 +299,7 @@ contract DutchAuction {
     }
 
     /// @dev Calculates the token price at the current timestamp during the auction.
-    /// @return Returns the token price - Wei per token unit
+    /// @return Returns the token price - Wei per Tei.
     function calcTokenPrice()
         constant
         private
@@ -305,7 +313,7 @@ contract DutchAuction {
     /// --------------------------------- Price Functions -------------------------------------------
 
     /// @dev Calculates current token price.
-    /// @return Returns num Wei per token unit.
+    /// @return Returns num Wei per Tei.
     function price()
         public
         constant

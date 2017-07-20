@@ -115,7 +115,7 @@ contract RaidenToken is StandardToken {
     string constant public name = "Raiden Token";
     string constant public symbol = "RDN";
     uint8 constant public decimals = 18;
-    uint constant multiplier = 10**18;
+    uint constant multiplier = 10**uint(decimals);
 
     address auction_address;
 
