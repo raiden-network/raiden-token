@@ -168,12 +168,15 @@ contract ReserveToken is StandardToken {
         public
     {
         require(num > 0);
-        require(balances[msg.sender] >= num);
         require(this.balance > 0);
 
-        balances[msg.sender] -= num;
+        // Calculate amount of Wei to be transferred to sender before burning
         uint unlocked = this.balance * num / totalSupply;
-        totalSupply -= num;
+
+        // Burn tokens before Wei transfer
+        burn(num);
+
+        // Transfer Wei to sender
         msg.sender.transfer(unlocked);
         Redeemed(msg.sender, num, unlocked, totalSupply);
     }
