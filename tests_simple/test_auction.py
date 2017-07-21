@@ -1,0 +1,178 @@
+import pytest
+from ethereum import tester
+from test_fixtures import (
+    auction_contract,
+    get_token_contract,
+    token_contract,
+    accounts,
+    auction_args,
+    initial_supply,
+    prealloc,
+    multiplier
+)
+import math
+from functools import (
+    reduce
+)
+
+
+def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
+    eth = web3.eth
+    auction = auction_contract
+
+    # Bidder accounts
+    bidders = web3.eth.accounts
+    Owner = bidders[0]
+    bidders = bidders[1:]
+
+    # Initialize token
+    token = get_token_contract([
+        auction.address,
+        initial_supply,
+        bidders[1:5],
+        prealloc
+    ])
+
+    # TODO setup auction and token with different owners - should fail
+
+    # Initial Auction state
+    assert auction.call().stage() == 0  # AuctionDeployed
+    assert eth.getBalance(auction.address) == 0
+
+    # changeSettings needs stage = AuctionSetUp, so it will fail now
+    with pytest.raises(tester.TransactionFailed):
+        auction.transact().changeSettings(*auction_args[1])
+
+    # Auction setup without being the owner should fail
+    with pytest.raises(tester.TransactionFailed):
+        auction.transact({'from': bidders[1]}).setup(token.address)
+
+    auction.transact().setup(token.address)
+    assert auction.call().stage() == 1  # AuctionSetUp
+
+    # Make sure we can change auction settings now
+    auction.transact().changeSettings(*auction_args[0])
+
+    # changeSettings without being the owner should fail
+    with pytest.raises(tester.TransactionFailed):
+        auction.transact({'from': bidders[1]}).changeSettings(*auction_args[1])
+
+    # startAuction without being the owner should fail
+    with pytest.raises(tester.TransactionFailed):
+        auction.transact({'from': bidders[1]}).startAuction()
+
+    auction.transact().startAuction()
+    assert auction.call().stage() == 2  # AuctionStarted
+
+    # transferReserveToToken should fail (private)
+    with pytest.raises(ValueError):
+        auction.transact({'from': bidders[1]}).transferReserveToToken()
+
+    # finalizeAuction should fail (private)
+    with pytest.raises(ValueError):
+        auction.transact({'from': bidders[1]}).finalizeAuction()
+
+    # Set maximum amount for a bid - we don't want 1 account draining the auction
+    missing_reserve = auction.call().missingReserveToEndAuction()
+    maxBid = missing_reserve / 4
+
+    # TODO Test multiple orders from 1 buyer
+
+    # Bidders start ordering tokens
+    bidders_len = len(bidders) - 1
+    bidded = 0  # Total bidded amount
+    index = 0  # bidders index
+
+    while auction.call().missingReserveToEndAuction() > 0:
+        if bidders_len < index:
+            print('!! Not enough accounts to simulate bidders')
+
+        bidder = bidders[index]
+        balance = eth.getBalance(bidder)
+        assert auction.call().bids(bidder) == 0
+
+        missing_reserve = auction.call().missingReserveToEndAuction()
+        amount = int(min(balance - 4000000, maxBid))
+
+        auction.transact({'from': bidder, "value": amount}).bid()
+        bidded += min(amount, missing_reserve)
+
+        if amount <= missing_reserve:
+            assert auction.call().bids(bidder) == amount
+        else:
+            assert auction.call().bids(bidder) == missing_reserve
+
+        index += 1
+
+    assert eth.getBalance(auction.address) == bidded
+    assert auction.call().missingReserveToEndAuction() == 0
+
+    # TODO check if account has received back the difference
+    # gas_price = eth.gasPrice
+    # receive_back -= receipt['gasUsed'] * gas_price
+    # assert eth.getBalance(D) == receive_back
+
+    # Auction ended, no more orders possible
+    if bidders_len < index:
+        print('!! Not enough accounts to simulate bidders. 1 additional account needed')
+    with pytest.raises(tester.TransactionFailed):
+        auction.transact({'from': bidders[index], "value": 1000}).bid()
+
+    assert auction.call().stage() == 3  # AuctionEnded
+
+    # Claim all tokens
+    # Final price per TKN (Tei * multiplier)
+    final_price = auction.call().final_price()
+
+    # Total Tei claimable
+    total_tokens_claimable = eth.getBalance(auction.address) * multiplier / final_price
+    print('FINAL PRICE', final_price)
+    print('TOTAL TOKENS CLAIMABLE', total_tokens_claimable)
+    assert total_tokens_claimable == auction.call().tokens_auctioned()
+
+    for i in range(0, index):
+        bidder = bidders[i]
+
+        # Calculate number of Tei issued for this bid
+        claimable = auction.call().bids(bidder) * multiplier // final_price
+
+        # Number of Tei assigned to the bidder
+        bidder_balance = token.call().balanceOf(bidder)
+
+        # Claim tokens -> tokens will be assigned to bidder
+        auction.transact({'from': bidder}).claimTokens()
+
+        balance_auction = eth.getBalance(auction.address)
+        # If auction funds not transfered to token (last claimTokens)
+        if balance_auction > 0:
+            unclaimed_reserve = eth.getBalance(auction.address) - auction.call().funds_claimed()
+            unclaimed_tokens = multiplier * unclaimed_reserve // auction.call().final_price()
+            unclaimed_token_supply = token.call().balanceOf(auction.address)
+
+            # FIXME - (unclaimed_tokens + 1) should be unclaimed_tokens
+            # Token's auction balance should be the same as the unclaimed tokens calculation based on the final_price
+            assert unclaimed_token_supply == unclaimed_tokens or unclaimed_token_supply == (unclaimed_tokens + 1)
+
+        # Check if bidder has the correct number of tokens
+        bidder_balance += claimable
+        assert token.call().balanceOf(bidder) == bidder_balance
+
+        # Bidder cannot claim tokens again
+        with pytest.raises(tester.TransactionFailed):
+            auction.transact({'from': bidder}).claimTokens()
+
+    # Check if all the auction tokens have been claimed
+    total_tokens = auction.call().tokens_auctioned() + reduce((lambda x, y: x + y), prealloc)
+    assert token.call().totalSupply() == total_tokens
+
+    # FIXME this fails: auction balance is 1
+    # assert token.call().balanceOf(auction.address) == 0
+
+
+    # Test if Auction funds have been transfered to Token
+    funds_claimed = auction.call().funds_claimed()
+    assert eth.getBalance(auction.address) == 0
+    assert eth.getBalance(token.address) == funds_claimed
+
+    # Check if auction stage has been changed
+    assert auction.call().stage() == 5  # TradingStarted

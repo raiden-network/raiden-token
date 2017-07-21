@@ -1,5 +1,4 @@
-pragma solidity 0.4.10;
-
+pragma solidity ^0.4.11;
 
 /// @title Abstract token contract - Functions to be implemented by token contracts.
 contract Token {
@@ -38,10 +37,8 @@ contract StandardToken is Token {
         public
         returns (bool)
     {
-        if (balances[msg.sender] < _value) {
-            // Balance too low
-            throw;
-        }
+        require(balances[msg.sender] >= _value);
+
         balances[msg.sender] -= _value;
         balances[_to] += _value;
         Transfer(msg.sender, _to, _value);
@@ -57,10 +54,9 @@ contract StandardToken is Token {
         public
         returns (bool)
     {
-        if (balances[_from] < _value || allowed[_from][msg.sender] < _value) {
-            // Balance or allowance too low
-            throw;
-        }
+        require(balances[_from] >= _value);
+        require(allowed[_from][msg.sender] >= _value);
+
         balances[_to] += _value;
         balances[_from] -= _value;
         allowed[_from][msg.sender] -= _value;
@@ -119,8 +115,14 @@ contract ReserveToken is StandardToken {
     string constant public name = "The Token";
     string constant public symbol = "TKN";
     uint8 constant public decimals = 18;
+    uint constant multiplier = 10**uint(decimals);
 
-    event Redeemed(address indexed receiver, uint num, uint _totalSupply);
+    address public owner;
+    address public auction_address;
+
+    event Deployed(address indexed auction, uint indexed initial_supply, uint indexed auction_supply);
+    event Redeemed(address indexed receiver, uint num, uint unlocked, uint _totalSupply);
+    event Burnt(address indexed receiver, uint num, uint _totalSupply);
     event ReceivedReserve(uint num);
 
     /*
@@ -128,50 +130,77 @@ contract ReserveToken is StandardToken {
      */
     /// @dev Contract constructor function sets dutch auction contract address and assigns all tokens to dutch auction.
     /// @param auction Address of dutch auction contract.
+    /// @param initial_supply Number of initially provided tokens.
     /// @param owners Array of addresses receiving preassigned tokens.
     /// @param tokens Array of preassigned token amounts.
-    function ReserveToken(address auction, address[] owners, uint[] tokens)
+    function ReserveToken(address auction, uint initial_supply, address[] owners, uint[] tokens)
         public
     {
-        if (auction == 0)
-            // Address should not be null.
-            throw;
-        totalSupply = 10000000 * 10**18;
-        balances[auction] = 9000000 * 10**18;
-        Transfer(0, auction, balances[auction]);
-        uint assignedTokens = balances[auction];
+        // Auction address should not be null.
+        require(auction != 0x0);
+
+        owner = msg.sender;
+        auction_address = auction;
+
+        // total supply of Tei at deployment
+        totalSupply = initial_supply;
+
+        // Preallocate tokens to beneficiaries
+        uint prealloc_tokens;
         for (uint i=0; i<owners.length; i++) {
-            if (owners[i] == 0)
-                // Address should not be null.
-                throw;
+            // Address should not be null.
+            require(owners[i] != 0x0);
+
             balances[owners[i]] += tokens[i];
+            prealloc_tokens += tokens[i];
             Transfer(0, owners[i], tokens[i]);
-            assignedTokens += tokens[i];
         }
-        if (assignedTokens != totalSupply)
-            throw;
+
+        balances[auction_address] = totalSupply - prealloc_tokens;
+        Transfer(0, auction_address, balances[auction]);
+
+        Deployed(auction_address, totalSupply, balances[auction]);
     }
 
-    /// @dev called from auction after it has ended to transfer the reserve
+    /// @dev Transfers auction's reserve; called from auction after it has ended.
     function receiveReserve()
         public
         payable
     {
-        require(msg.sender == auction);
+        require(msg.sender == auction_address);
         ReceivedReserve(msg.value);
     }
 
-    /// @dev allows to destroy tokens and receive the corresponding amount of ether, implements the floor price
+    /// @dev Allows to destroy tokens and receive the corresponding amount of ether, implements the floor price
+    /// @param num Number of tokens to redeem
     function redeem(uint num)
         public
     {
         require(num > 0);
-        assert(balances[msg.sender] >= _num);
-        balances[msg.sender] -=num;
-        uint unlocked = this.value * num / totalSupply;
-        totalSupply = -=num;
+        require(this.balance > 0);
+
+        // Calculate amount of Wei to be transferred to sender before burning
+        uint unlocked = this.balance * num / totalSupply;
+
+        // Burn tokens before Wei transfer
+        burn(num);
+
+        // Transfer Wei to sender
         msg.sender.transfer(unlocked);
-        Redeemed(msg.sender, _num, totalSupply);
+        Redeemed(msg.sender, num, unlocked, totalSupply);
+    }
+
+    /// @dev Allows to destroy tokens without receiving the corresponding amount of ether
+    /// @param num Number of tokens to burn
+    function burn(uint num)
+        public
+    {
+        require(num > 0);
+        require(balances[msg.sender] >= num);
+
+        balances[msg.sender] -= num;
+        totalSupply -= num;
+        Burnt(msg.sender, num, totalSupply);
     }
 
 }
