@@ -10,7 +10,7 @@ contract DutchAuction {
     /*
      *  Storage
      */
-    RaidenToken public token;
+    ReserveToken public token;
     address public owner;
 
     // Price function parameters
@@ -130,7 +130,7 @@ contract DutchAuction {
         atStage(Stages.AuctionDeployed)
     {
         require(_token != 0x0);
-        token = RaidenToken(_token);
+        token = ReserveToken(_token);
 
         // Get number of tokens to be auctioned from token auction balance
         tokens_auctioned = token.balanceOf(this);
@@ -298,7 +298,7 @@ contract DutchAuction {
     }
 
     /// @dev Calculates the token price at the current timestamp during the auction.
-    /// @return Returns the token price - Wei per Tei.
+    /// @return Returns the token price - Wei per TKN.
     function calcTokenPrice()
         constant
         private

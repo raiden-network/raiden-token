@@ -107,19 +107,20 @@ contract StandardToken is Token {
 
 /// @title Gnosis token contract
 /// @author [..] credits to Stefan George - <stefan.george@consensys.net>
-contract RaidenToken is StandardToken {
+contract ReserveToken is StandardToken {
 
     /*
      *  Token meta data
      */
-    string constant public name = "Raiden Token";
-    string constant public symbol = "RDN";
+    string constant public name = "The Token";
+    string constant public symbol = "TKN";
     uint8 constant public decimals = 18;
     uint constant multiplier = 10**uint(decimals);
 
     address auction_address;
 
     event Redeemed(address indexed receiver, uint num, uint unlocked, uint _totalSupply);
+    event Burnt(address indexed receiver, uint num, uint _totalSupply);
     event ReceivedReserve(uint num);
 
     /*
@@ -129,7 +130,7 @@ contract RaidenToken is StandardToken {
     /// @param auction Address of dutch auction contract.
     /// @param owners Array of addresses receiving preassigned tokens.
     /// @param tokens Array of preassigned token amounts.
-    function RaidenToken(address auction, address[] owners, uint[] tokens)
+    function ReserveToken(address auction, address[] owners, uint[] tokens)
         public
     {
         // Auction address should not be null.
@@ -167,15 +168,27 @@ contract RaidenToken is StandardToken {
         public
     {
         require(num > 0);
-        assert(balances[msg.sender] >= num);
-        assert(this.balance > 0);
+        require(balances[msg.sender] >= num);
+        require(this.balance > 0);
 
         balances[msg.sender] -= num;
         uint unlocked = this.balance * num / totalSupply;
-        Redeemed(msg.sender, msg.sender.balance, unlocked, totalSupply);
         totalSupply -= num;
         msg.sender.transfer(unlocked);
         Redeemed(msg.sender, num, unlocked, totalSupply);
+    }
+
+    /// @dev Allows to destroy tokens without receiving the corresponding amount of ether
+    /// @param num Number of tokens to burn
+    function burn(uint num)
+        public
+    {
+        require(num > 0);
+        require(balances[msg.sender] >= num);
+
+        balances[msg.sender] -= num;
+        totalSupply -= num;
+        Burnt(msg.sender, num, totalSupply);
     }
 
 }

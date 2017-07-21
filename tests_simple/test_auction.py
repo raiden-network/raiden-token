@@ -5,7 +5,6 @@ from test_fixtures import (
     get_token_contract,
     token_contract,
     accounts,
-    accounts_orders,
     auction_args,
     auction_supply,
     initial_supply,
@@ -20,7 +19,6 @@ from functools import (
 
 def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
     eth = web3.eth
-    orders = accounts_orders
     auction = auction_contract
 
     # Bidder accounts
@@ -54,7 +52,7 @@ def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
 
     # Set maximum amount for a bid - we don't want 1 account draining the auction
     missing_reserve = auction.call().missingReserveToEndAuction()
-    maxBid = missing_reserve / 4;
+    maxBid = missing_reserve / 4
 
     # TODO Test multiple orders from 1 buyer
 

@@ -23,14 +23,6 @@ auction_args = [
     [3, 7500, 555, 3]
 ]
 
-# auction order values for accounts; to be corelated with the above
-accounts_orders = [
-    [10 * multiplier],
-    [15 * multiplier],
-    [25 * multiplier],
-    [60 * multiplier],
-]
-
 
 @pytest.fixture()
 def auction_contract(chain):
@@ -54,12 +46,12 @@ def auction_contract(chain):
 def get_token_contract(chain):
     # contract can be auction contract or proxy contract
     def get(arguments):
-        RaidenToken = chain.provider.get_contract_factory('RaidenToken')
-        token_contract = create_contract(chain, RaidenToken, arguments)
+        ReserveToken = chain.provider.get_contract_factory('ReserveToken')
+        token_contract = create_contract(chain, ReserveToken, arguments)
 
-        print_logs(token_contract, 'Redeemed', 'RaidenToken')
-        print_logs(token_contract, 'Transfer', 'RaidenToken')
-        print_logs(token_contract, 'ReceivedReserve', 'RaidenToken')
+        print_logs(token_contract, 'Redeemed', 'ReserveToken')
+        print_logs(token_contract, 'Transfer', 'ReserveToken')
+        print_logs(token_contract, 'ReceivedReserve', 'ReserveToken')
 
         return token_contract
     return get
