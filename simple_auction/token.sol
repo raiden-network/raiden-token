@@ -117,8 +117,10 @@ contract ReserveToken is StandardToken {
     uint8 constant public decimals = 18;
     uint constant multiplier = 10**uint(decimals);
 
-    address auction_address;
+    address public owner;
+    address public auction_address;
 
+    event Deployed(address indexed auction, uint indexed initial_supply, uint indexed auction_supply);
     event Redeemed(address indexed receiver, uint num, uint unlocked, uint _totalSupply);
     event Burnt(address indexed receiver, uint num, uint _totalSupply);
     event ReceivedReserve(uint num);
@@ -128,29 +130,36 @@ contract ReserveToken is StandardToken {
      */
     /// @dev Contract constructor function sets dutch auction contract address and assigns all tokens to dutch auction.
     /// @param auction Address of dutch auction contract.
+    /// @param initial_supply Number of initially provided tokens.
     /// @param owners Array of addresses receiving preassigned tokens.
     /// @param tokens Array of preassigned token amounts.
-    function ReserveToken(address auction, address[] owners, uint[] tokens)
+    function ReserveToken(address auction, uint initial_supply, address[] owners, uint[] tokens)
         public
     {
         // Auction address should not be null.
         require(auction != 0x0);
 
+        owner = msg.sender;
         auction_address = auction;
-        totalSupply = 10000000 * multiplier;
-        balances[auction] = 9000000 * multiplier;
-        Transfer(0, auction, balances[auction]);
-        uint assignedTokens = balances[auction];
 
+        // total supply of Tei at deployment
+        totalSupply = initial_supply;
+
+        // Preallocate tokens to beneficiaries
+        uint prealloc_tokens;
         for (uint i=0; i<owners.length; i++) {
             // Address should not be null.
             require(owners[i] != 0x0);
 
             balances[owners[i]] += tokens[i];
+            prealloc_tokens += tokens[i];
             Transfer(0, owners[i], tokens[i]);
-            assignedTokens += tokens[i];
         }
-        assert(assignedTokens == totalSupply);
+
+        balances[auction_address] = totalSupply - prealloc_tokens;
+        Transfer(0, auction_address, balances[auction]);
+
+        Deployed(auction_address, totalSupply, balances[auction]);
     }
 
     /// @dev Transfers auction's reserve; called from auction after it has ended.

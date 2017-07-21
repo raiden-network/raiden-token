@@ -114,6 +114,7 @@ contract DutchAuction {
     {
         require(_token != 0x0);
         token = ReserveToken(_token);
+        require(token.owner() == owner);
 
         // Get number of tokens to be auctioned from token auction balance
         tokens_auctioned = token.balanceOf(this);
@@ -215,7 +216,7 @@ contract DutchAuction {
         require(bids[receiver] > 0);
 
         // Number of Tei = bidded_wei / wei_per_TKN * multiplier
-        uint num = bids[receiver] * multiplier / final_price;
+        uint num = multiplier * bids[receiver] / final_price;
         funds_claimed += bids[receiver];
 
         ClaimedTokens(receiver, bids[receiver], num);
@@ -264,13 +265,13 @@ contract DutchAuction {
         returns (uint)
     {
         uint elapsed = now - start_time;
-        return price_factor * multiplier / (elapsed + price_const) + 1;
+        return multiplier * price_factor / (elapsed + price_const) + 1;
     }
 
     /// --------------------------------- Price Functions -------------------------------------------
 
     /// @dev Calculates current token price.
-    /// @return Returns num Wei per TKN (Tei * multiplier).
+    /// @return Returns num Wei per TKN (multiplier * Tei).
     function price()
         public
         constant

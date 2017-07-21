@@ -9,11 +9,7 @@ from test_fixtures import (
     initial_supply,
     auction_supply,
     prealloc,
-    bad_prealloc,
     xassert
-)
-from functools import (
-    reduce
 )
 
 
@@ -46,24 +42,16 @@ def test_ctoken(chain, web3, accounts, get_token_contract, proxy_contract, recei
     auction = proxy_contract
     eth = web3.eth
 
-    # Test preallocation > than initial supply - auction supply
-    assert auction_supply + reduce((lambda x, y: x + y), bad_prealloc) != initial_supply
-    with pytest.raises(tester.TransactionFailed):
-        token = get_token_contract([
-            auction.address,
-            [A, B, C, D],
-            bad_prealloc
-        ])
-
     # TODO - Token initalization with no preallocation of tokens? - fails
 
     # Token initalization + preallocation of tokens
-    assert auction_supply + reduce((lambda x, y: x + y), prealloc) == initial_supply
     token = get_token_contract([
         auction.address,
+        initial_supply,
         [A, B, C, D],
         prealloc
     ])
+    assert token.call().totalSupply() == initial_supply
 
     # Check auction balance
     assert token.call().balanceOf(auction.address) == auction_supply

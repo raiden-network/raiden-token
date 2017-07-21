@@ -1,4 +1,7 @@
 import pytest
+from functools import (
+    reduce
+)
 
 # multiplier based on token decimals: 10^decimals
 multiplier = 10**18
@@ -10,12 +13,7 @@ prealloc = [
     400000 * multiplier,
     100000 * multiplier
 ]
-bad_prealloc = [
-    200001 * multiplier,
-    300000 * multiplier,
-    400000 * multiplier,
-    100000 * multiplier
-]
+auction_supply = initial_supply - reduce((lambda x, y: x + y), prealloc)
 
 # price_factor, _price_const
 auction_args = [
@@ -62,6 +60,7 @@ def token_contract(chain, get_token_contract):
     def get(owners, prealloc, auction):
         token_contract = get_token_contract([
             auction.address,
+            initial_supply,
             owners,
             prealloc
         ])

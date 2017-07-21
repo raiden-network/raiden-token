@@ -6,7 +6,6 @@ from test_fixtures import (
     token_contract,
     accounts,
     auction_args,
-    auction_supply,
     initial_supply,
     prealloc,
     multiplier
@@ -29,9 +28,12 @@ def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
     # Initialize token
     token = get_token_contract([
         auction.address,
+        initial_supply,
         bidders[1:5],
         prealloc
     ])
+
+    # TODO setup auction and token with different owners - should fail
 
     # Initial Auction state
     assert auction.call().stage() == 0  # AuctionDeployed
@@ -41,14 +43,34 @@ def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
     with pytest.raises(tester.TransactionFailed):
         auction.transact().changeSettings(*auction_args[1])
 
+    # Auction setup without being the owner should fail
+    with pytest.raises(tester.TransactionFailed):
+        auction.transact({'from': bidders[1]}).setup(token.address)
+
     auction.transact().setup(token.address)
     assert auction.call().stage() == 1  # AuctionSetUp
 
     # Make sure we can change auction settings now
     auction.transact().changeSettings(*auction_args[0])
 
+    # changeSettings without being the owner should fail
+    with pytest.raises(tester.TransactionFailed):
+        auction.transact({'from': bidders[1]}).changeSettings(*auction_args[1])
+
+    # startAuction without being the owner should fail
+    with pytest.raises(tester.TransactionFailed):
+        auction.transact({'from': bidders[1]}).startAuction()
+
     auction.transact().startAuction()
     assert auction.call().stage() == 2  # AuctionStarted
+
+    # transferReserveToToken should fail (private)
+    with pytest.raises(ValueError):
+        auction.transact({'from': bidders[1]}).transferReserveToToken()
+
+    # finalizeAuction should fail (private)
+    with pytest.raises(ValueError):
+        auction.transact({'from': bidders[1]}).finalizeAuction()
 
     # Set maximum amount for a bid - we don't want 1 account draining the auction
     missing_reserve = auction.call().missingReserveToEndAuction()
@@ -120,6 +142,17 @@ def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
         # Claim tokens -> tokens will be assigned to bidder
         auction.transact({'from': bidder}).claimTokens()
 
+        balance_auction = eth.getBalance(auction.address)
+        # If auction funds not transfered to token (last claimTokens)
+        if balance_auction > 0:
+            unclaimed_reserve = eth.getBalance(auction.address) - auction.call().funds_claimed()
+            unclaimed_tokens = multiplier * unclaimed_reserve // auction.call().final_price()
+            unclaimed_token_supply = token.call().balanceOf(auction.address)
+
+            # FIXME - (unclaimed_tokens + 1) should be unclaimed_tokens
+            # Token's auction balance should be the same as the unclaimed tokens calculation based on the final_price
+            assert unclaimed_token_supply == unclaimed_tokens or unclaimed_token_supply == (unclaimed_tokens + 1)
+
         # Check if bidder has the correct number of tokens
         bidder_balance += claimable
         assert token.call().balanceOf(bidder) == bidder_balance
@@ -131,6 +164,10 @@ def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
     # Check if all the auction tokens have been claimed
     total_tokens = auction.call().tokens_auctioned() + reduce((lambda x, y: x + y), prealloc)
     assert token.call().totalSupply() == total_tokens
+
+    # FIXME this fails: auction balance is 1
+    # assert token.call().balanceOf(auction.address) == 0
+
 
     # Test if Auction funds have been transfered to Token
     funds_claimed = auction.call().funds_claimed()
