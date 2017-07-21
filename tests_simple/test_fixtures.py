@@ -17,10 +17,10 @@ bad_prealloc = [
     100000 * multiplier
 ]
 
-# price_factor, _price_const, _owner_fr, _owner_fr_dec
+# price_factor, _price_const
 auction_args = [
-    [2, 7500, 10, 2],
-    [3, 7500, 555, 3]
+    [2, 7500],
+    [3, 7500]
 ]
 
 

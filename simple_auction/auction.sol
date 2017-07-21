@@ -1,7 +1,5 @@
 pragma solidity ^0.4.11;
 
-import './safe_math.sol';
-import './utils.sol';
 import './token.sol';
 
 /// @title Dutch auction contract - distribution of tokens using an auction.
@@ -30,10 +28,6 @@ contract DutchAuction {
 
     // Wei per TKN (Tei * multiplier)
     uint public final_price;
-
-    // Owner issuance fraction = % of tokens assigned to owner from the total auction supply
-    uint public owner_fr;
-    uint public owner_fr_dec;
 
     mapping (address => uint) public bids;
     Stages public stage;
@@ -78,12 +72,12 @@ contract DutchAuction {
      *  Events
      */
 
-    event Deployed(address indexed auction, uint indexed price_factor, uint indexed price_const, uint owner_fr, uint owner_fr_dec);
+    event Deployed(address indexed auction, uint indexed price_factor, uint indexed price_const);
     event Setup();
-    event SettingsChanged(uint indexed price_factor, uint indexed price_const, uint owner_fr, uint owner_fr_dec);
+    event SettingsChanged(uint indexed price_factor, uint indexed price_const);
     event AuctionStarted(uint indexed start_time, uint indexed block_number);
     event BidSubmission(address indexed sender, uint amount, uint returned_amount, uint indexed missing_reserve);
-    event ClaimedTokens(address indexed recipient, uint sent_amount, uint num, uint recipient_num, uint owner_num);
+    event ClaimedTokens(address indexed recipient, uint sent_amount, uint num);
     event AuctionEnded(uint indexed final_price);
     event TokensDistributed();
     event TradingStarted();
@@ -95,31 +89,20 @@ contract DutchAuction {
     /// @dev Contract constructor function sets owner.
     /// @param _price_factor Auction price factor.
     /// @param _price_const Auction price divisor constant.
-    /// @param _owner_fr Auction owner issuance fraction (e.g. 15 for 0.15).
-    /// @param _owner_fr_dec Auction owner issuance fraction decimals (e.g. 2 for 0.15).
     function DutchAuction(
         uint _price_factor,
-        uint _price_const,
-        uint _owner_fr,
-        uint _owner_fr_dec)
+        uint _price_const)
         public
     {
         require(_price_factor != 0);
         require(_price_const != 0);
-        require(_owner_fr != 0);
-        require(_owner_fr_dec != 0);
-
-        // Example (15, 2) means 15%, we cannot have 1500%
-        require(Utils.num_digits(owner_fr) <= owner_fr_dec);
 
         owner = msg.sender;
         price_factor = _price_factor;
         price_const = _price_const;
-        owner_fr = _owner_fr;
-        owner_fr_dec = _owner_fr_dec;
 
         stage = Stages.AuctionDeployed;
-        Deployed(this, price_factor, price_const, owner_fr, owner_fr_dec);
+        Deployed(this, price_factor, price_const);
     }
 
     /// @dev Setup function sets external contracts' addresses.
@@ -145,29 +128,19 @@ contract DutchAuction {
     /// @dev Changes auction start price factor before auction is started.
     /// @param _price_factor Updated price factor.
     /// @param _price_const Updated price divisor constant.
-    /// @param _owner_fr Updated owner issuance fraction (e.g. 15 for 0.15).
-    /// @param _owner_fr_dec Updated owner issuance fraction decimals (e.g. 2 for 0.15).
     function changeSettings(
         uint _price_factor,
-        uint _price_const,
-        uint _owner_fr,
-        uint _owner_fr_dec)
+        uint _price_const)
         public
+        isOwner
         atStage(Stages.AuctionSetUp)
     {
         require(_price_factor != 0);
         require(_price_const != 0);
-        require(_owner_fr != 0);
-        require(_owner_fr_dec != 0);
-
-        // Example (10, 2) means 10%, we cannot have 1000%
-        require(Utils.num_digits(owner_fr) <= owner_fr_dec);
 
         price_factor = _price_factor;
         price_const = _price_const;
-        owner_fr = _owner_fr;
-        owner_fr_dec = _owner_fr_dec;
-        SettingsChanged(price_factor, price_const, owner_fr, owner_fr_dec);
+        SettingsChanged(price_factor, price_const);
     }
 
     /// @dev Starts auction and sets start_time.
@@ -243,33 +216,18 @@ contract DutchAuction {
 
         // Number of Tei = bidded_wei / wei_per_TKN * multiplier
         uint num = bids[receiver] * multiplier / final_price;
-        uint owner_num = ownerFraction(num);
-        uint recipient_num = num - owner_num;
         funds_claimed += bids[receiver];
 
-        ClaimedTokens(receiver, bids[receiver], num, recipient_num, owner_num);
+        ClaimedTokens(receiver, bids[receiver], num);
 
         bids[receiver] = 0;
-
-        token.transfer(owner, owner_num);
-        token.transfer(receiver, recipient_num);
+        token.transfer(receiver, num);
 
         if (funds_claimed == this.balance) {
             stage = Stages.TokensDistributed;
             TokensDistributed();
             transferReserveToToken();
         }
-    }
-
-    /// @dev Get the owner issuance fraction from the provided supply / number of tokens.
-    /// @param supply Number of tokens.
-    /// @return Returns number of tokens issued for the auction owner.
-    function ownerFraction(uint supply)
-        public
-        constant
-        returns (uint)
-    {
-        return SafeMath.mul(supply, owner_fr) / 10**owner_fr_dec;
     }
 
     /*
@@ -324,16 +282,6 @@ contract DutchAuction {
         return calcTokenPrice();
     }
 
-    /// @dev Calculates the simulated reserve at the current price.
-    /// @return Returns the simulated reserve amount.
-    function reserveAtPrice()
-        constant
-        public
-        returns (uint)
-    {
-        return tokens_auctioned * price() / multiplier;
-    }
-
     /// @dev The missing reserve amount necessary to end the auction at the current price.
     /// @return Returns the missing reserve amount.
     function missingReserveToEndAuction()
@@ -352,6 +300,10 @@ contract DutchAuction {
         public
         returns (uint)
     {
-        return SafeMath.max256(0, reserveAtPrice() - reserve);
+        uint reserve_at_price = tokens_auctioned * price() / multiplier;
+        if(reserve_at_price < reserve) {
+            return 0;
+        }
+        return reserve_at_price - reserve;
     }
 }

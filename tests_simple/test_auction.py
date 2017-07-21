@@ -108,27 +108,20 @@ def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
     print('TOTAL TOKENS CLAIMABLE', total_tokens_claimable)
     assert total_tokens_claimable == auction.call().tokens_auctioned()
 
-    owner_balance = token.call().balanceOf(Owner)
-
     for i in range(0, index):
         bidder = bidders[i]
 
         # Calculate number of Tei issued for this bid
         claimable = auction.call().bids(bidder) * multiplier // final_price
 
-        # Number of Tei assigned to owner
-        owner_fraction = auction.call().ownerFraction(claimable)
-
         # Number of Tei assigned to the bidder
         bidder_balance = token.call().balanceOf(bidder)
 
-        # Claim tokens -> tokens will be assigned to owner + bidder
+        # Claim tokens -> tokens will be assigned to bidder
         auction.transact({'from': bidder}).claimTokens()
 
-        # Check if owner & bidder have the correct number of tokens
-        owner_balance += owner_fraction
-        bidder_balance += claimable - owner_fraction
-        assert token.call().balanceOf(Owner) == owner_balance
+        # Check if bidder has the correct number of tokens
+        bidder_balance += claimable
         assert token.call().balanceOf(bidder) == bidder_balance
 
         # Bidder cannot claim tokens again
@@ -138,7 +131,6 @@ def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
     # Check if all the auction tokens have been claimed
     total_tokens = auction.call().tokens_auctioned() + reduce((lambda x, y: x + y), prealloc)
     assert token.call().totalSupply() == total_tokens
-    assert token.call().balanceOf(Owner) == owner_balance
 
     # Test if Auction funds have been transfered to Token
     funds_claimed = auction.call().funds_claimed()
@@ -147,17 +139,3 @@ def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
 
     # Check if auction stage has been changed
     assert auction.call().stage() == 5  # TradingStarted
-
-
-def test_ownerFraction(accounts, auction_contract, token_contract):
-    auction = auction_contract
-    (Owner, A, B, C, D) = accounts(5)
-    bidders = [A, B, C, D]
-    token = token_contract(bidders, prealloc, auction)
-
-    assert auction.call().ownerFraction(100000) == 10000
-    assert auction.call().ownerFraction(123456) == 12345
-
-    auction.transact().changeSettings(*auction_args[1])
-    owner_fr = 100000 * auction_args[1][2] / math.pow(10, auction_args[1][3])
-    assert auction.call().ownerFraction(100000) == owner_fr
