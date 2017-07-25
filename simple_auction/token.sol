@@ -37,6 +37,8 @@ contract StandardToken is Token {
         public
         returns (bool)
     {
+        require(_to != 0x0);
+        require(_value > 0);
         require(balances[msg.sender] >= _value);
 
         balances[msg.sender] -= _value;
@@ -138,6 +140,8 @@ contract ReserveToken is StandardToken {
     {
         // Auction address should not be null.
         require(auction != 0x0);
+        require(owners.length == tokens.length);
+        require(initial_supply > multiplier);
 
         owner = msg.sender;
         auction_address = auction;
@@ -150,6 +154,7 @@ contract ReserveToken is StandardToken {
         for (uint i=0; i<owners.length; i++) {
             // Address should not be null.
             require(owners[i] != 0x0);
+            require(tokens[i] > 0);
 
             balances[owners[i]] += tokens[i];
             prealloc_tokens += tokens[i];
@@ -168,6 +173,8 @@ contract ReserveToken is StandardToken {
         payable
     {
         require(msg.sender == auction_address);
+        require(msg.value > 0);
+
         ReceivedReserve(msg.value);
     }
 
@@ -181,6 +188,10 @@ contract ReserveToken is StandardToken {
 
         // Calculate amount of Wei to be transferred to sender before burning
         uint unlocked = this.balance * num / totalSupply;
+        assert(unlocked > 0);
+
+        // TODO remove after testing
+        assert(num == (unlocked * totalSupply / this.balance));
 
         // Burn tokens before Wei transfer
         burn(num);
@@ -197,6 +208,7 @@ contract ReserveToken is StandardToken {
     {
         require(num > 0);
         require(balances[msg.sender] >= num);
+        require(totalSupply >= num);
 
         balances[msg.sender] -= num;
         totalSupply -= num;

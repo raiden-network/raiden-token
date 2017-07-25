@@ -97,8 +97,8 @@ contract DutchAuction {
         uint _price_const)
         public
     {
-        require(_price_factor != 0);
-        require(_price_const != 0);
+        require(_price_factor > 0);
+        require(_price_const > 0);
 
         owner = msg.sender;
         price_factor = _price_factor;
@@ -121,6 +121,7 @@ contract DutchAuction {
 
         // Get number of tokens to be auctioned from token auction balance
         tokens_auctioned = token.balanceOf(this);
+        assert(tokens_auctioned > 0);
 
         // Set number of tokens multiplier from token decimals
         multiplier = 10**uint(token.decimals());
@@ -139,8 +140,8 @@ contract DutchAuction {
         isOwner
         atStage(Stages.AuctionSetUp)
     {
-        require(_price_factor != 0);
-        require(_price_const != 0);
+        require(_price_factor > 0);
+        require(_price_const > 0);
 
         price_factor = _price_factor;
         price_const = _price_const;
@@ -179,6 +180,7 @@ contract DutchAuction {
         atStage(Stages.AuctionStarted)
     {
         require(receiver != 0x0);
+        require(msg.value > 0);
 
         uint amount = msg.value;
 
