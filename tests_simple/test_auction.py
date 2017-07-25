@@ -4,9 +4,9 @@ from test_fixtures import (
     auction_contract,
     get_token_contract,
     token_contract,
-    accounts,
     auction_args,
     initial_supply,
+    auction_supply,
     prealloc,
     multiplier
 )
@@ -16,20 +16,19 @@ from functools import (
 )
 
 
-def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
+def test_auction(chain, web3, auction_contract, get_token_contract):
     eth = web3.eth
     auction = auction_contract
 
     # Bidder accounts
-    bidders = web3.eth.accounts
-    Owner = bidders[0]
-    bidders = bidders[1:]
+    owners = web3.eth.accounts[:2]
+    bidders = web3.eth.accounts[2:]
 
     # Initialize token
     token = get_token_contract([
         auction.address,
         initial_supply,
-        bidders[1:5],
+        owners,
         prealloc
     ])
 

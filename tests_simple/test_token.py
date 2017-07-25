@@ -2,7 +2,6 @@ import pytest
 from ethereum import tester
 from test_fixtures import (
     get_token_contract,
-    accounts,
     create_contract,
     print_logs,
     multiplier,
@@ -37,8 +36,9 @@ def receiveReserve(web3, proxy_contract):
     return get
 
 
-def test_ctoken(chain, web3, accounts, get_token_contract, proxy_contract, receiveReserve):
-    (A, B, C, D) = accounts(4)
+def test_ctoken(chain, web3, get_token_contract, proxy_contract, receiveReserve):
+    owners = web3.eth.accounts[:2]
+    (A, B, C, D) = web3.eth.accounts[2:6]
     auction = proxy_contract
     eth = web3.eth
 
@@ -48,7 +48,7 @@ def test_ctoken(chain, web3, accounts, get_token_contract, proxy_contract, recei
     token = get_token_contract([
         auction.address,
         initial_supply,
-        [A, B, C, D],
+        owners,
         prealloc
     ])
     assert token.call().totalSupply() == initial_supply
@@ -57,16 +57,16 @@ def test_ctoken(chain, web3, accounts, get_token_contract, proxy_contract, recei
     assert token.call().balanceOf(auction.address) == auction_supply
 
     # Check preallocations
-    assert token.call().balanceOf(A) == prealloc[0]
-    assert token.call().balanceOf(B) == prealloc[1]
-    assert token.call().balanceOf(C) == prealloc[2]
-    assert token.call().balanceOf(D) == prealloc[3]
+    for index, owner in enumerate(owners):
+        assert token.call().balanceOf(owner) == prealloc[index]
 
     # Check token transfers
-    token.transact({'from': A}).transfer(B, 400)
+    token.transact({'from': owners[0]}).transfer(A, 1000 * multiplier)
+    token.transact({'from': A}).transfer(B, 400 * multiplier)
     assert token.call().totalSupply() == initial_supply
-    assert token.call().balanceOf(A) == prealloc[0] - 400
-    assert token.call().balanceOf(B) == prealloc[1] + 400
+    assert token.call().balanceOf(owners[0]) == prealloc[0] - 1000 * multiplier
+    assert token.call().balanceOf(A) == 600 * multiplier
+    assert token.call().balanceOf(B) == 400 * multiplier
 
     # TODO
     # token.transact({'from': A}).transferFrom(A, B, 300)
@@ -99,12 +99,12 @@ def test_ctoken(chain, web3, accounts, get_token_contract, proxy_contract, recei
     tokens_A = token.call().balanceOf(A)
     redeemed = 250 * multiplier
     balance_A = eth.getBalance(A)
-    expected_payment = eth.getBalance(token.address) * redeemed / initial_supply
+    expected_payment = eth.getBalance(token.address) * redeemed // initial_supply
 
     token.transact({'from': A}).redeem(redeemed)
     assert token.call().totalSupply() == initial_supply - redeemed
     assert token.call().balanceOf(A) == tokens_A - redeemed
-    assert eth.getBalance(token.address) == balance_token - expected_payment
+    assert eth.getBalance(token.address) == int(balance_token - expected_payment)
 
     print('****** redeemed', redeemed, expected_payment)
     print('****** balance_A', balance_A, eth.getBalance(A), balance_A + expected_payment, eth.getBalance(A) - balance_A)
