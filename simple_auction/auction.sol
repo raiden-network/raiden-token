@@ -38,6 +38,9 @@ contract DutchAuction {
     // multiplier set from token's number of decimals (i.e. 10**decimals)
     uint multiplier;
 
+    // TODO - remove after testing
+    uint rounding_error_tokens;
+
     /*
      *  Enums
      */
@@ -217,12 +220,33 @@ contract DutchAuction {
 
         // Number of Tei = bidded_wei / wei_per_TKN * multiplier
         uint num = multiplier * bids[receiver] / final_price;
+
+        // Update funds claimed with full bidded amount
+        // rounding errors are included to not block the contract
         funds_claimed += bids[receiver];
 
         ClaimedTokens(receiver, bids[receiver], num);
 
+        // Set receiver bid to 0 before assigning tokens
         bids[receiver] = 0;
+
         token.transfer(receiver, num);
+        assert(num == token.balanceOf(receiver));
+        ClaimedTokens(receiver, num, token.balanceOf(receiver));
+
+        // Test for a correct claimed tokens calculation
+        /* TODO remove this after testing */
+        uint auction_unclaimed_tokens = token.balanceOf(this);
+
+        uint unclaimed_tokens = (this.balance - funds_claimed) * multiplier / final_price;
+        unclaimed_tokens += rounding_error_tokens;
+
+        if(auction_unclaimed_tokens != unclaimed_tokens) {
+            rounding_error_tokens += 1;
+            unclaimed_tokens += 1;
+        }
+        assert(auction_unclaimed_tokens == unclaimed_tokens);
+        /* End of removable test */
 
         if (funds_claimed == this.balance) {
             stage = Stages.TokensDistributed;

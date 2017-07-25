@@ -83,6 +83,12 @@ def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
     bidded = 0  # Total bidded amount
     index = 0  # bidders index
 
+    # Make some bids with 1 wei to be sure we test rounding errors
+    auction.transact({'from': bidders[0], "value": 1}).bid()
+    auction.transact({'from': bidders[1], "value": 1}).bid()
+    index = 2
+    bidded = 2
+
     while auction.call().missingReserveToEndAuction() > 0:
         if bidders_len < index:
             print('!! Not enough accounts to simulate bidders')
@@ -106,6 +112,7 @@ def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
 
     assert eth.getBalance(auction.address) == bidded
     assert auction.call().missingReserveToEndAuction() == 0
+    print('NO OF BIDDERS', index)
 
     # TODO check if account has received back the difference
     # gas_price = eth.gasPrice
@@ -125,10 +132,12 @@ def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
     final_price = auction.call().final_price()
 
     # Total Tei claimable
-    total_tokens_claimable = eth.getBalance(auction.address) * multiplier / final_price
+    total_tokens_claimable = eth.getBalance(auction.address) * multiplier // final_price
     print('FINAL PRICE', final_price)
-    print('TOTAL TOKENS CLAIMABLE', total_tokens_claimable)
-    assert total_tokens_claimable == auction.call().tokens_auctioned()
+    print('TOTAL TOKENS CLAIMABLE', int(total_tokens_claimable))
+    assert int(total_tokens_claimable) == auction.call().tokens_auctioned()
+
+    rounding_error_tokens = 0
 
     for i in range(0, index):
         bidder = bidders[i]
@@ -142,16 +151,28 @@ def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
         # Claim tokens -> tokens will be assigned to bidder
         auction.transact({'from': bidder}).claimTokens()
 
-        balance_auction = eth.getBalance(auction.address)
         # If auction funds not transfered to token (last claimTokens)
+        # we test for a correct claimed tokens calculation
+        balance_auction = eth.getBalance(auction.address)
         if balance_auction > 0:
-            unclaimed_reserve = eth.getBalance(auction.address) - auction.call().funds_claimed()
-            unclaimed_tokens = multiplier * unclaimed_reserve // auction.call().final_price()
+
+            # Auction supply = unclaimed tokens, including rounding errors
             unclaimed_token_supply = token.call().balanceOf(auction.address)
 
-            # FIXME - (unclaimed_tokens + 1) should be unclaimed_tokens
+            # Calculated unclaimed tokens
+            unclaimed_reserve = eth.getBalance(auction.address) - auction.call().funds_claimed()
+            unclaimed_tokens = multiplier * unclaimed_reserve // auction.call().final_price()
+
+            # Adding previous rounding errors
+            unclaimed_tokens += rounding_error_tokens
+
+
             # Token's auction balance should be the same as the unclaimed tokens calculation based on the final_price
-            assert unclaimed_token_supply == unclaimed_tokens or unclaimed_token_supply == (unclaimed_tokens + 1)
+            # We assume a rounding error of 1
+            if unclaimed_token_supply != unclaimed_tokens:
+                rounding_error_tokens += 1
+                unclaimed_tokens += 1
+            assert unclaimed_token_supply == unclaimed_tokens
 
         # Check if bidder has the correct number of tokens
         bidder_balance += claimable
@@ -165,8 +186,9 @@ def test_auction(chain, accounts, web3, auction_contract, get_token_contract):
     total_tokens = auction.call().tokens_auctioned() + reduce((lambda x, y: x + y), prealloc)
     assert token.call().totalSupply() == total_tokens
 
-    # FIXME this fails: auction balance is 1
-    # assert token.call().balanceOf(auction.address) == 0
+    # Auction balance might be > 0 due to rounding errors
+    assert token.call().balanceOf(auction.address) == rounding_error_tokens
+    print('FINAL UNCLAIMED TOKENS', rounding_error_tokens)
 
 
     # Test if Auction funds have been transfered to Token
