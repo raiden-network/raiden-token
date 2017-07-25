@@ -106,8 +106,6 @@ def test_ctoken(chain, web3, get_token_contract, proxy_contract, receiveReserve)
     assert token.call().balanceOf(A) == tokens_A - redeemed
     assert eth.getBalance(token.address) == int(balance_token - expected_payment)
 
-    print('****** redeemed', redeemed, expected_payment)
-    print('****** balance_A', balance_A, eth.getBalance(A), balance_A + expected_payment, eth.getBalance(A) - balance_A)
     # transaction costs estimation
     # FIXME seems like A gets back more than the expected_payment
     # though the token contract shows correct balance when logging the values

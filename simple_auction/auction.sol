@@ -287,7 +287,6 @@ contract DutchAuction {
     function calcTokenPrice()
         constant
         private
-        atStage(Stages.AuctionStarted)
         returns (uint)
     {
         uint elapsed = now - start_time;

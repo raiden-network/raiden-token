@@ -165,8 +165,8 @@ def test_auction(chain, web3, auction_contract, get_token_contract):
             # Adding previous rounding errors
             unclaimed_tokens += rounding_error_tokens
 
-
-            # Token's auction balance should be the same as the unclaimed tokens calculation based on the final_price
+            # Token's auction balance should be the same as
+            # the unclaimed tokens calculation based on the final_price
             # We assume a rounding error of 1
             if unclaimed_token_supply != unclaimed_tokens:
                 rounding_error_tokens += 1
@@ -188,7 +188,6 @@ def test_auction(chain, web3, auction_contract, get_token_contract):
     # Auction balance might be > 0 due to rounding errors
     assert token.call().balanceOf(auction.address) == rounding_error_tokens
     print('FINAL UNCLAIMED TOKENS', rounding_error_tokens)
-
 
     # Test if Auction funds have been transfered to Token
     funds_claimed = auction.call().funds_claimed()

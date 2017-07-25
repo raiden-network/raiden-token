@@ -19,14 +19,15 @@ Smart Contracts, Unittests and Infrastructure.
  * pytest
  * populus deploy
 
-#### Testing recommendations
+#### Testing
 
  * If testing with Populus TesterChain
 
  ```
- pytest tests_simple -p no:warnings -s
+pytest tests_simple -p no:warnings -s
  ```
+ * Easy deployment on a testnet
 
-- not enough accounts & balance for token decimals = 18, so:
-    - set `multiplier = 10**10` in `tests_simple/test_fixtures.py`
-    - set `uint8 constant public decimals = 10;` in `simple_auction/token.sol`
+ ```
+python deploy.py
+ ```
