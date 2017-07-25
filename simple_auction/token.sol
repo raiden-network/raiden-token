@@ -188,17 +188,21 @@ contract ReserveToken is StandardToken {
 
         // Calculate amount of Wei to be transferred to sender before burning
         uint unlocked = this.balance * num / totalSupply;
-        assert(unlocked > 0);
-
-        // TODO remove after testing
-        assert(num == (unlocked * totalSupply / this.balance));
 
         // Burn tokens before Wei transfer
         burn(num);
 
+        uint pre_balance = this.balance;
+
         // Transfer Wei to sender
         msg.sender.transfer(unlocked);
         Redeemed(msg.sender, num, unlocked, totalSupply);
+
+        assert(unlocked > 0);
+        assert(this.balance == pre_balance - unlocked);
+
+        // TODO remove after testing
+        assert(num == (unlocked * totalSupply / this.balance));
     }
 
     /// @dev Allows to destroy tokens without receiving the corresponding amount of ether
@@ -210,9 +214,13 @@ contract ReserveToken is StandardToken {
         require(balances[msg.sender] >= num);
         require(totalSupply >= num);
 
+        uint pre_balance = balances[msg.sender];
+
         balances[msg.sender] -= num;
         totalSupply -= num;
         Burnt(msg.sender, num, totalSupply);
+
+        assert(balances[msg.sender] == pre_balance - num);
     }
 
 }

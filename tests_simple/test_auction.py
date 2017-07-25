@@ -35,15 +35,9 @@ def test_auction(chain, web3, auction_contract, get_token_contract):
         prealloc
     ])
 
-    # TODO setup auction and token with different owners - should fail
-
     # Initial Auction state
     assert auction.call().stage() == 0  # AuctionDeployed
     assert eth.getBalance(auction.address) == 0
-
-    # changeSettings needs stage = AuctionSetUp, so it will fail now
-    with pytest.raises(tester.TransactionFailed):
-        auction.transact().changeSettings(*auction_args[1])
 
     # Auction setup without being the owner should fail
     with pytest.raises(tester.TransactionFailed):
@@ -70,6 +64,10 @@ def test_auction(chain, web3, auction_contract, get_token_contract):
     auction.transact().startAuction()
     assert auction.call().stage() == 2  # AuctionStarted
     assert auction.call().price() < initial_price
+
+    # Cannot changeSettings after auction starts
+    with pytest.raises(tester.TransactionFailed):
+        auction.transact().changeSettings(*auction_args[1])
 
     # transferReserveToToken should fail (private)
     with pytest.raises(ValueError):
