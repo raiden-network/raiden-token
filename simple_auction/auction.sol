@@ -282,14 +282,18 @@ contract DutchAuction {
         TradingStarted();
     }
 
-    /// @dev Calculates the token price at the current timestamp during the auction.
+    /// @dev Calculates the token price at the current timestamp during the auction; elapsed time = 0 before auction starts.
+    /// @dev At AuctionDeployed the price is 1, because multiplier is 0
     /// @return Returns the token price - Wei per TKN.
     function calcTokenPrice()
         constant
         private
         returns (uint)
     {
-        uint elapsed = now - start_time;
+        uint elapsed;
+        if(stage == Stages.AuctionStarted) {
+            elapsed = now - start_time;
+        }
         return multiplier * price_factor / (elapsed + price_const) + 1;
     }
 
@@ -302,8 +306,11 @@ contract DutchAuction {
         constant
         returns (uint)
     {
-        if (stage == Stages.AuctionEnded) {
-            return final_price;
+        if (stage == Stages.AuctionEnded ||
+            stage == Stages.TokensDistributed ||
+            stage == Stages.TradingStarted)
+        {
+            return 0;
         }
         return calcTokenPrice();
     }

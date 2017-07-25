@@ -24,6 +24,9 @@ def test_auction(chain, web3, auction_contract, get_token_contract):
     owners = web3.eth.accounts[:2]
     bidders = web3.eth.accounts[2:]
 
+    # Auction price after deployment; multiplier is 0 at this point
+    assert auction.call().price() == 1
+
     # Initialize token
     token = get_token_contract([
         auction.address,
@@ -60,8 +63,13 @@ def test_auction(chain, web3, auction_contract, get_token_contract):
     with pytest.raises(tester.TransactionFailed):
         auction.transact({'from': bidders[1]}).startAuction()
 
+    # Auction price before auction start
+    initial_price = multiplier * auction_args[0][0] // auction_args[0][1] + 1
+    assert auction.call().price() == initial_price
+
     auction.transact().startAuction()
     assert auction.call().stage() == 2  # AuctionStarted
+    assert auction.call().price() < initial_price
 
     # transferReserveToToken should fail (private)
     with pytest.raises(ValueError):
@@ -125,6 +133,7 @@ def test_auction(chain, web3, auction_contract, get_token_contract):
         auction.transact({'from': bidders[index], "value": 1000}).bid()
 
     assert auction.call().stage() == 3  # AuctionEnded
+    assert auction.call().price() == 0  # UI has to call final_price
 
     # Claim all tokens
     # Final price per TKN (Tei * multiplier)
