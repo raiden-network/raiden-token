@@ -20,5 +20,8 @@ static-html
 dynamic-import
 react-meteor-data
 
+aldeed:collection2-core
+mdg:validated-method
+
 less
 ethereum:dapp-styles
