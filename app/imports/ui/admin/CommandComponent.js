@@ -12,7 +12,8 @@ export default class CommandComponent extends Component {
   onClick() {
     let { command, onClick } = this.props;
     let inputsNo = command.inputs.length,
-      iNo = Object.keys(this.inputs).length
+      iNo = Object.keys(this.inputs).length;
+      
     if(inputsNo === iNo || inputsNo == iNo - 1) {
       let orderedInputs = command.inputs.map(i => {
         return this.inputs[i.name];
@@ -29,11 +30,12 @@ export default class CommandComponent extends Component {
   render() {
     let { command, value } = this.props;
     //console.log(command.name, command.inputs)
+
     return React.createElement('div', {},
       React.createElement('button', { 
         onClick: this.onClick, 
         className: 'dapp-block-button btn-cmd' 
-      }, command.label),//command.name),
+      }, command.name),
       command.inputs.map((i) => {
         return React.createElement('input', {
           name: 'input', 

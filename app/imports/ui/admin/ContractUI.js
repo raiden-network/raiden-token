@@ -1,5 +1,5 @@
 import React, { Component } from 'react';
-import CommandComponent from '/imports/ui/CommandComponent'
+import CommandComponent from './CommandComponent'
 
 export default class ContractUI extends Component {
   constructor(props) {
@@ -9,7 +9,7 @@ export default class ContractUI extends Component {
 
   render() {
     let { contract, web3, commands, values, onClick } = this.props;
-
+    console.log(this.props)
     return React.createElement('div', {},
       React.createElement('div', {},
         commands.map((f, i) => {
