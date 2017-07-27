@@ -58,7 +58,10 @@ contract Mint {
     event Bought(address indexed _recipient, uint indexed _value, uint indexed _num);
     event Sold(address indexed _recipient, uint indexed _num, uint indexed _purchase_cost);
     event Burnt(address indexed _recipient, uint indexed _num);
-
+    event SaleCost(uint indexed _num, uint _cost, uint _supply, uint indexed _timestamp);
+    event PurchaseCost(uint indexed _num, uint _cost, uint _supply, uint indexed _timestamp);
+    event Valuation(uint _valuation, uint indexed _timestamp);
+    event MarketCap(uint _market_cap, uint _supply, uint indexed _timestamp);
 
     function Mint(
         uint _base_price,
@@ -160,8 +163,8 @@ contract Mint {
         atStage(Stages.MintingActive)
     {
         require(num > 0);
-        token.destroy(msg.sender, num);
         Burnt(msg.sender, num);
+        token.destroy(msg.sender, num);
     }
 
     function issuedSupply()
@@ -381,7 +384,10 @@ contract Mint {
         returns (uint)
     {
         // Current sale cost of 1 token * actual supply
-        return SafeMath.mul(ask(), token.totalSupply());
+        uint supply = token.totalSupply();
+        uint market_cap = SafeMath.mul(ask(), supply);
+        MarketCap(market_cap, supply, now);
+        return market_cap;
     }
 
     // Current sale cost of 1 token
@@ -401,26 +407,30 @@ contract Mint {
         constant
         returns (uint)
     {
+        uint supply = supplyAtReserve();
         uint sale_cost = curveCost(
-            supplyAtReserve(),
+            supply,
             SafeMath.sub(num, ownerFraction(num))
         );
+        SaleCost(num, sale_cost, supply, now);
         return sale_cost;
     }
 
     // Get the purchase cost of a number of tokens = the price at which the owner buys back tokens from the market
     // This sets the floor price
-    function purchaseCost(uint _num)
+    function purchaseCost(uint num)
         public
         constant
         returns (uint)
     {
-        if(token.totalSupply() == 0) {
+        uint supply = token.totalSupply();
+        if(supply == 0) {
             return 0;
         }
 
-        assert(_num <= token.totalSupply());
-        uint purchase_cost = SafeMath.mul(combinedReserve(), _num) / token.totalSupply();
+        assert(num <= supply);
+        uint purchase_cost = SafeMath.mul(combinedReserve(), num) / supply;
+        PurchaseCost(num, purchase_cost, supply, now);
         return purchase_cost;
     }
 
@@ -434,6 +444,7 @@ contract Mint {
             0,
             SafeMath.sub(marketCap(), combinedReserve())
         );
+        Valuation(val, now);
         return val;
     }
 
