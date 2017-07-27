@@ -6,12 +6,9 @@ from functools import (
 # multiplier based on token decimals: 10^decimals
 multiplier = 10**18
 initial_supply = 10000000 * multiplier
-auction_supply = 9000000 * multiplier
 prealloc = [
     200000 * multiplier,
-    300000 * multiplier,
-    400000 * multiplier,
-    100000 * multiplier
+    800000 * multiplier
 ]
 auction_supply = initial_supply - reduce((lambda x, y: x + y), prealloc)
 

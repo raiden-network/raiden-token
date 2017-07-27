@@ -38,6 +38,9 @@ contract DutchAuction {
     // multiplier set from token's number of decimals (i.e. 10**decimals)
     uint multiplier;
 
+    // TODO - remove after testing
+    uint rounding_error_tokens;
+
     /*
      *  Enums
      */
@@ -94,15 +97,10 @@ contract DutchAuction {
         uint _price_const)
         public
     {
-        require(_price_factor != 0);
-        require(_price_const != 0);
-
         owner = msg.sender;
-        price_factor = _price_factor;
-        price_const = _price_const;
-
         stage = Stages.AuctionDeployed;
         Deployed(this, price_factor, price_const);
+        changeSettings(_price_factor, _price_const);
     }
 
     /// @dev Setup function sets external contracts' addresses.
@@ -124,6 +122,8 @@ contract DutchAuction {
 
         stage = Stages.AuctionSetUp;
         Setup();
+
+        assert(tokens_auctioned > 0);
     }
 
     /// @dev Changes auction start price factor before auction is started.
@@ -134,10 +134,10 @@ contract DutchAuction {
         uint _price_const)
         public
         isOwner
-        atStage(Stages.AuctionSetUp)
     {
-        require(_price_factor != 0);
-        require(_price_const != 0);
+        require(stage == Stages.AuctionDeployed || stage == Stages.AuctionSetUp);
+        require(_price_factor > 0);
+        require(_price_const > 0);
 
         price_factor = _price_factor;
         price_const = _price_const;
@@ -176,8 +176,10 @@ contract DutchAuction {
         atStage(Stages.AuctionStarted)
     {
         require(receiver != 0x0);
+        require(msg.value > 0);
 
         uint amount = msg.value;
+        uint pre_receiver_funds = bids[receiver];
 
         // Missing reserve without the current bid amount
         uint maxWei = missingReserveToEndAuction(this.balance - amount);
@@ -186,6 +188,7 @@ contract DutchAuction {
         if (amount > maxWei) {
             amount = maxWei;
             // Send change back to receiver address.
+            // TODO add test for this
             receiver.transfer(msg.value - amount);
         }
         bids[receiver] += amount;
@@ -195,6 +198,8 @@ contract DutchAuction {
             // When maxWei is equal to the big amount the auction is ended and finalizeAuction is triggered.
             finalizeAuction();
         }
+
+        assert(bids[receiver] == pre_receiver_funds + amount);
     }
 
     /// @dev Claims tokens for bidder after auction. To be used if tokens can be claimed by bidders, individually.
@@ -217,18 +222,41 @@ contract DutchAuction {
 
         // Number of Tei = bidded_wei / wei_per_TKN * multiplier
         uint num = multiplier * bids[receiver] / final_price;
+
+        // Update funds claimed with full bidded amount
+        // rounding errors are included to not block the contract
         funds_claimed += bids[receiver];
 
         ClaimedTokens(receiver, bids[receiver], num);
 
+        // Set receiver bid to 0 before assigning tokens
         bids[receiver] = 0;
+
         token.transfer(receiver, num);
+        ClaimedTokens(receiver, num, token.balanceOf(receiver));
+
+        // Test for a correct claimed tokens calculation
+        /* TODO remove this after testing */
+        uint auction_unclaimed_tokens = token.balanceOf(this);
+
+        uint unclaimed_tokens = (this.balance - funds_claimed) * multiplier / final_price;
+        unclaimed_tokens += rounding_error_tokens;
+
+        if(auction_unclaimed_tokens != unclaimed_tokens) {
+            rounding_error_tokens += 1;
+            unclaimed_tokens += 1;
+        }
+        assert(auction_unclaimed_tokens == unclaimed_tokens);
+        /* End of removable test */
 
         if (funds_claimed == this.balance) {
             stage = Stages.TokensDistributed;
             TokensDistributed();
             transferReserveToToken();
         }
+
+        assert(num == token.balanceOf(receiver));
+        assert(bids[receiver] == 0);
     }
 
     /*
@@ -251,20 +279,28 @@ contract DutchAuction {
         private
         atStage(Stages.TokensDistributed)
     {
+        uint pre_balance = this.balance;
+
         token.receiveReserve.value(this.balance)();
         stage = Stages.TradingStarted;
         TradingStarted();
+
+        assert(this.balance == 0);
+        assert(token.balance == pre_balance);
     }
 
-    /// @dev Calculates the token price at the current timestamp during the auction.
+    /// @dev Calculates the token price at the current timestamp during the auction; elapsed time = 0 before auction starts.
+    /// @dev At AuctionDeployed the price is 1, because multiplier is 0
     /// @return Returns the token price - Wei per TKN.
     function calcTokenPrice()
         constant
         private
-        atStage(Stages.AuctionStarted)
         returns (uint)
     {
-        uint elapsed = now - start_time;
+        uint elapsed;
+        if(stage == Stages.AuctionStarted) {
+            elapsed = now - start_time;
+        }
         return multiplier * price_factor / (elapsed + price_const) + 1;
     }
 
@@ -277,8 +313,11 @@ contract DutchAuction {
         constant
         returns (uint)
     {
-        if (stage == Stages.AuctionEnded) {
-            return final_price;
+        if (stage == Stages.AuctionEnded ||
+            stage == Stages.TokensDistributed ||
+            stage == Stages.TradingStarted)
+        {
+            return 0;
         }
         return calcTokenPrice();
     }

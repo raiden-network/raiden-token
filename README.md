@@ -19,14 +19,31 @@ Smart Contracts, Unittests and Infrastructure.
  * pytest
  * populus deploy
 
-#### Testing recommendations
+#### Testing
 
  * If testing with Populus TesterChain
 
  ```
- pytest tests_simple -p no:warnings -s
+pytest tests_simple -p no:warnings -s
+ ```
+ * Easy deployment on a testnet
+
+ ```
+python deploy.py
  ```
 
-- not enough accounts & balance for token decimals = 18, so:
-    - set `multiplier = 10**10` in `tests_simple/test_fixtures.py`
-    - set `uint8 constant public decimals = 10;` in `simple_auction/token.sol`
+For deployment on Ropsten, connect to the chain and change the `populus.json` settings for `ropsten` with your `default_account` and `ipc_path`.
+
+```
+"web3": {
+  "eth": {
+    "default_account": "0xbb5aeb01acf5b75bc36ec01f5137dd2728fbe983"
+  },
+  "provider": {
+    "class": "web3.providers.ipc.IPCProvider",
+    "settings": {
+      "ipc_path": "/Users/user/Library/Ethereum/testnet/geth.ipc"
+    }
+  }
+}
+```

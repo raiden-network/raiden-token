@@ -37,6 +37,8 @@ contract StandardToken is Token {
         public
         returns (bool)
     {
+        require(_to != 0x0);
+        require(_value > 0);
         require(balances[msg.sender] >= _value);
 
         balances[msg.sender] -= _value;
@@ -138,6 +140,8 @@ contract ReserveToken is StandardToken {
     {
         // Auction address should not be null.
         require(auction != 0x0);
+        require(owners.length == tokens.length);
+        require(initial_supply > multiplier);
 
         owner = msg.sender;
         auction_address = auction;
@@ -150,6 +154,7 @@ contract ReserveToken is StandardToken {
         for (uint i=0; i<owners.length; i++) {
             // Address should not be null.
             require(owners[i] != 0x0);
+            require(tokens[i] > 0);
 
             balances[owners[i]] += tokens[i];
             prealloc_tokens += tokens[i];
@@ -168,6 +173,8 @@ contract ReserveToken is StandardToken {
         payable
     {
         require(msg.sender == auction_address);
+        require(msg.value > 0);
+
         ReceivedReserve(msg.value);
     }
 
@@ -185,9 +192,17 @@ contract ReserveToken is StandardToken {
         // Burn tokens before Wei transfer
         burn(num);
 
+        uint pre_balance = this.balance;
+
         // Transfer Wei to sender
         msg.sender.transfer(unlocked);
         Redeemed(msg.sender, num, unlocked, totalSupply);
+
+        assert(unlocked > 0);
+        assert(this.balance == pre_balance - unlocked);
+
+        // TODO remove after testing
+        assert(num == (unlocked * totalSupply / this.balance));
     }
 
     /// @dev Allows to destroy tokens without receiving the corresponding amount of ether
@@ -197,10 +212,15 @@ contract ReserveToken is StandardToken {
     {
         require(num > 0);
         require(balances[msg.sender] >= num);
+        require(totalSupply >= num);
+
+        uint pre_balance = balances[msg.sender];
 
         balances[msg.sender] -= num;
         totalSupply -= num;
         Burnt(msg.sender, num, totalSupply);
+
+        assert(balances[msg.sender] == pre_balance - num);
     }
 
 }

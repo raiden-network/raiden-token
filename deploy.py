@@ -4,6 +4,11 @@ Deploy ContinuousToken on testnet
 from populus import Project
 from populus.utils.wait import wait_for_transaction_receipt
 from web3 import Web3
+from tests_simple.test_fixtures import (
+    auction_args,
+    initial_supply,
+    prealloc
+)
 
 
 def check_succesful_tx(web3: Web3, txid: str, timeout=180) -> dict:
@@ -23,39 +28,37 @@ def main():
     # This is configured in populus.json
     # We are working on a testnet
     chain_name = "ropsten"
-    chain_name = "testrpc"
+    # chain_name = "testrpc"
     # chain_name = "tester"
 
     with project.get_chain(chain_name) as chain:
 
         # Load Populus contract proxy classes
-        Auction = chain.provider.get_contract_factory('Auction')
-        Mint = chain.provider.get_contract_factory('Mint')
-        Token = chain.provider.get_contract_factory('ContinuousToken')
+        Auction = chain.provider.get_contract_factory('DutchAuction')
+        Token = chain.provider.get_contract_factory('ReserveToken')
 
         web3 = chain.web3
         print("Web3 provider is", web3.currentProvider)
 
         # The address who will be the owner of the contracts
         beneficiary = web3.eth.coinbase
+        owners = web3.eth.accounts[:2]
         assert beneficiary, "Make sure your node has coinbase account created"
 
         # Deploy Auction
-        txhash = Auction.deploy(transaction={"from": beneficiary}, args=[10000, 100])
+        txhash = Auction.deploy(transaction={"from": beneficiary}, args=auction_args[0])
         print("Deploying auction, tx hash is", txhash)
         receipt = check_succesful_tx(web3, txhash)
         auction_address = receipt["contractAddress"]
         print("Auction contract address is", auction_address)
 
-        # Deploy Mint
-        txhash = Mint.deploy(transaction={"from": beneficiary}, args=[100, 15, 10, 2])
-        print("Deploying mint, tx hash is", txhash)
-        receipt = check_succesful_tx(web3, txhash)
-        mint_address = receipt["contractAddress"]
-        print("Auction mint address is", mint_address)
-
         # Deploy token
-        txhash = Token.deploy(transaction={"from": beneficiary}, args=[mint_address])
+        txhash = Token.deploy(transaction={"from": beneficiary}, args=[
+            auction_address,
+            initial_supply,
+            owners,
+            prealloc
+        ])
         print("Deploying token, tx hash is", txhash)
         receipt = check_succesful_tx(web3, txhash)
         token_address = receipt["contractAddress"]
@@ -64,18 +67,13 @@ def main():
         # Make contracts aware of each other
         print("Initializing contracts")
         auction = Auction(address=auction_address)
-        mint = Mint(address=mint_address)
         token = Token(address=token_address)
 
-        txhash = mint.transact({"from": beneficiary}).setup(auction_address, token_address)
-        check_succesful_tx(web3, txhash)
-
-        txhash = auction.transact({"from": beneficiary}).setup(mint_address)
+        txhash = auction.transact({"from": beneficiary}).setup(token_address)
         check_succesful_tx(web3, txhash)
 
         # Do some contract reads to see everything looks ok
         print("Token total supply is", token.call().totalSupply())
-        print("Mint total supply is", mint.call().issuedSupply())
         print("Auction price is", auction.call().price())
 
 
