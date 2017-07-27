@@ -31,3 +31,19 @@ pytest tests_simple -p no:warnings -s
  ```
 python deploy.py
  ```
+
+For deployment on Ropsten, connect to the chain and change the `populus.json` settings for `ropsten` with your `default_account` and `ipc_path`.
+
+```
+"web3": {
+  "eth": {
+    "default_account": "0xbb5aeb01acf5b75bc36ec01f5137dd2728fbe983"
+  },
+  "provider": {
+    "class": "web3.providers.ipc.IPCProvider",
+    "settings": {
+      "ipc_path": "/Users/user/Library/Ethereum/testnet/geth.ipc"
+    }
+  }
+}
+```

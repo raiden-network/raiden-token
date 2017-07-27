@@ -28,7 +28,7 @@ def main():
     # This is configured in populus.json
     # We are working on a testnet
     chain_name = "ropsten"
-    chain_name = "testrpc"
+    # chain_name = "testrpc"
     # chain_name = "tester"
 
     with project.get_chain(chain_name) as chain:
