@@ -18,11 +18,12 @@ export default class AddContract extends Component {
   }
 
   addContract(ev) {
+    let self = this;
     const { web3, networkId } = this.props;
     let { submitted, address, transactionHash, linkedContracts, name, abi } = this.state;
     this.setState({ submitted : 1 });
 
-    if(!address || !transactionHash || !networkId) {
+    if(!address || !transactionHash || !networkId || !abi) {
       return;
     }
 
@@ -30,8 +31,15 @@ export default class AddContract extends Component {
       linkedContracts = linkedContracts.split(',').map(c => c.trim());
     }
 
+    try {
+      let json = JSON.parse(abi);
+    }
+    catch(error) {
+      throw "Provided ABI is an incorrect JSON object";
+    }
+
     // Insert contract details in our database
-    let obj = { linkedContracts, name, address, transactionHash, abi };
+    let obj = { linkedContracts, name, address, transactionHash, abi, networkId };
     console.log(JSON.stringify(obj));
     Meteor.call('contracts.insert', obj);
     this.setState({ 
@@ -40,8 +48,7 @@ export default class AddContract extends Component {
       transactionHash: '', 
       linkedContracts: '', 
       name: '', 
-      abi: '',
-      networkId
+      abi: ''
     });
   }
 

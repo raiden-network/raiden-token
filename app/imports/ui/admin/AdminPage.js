@@ -105,10 +105,10 @@ export default class AdminPage extends Component {
   render() {
     const { web3, networkId, account, contract, contracts } = this.props;
     const { owner, values=[] } = this.state;
-
+    
     let contractUI;
     if(contract) {
-      let commands = this.getCommands(contract.abi, 'function');
+      let commands = this.getCommands(contract.abi, "type", 'function');
 
       contractUI = [
         React.createElement('h1', { key: 1 }, contract.name),

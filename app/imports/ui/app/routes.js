@@ -11,6 +11,7 @@ import RouteWithSubRoutes from './RouteWithSubRoutes';
 import AppContainer from './AppContainer';
 import AuctionContainer from '../auction/AuctionContainer';
 import AdminContainer from '../admin/AdminContainer';
+import HomePage from './HomePage';
 
 const routes = [
   { 
@@ -22,12 +23,20 @@ const routes = [
         component: AuctionContainer,
       },
       {
+        path: '/auction',
+        component: AuctionContainer,
+      },
+      {
         path: '/admin/:address',
         component: AdminContainer,
       },
       {
         path: '/admin',
         component: AdminContainer,
+      },
+      {
+        path: '/',
+        component: HomePage,
       }
     ]
   }

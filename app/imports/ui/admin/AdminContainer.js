@@ -22,7 +22,7 @@ const AdminContainer = createContainer(params => {
   if(contract) {
     contract.abi = JSON.parse(contract.abi);
   }
-  console.log('AdminContainer', contracts, contract)
+
   return {
     web3,
     networkId,
