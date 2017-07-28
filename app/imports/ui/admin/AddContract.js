@@ -39,7 +39,10 @@ export default class AddContract extends Component {
     }
 
     // Insert contract details in our database
-    let obj = { linkedContracts, name, address, transactionHash, abi, networkId };
+    let obj = { name, address, transactionHash, abi, networkId };
+    if(linkedContracts) {
+      obj.linkedContracts = linkedContracts;
+    }
     console.log(JSON.stringify(obj));
     Meteor.call('contracts.insert', obj);
     this.setState({ 
