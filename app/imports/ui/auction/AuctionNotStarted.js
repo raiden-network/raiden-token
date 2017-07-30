@@ -27,7 +27,6 @@ export default class AuctionNotStarted extends Component {
   }
 
   setStartingPrice(props) {
-    let self = this;
     const { auctionInstance } = props;
 
     auctionInstance.price((err, res) => {
@@ -35,7 +34,7 @@ export default class AuctionNotStarted extends Component {
         console.log('price', err);
       }
       if(res) {
-        self.setState({ startingPrice: 
+        this.setState({ startingPrice: 
           {
             wei: res.toNumber().toLocaleString(),
             eth:  web3.fromWei(res, 'ether').toNumber()
@@ -46,7 +45,6 @@ export default class AuctionNotStarted extends Component {
   }
 
   setTotalTokensAuctioned(props) {
-    let self = this;
     const { web3, auctionInstance } = props;
 
     auctionInstance.tokens_auctioned((err, res) => {
@@ -54,12 +52,12 @@ export default class AuctionNotStarted extends Component {
         console.log('setTotalTokensAuctioned', err);
       }
       if(res) {
-        const { decimals } = self.props;
+        const { decimals } = this.props;
         let tokenNo = res.toNumber();
         let decimalNo = Math.pow(10, decimals);
         tokenNo /= decimalNo;
 
-        self.setState({ tokensAuctioned: tokenNo.toLocaleString() });
+        this.setState({ tokensAuctioned: tokenNo.toLocaleString() });
       }
     });
   }

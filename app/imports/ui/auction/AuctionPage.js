@@ -4,7 +4,8 @@ import AuctionNotStarted from './AuctionNotStarted';
 import Auction from './Auction';
 import Loading from '../Loading';
 
-// TODO: loading
+// TODO: loading template 
+// (setState error because AuctionStarted gets mounted and quickly unmounted if auction started)
 
 export default class AuctionPage extends Component {
   constructor(props) {
@@ -27,27 +28,42 @@ export default class AuctionPage extends Component {
 
     this.setAuctionInstance(props);
     this.setDeploymentBlockNumber(props);
-    this.setTokenDecimals(props);
+    this.setTokenInstance(props);
   }
 
   addressBuilder(contract) {
     return '/auction/' + contract.address + '?linked=' + contract.linkedContracts.join(',');
   }
 
-  setTokenDecimals(props) {
-    let self = this;
+  setTokenInstance(props) {
     const { web3, token } = props || this.props;
     if(!token || !token.address) {
       return;
     }
 
     let tokenInstance = web3.eth.contract(token.abi).at(token.address);
+    this.setState({ tokenInstance });
+    this.setTokenDecimals(tokenInstance);
+    this.setTokenSupply(tokenInstance);
+  }
+
+  setTokenDecimals(tokenInstance) {
     tokenInstance.decimals((err, res) => {
       if(err) {
         console.log('setTokenDecimals event', err);
         return;
       }
-      self.setState({ decimals: res.toNumber() });
+      this.setState({ decimals: res.toNumber() });
+    });
+  }
+
+  setTokenSupply(tokenInstance) {
+    tokenInstance.totalSupply((err, res) => {
+      if(err) {
+        console.log('setTokenSupply event', err);
+        return;
+      }
+      this.setState({ totalSupply: res.toNumber() });
     });
   }
 
@@ -59,37 +75,73 @@ export default class AuctionPage extends Component {
 
     let auctionInstance = web3.eth.contract(auction.abi).at(auction.address);
     this.setState({ auctionInstance });
+    this.setPriceFactor(auctionInstance);
+    this.setPriceConstant(auctionInstance);
+    this.setStartTimestamp(auctionInstance);
   }
 
   setDeploymentBlockNumber(props) {
-    let self = this;
     const { auction } = props || this.props;
     if(!auction) {
       return;
     }
 
-    let deploymentBlock = web3.eth.getTransaction(auction.transactionHash, function(err, block) {
+    let deploymentBlock = web3.eth.getTransaction(auction.transactionHash, (err, block) => {
       if(err) {
         console.log('deploymentBlock', err);
         return;
       }
       if(block && block.blockNumber) {
-        self.setState({ blockNumber: block.blockNumber });
-        self.setEventFilters();
+        this.setState({ blockNumber: block.blockNumber });
+        this.setEventFilters();
+      }
+    });
+  }
+
+  setPriceFactor(auctionInstance) {
+    auctionInstance.price_factor((err, res) => {
+      if(err) {
+        console.log('setPriceFactor', err);
+        return;
+      }
+      if(res) {
+        this.setState({ priceFactor: res.toNumber() });
+      }
+    });
+  }
+
+  setPriceConstant(auctionInstance) {
+    auctionInstance.price_const((err, res) => {
+      if(err) {
+        console.log('setPriceConstant', err);
+        return;
+      }
+      if(res) {
+        this.setState({ priceConst: res.toNumber() });
+      }
+    });
+  }
+
+  setStartTimestamp(auctionInstance) {
+    auctionInstance.start_time((err, res) => {
+      if(err) {
+        console.log('setStartTimestamp', err);
+        return;
+      }
+      if(res) {
+        this.setState({ startTimestamp: res.toNumber() * 1000 });
       }
     });
   }
 
   setEventFilters() {
-    let self = this;
-    
     this.getEventFilter('AuctionStarted').get((err, logs) => {
       if(err) {
         console.log('AuctionStarted event', err);
         return;
       }
-      if(logs && logs[0]) {
-        self.setState({ stage: 'started'});
+      if(logs && logs[0] && this.state.stage == 'deployed') {
+        this.setState({ stage: 'started'});
       }
     });
 
@@ -99,7 +151,7 @@ export default class AuctionPage extends Component {
         return;
       }
       if(logs && logs[0]) {
-        self.setState({ stage: 'ended'});
+        this.setState({ stage: 'ended'});
       }
     });
   }
@@ -123,13 +175,28 @@ export default class AuctionPage extends Component {
 
   render() {
     const { web3, networkId, account, contracts, auction, token } = this.props;
-    const { auctionInstance, stage, decimals } = this.state;
+    const { 
+      auctionInstance,
+      stage,
+      decimals,
+      totalSupply,
+      priceFactor, 
+      priceConst, 
+      startTimestamp,
+    } = this.state;
+
     const { getEventFilter } = this;
     let ended = stage == 'ended' ? 1 : 0;
 
     return React.createElement('div', { className: 'dapp-flex-content' },
-      React.createElement(ContractList, { web3, contracts, addressBuilder: this.addressBuilder }),
-      React.createElement('div', { className: 'col col-1-1 tablet-col-1-1' },
+      React.createElement(ContractList, { 
+        web3,
+        contracts,
+        addressBuilder: this.addressBuilder
+      }),
+      !auction ? null : React.createElement('div', { 
+          className: 'col col-1-1 tablet-col-1-1' 
+        },
         stage == 'deployed' ? 
           React.createElement(AuctionNotStarted, { 
             web3, 
@@ -143,10 +210,14 @@ export default class AuctionPage extends Component {
             web3, 
             networkId,
             decimals,
+            totalSupply,
             auction,
             auctionInstance,
             getEventFilter,
             ended,
+            priceFactor, 
+            priceConst, 
+            startTimestamp,
           })
       )
     )

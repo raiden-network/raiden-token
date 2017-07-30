@@ -2,6 +2,7 @@ import React, { Component } from 'react';
 import { Switch } from 'react-router-dom';
 
 import RouteWithSubRoutes from './RouteWithSubRoutes';
+import NoWeb3 from './NoWeb3';
 
 export default class AppContainer extends Component {
   constructor(props) {
@@ -14,6 +15,9 @@ export default class AppContainer extends Component {
   componentWillMount() {
     let self = this;
     let { web3 } = this.state;
+    if(!web3) {
+      return;
+    }
     
     getNetworkId(web3, networkId => {
       self.setState({ networkId });
@@ -40,8 +44,12 @@ export default class AppContainer extends Component {
     let { routes } = this.props;
     let { web3, networkId, account } = this.state;
 
-    if(!web3 || !networkId) {
-      return null;
+    if(!web3) {
+      return NoWeb3();
+    }
+
+    if(!networkId) {
+      return React.createElement('span', {}, 'No nework detected');
     }
 
     return React.createElement(Switch, { },
@@ -64,15 +72,16 @@ function getWeb3() {
   if (typeof web3 !== 'undefined') {
     // Use Mist/MetaMask's provider
     window.web3 = new Web3(web3.currentProvider);
-  } else {
+  } else if(typeof Web3 !== 'undefined') {
     console.log('No web3? You should consider trying MetaMask!')
     // fallback - use your fallback strategy (local node / hosted node + in-dapp id mgmt / fail)
     window.web3 = new Web3(new Web3.providers.HttpProvider("http://localhost:8545"));
   }
 
-  console.log("Connected to Web3 Status: " + web3.isConnected());
-
-  return web3;
+  if(typeof web3 !== 'undefined') {
+    console.log("Connected to Web3 Status: " + web3.isConnected());
+    return web3;
+  }
 }
 
 function getNetworkId(web3, callb) {

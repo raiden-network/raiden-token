@@ -80,8 +80,7 @@ export default class AdminPage extends Component {
           console.log(command.name, err);
         }
         else {
-          let value = res.c ? res.c[0] : res;
-          callback(value);
+          callback(res.c ? res.toNumber() : res);
         }
       }
     );

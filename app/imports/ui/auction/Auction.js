@@ -1,23 +1,33 @@
 import React, { Component } from 'react';
-import BigNumber from 'bignumber.js';
+import PriceChart from './PriceChart';
+import ValueChart from './ValueChart';
 
-export default class AuctionStarted extends Component {
+export default class Auction extends Component {
   constructor(props) {
     super(props);
-    this.state = {};
+    this.state = { priceData: [] };
+
+    this.priceUpdateInterval = 1000 * 5; // 5 sec
+    this.graphDataUpdateInterval = 1000 * 5;
   }
 
   componentWillMount() {
     this.setValues(this.props);
   }
 
+  componentWillUnmount() {
+    clearInterval(this.priceInterval);
+    clearInterval(this.priceGraphInterval);
+  }
+
   componentWillReceiveProps(newProps) {
+    this.state = { priceData: [] };
     this.setValues(newProps);
   }
 
   setValues(props) {
     props = props || this.props;
-    const { auctionInstance } = props;
+    const { auctionInstance, startTimestamp, endTimestamp } = props;
 
     if(!auctionInstance) {
       return;
@@ -25,19 +35,18 @@ export default class AuctionStarted extends Component {
 
     this.setTotalTokensAuctioned(props);
     this.setAuctionReserve(props);
-    this.setMarketCap(props);
-    this.setValuation(props);
+    let data = this.getPriceInInterval(startTimestamp, endTimestamp || new Date().getTime());
+    this.setState({ priceData: data });
 
     if(props.ended) {
       this.setFinalPrice(props);
     }
     else {
-      this.setEstimatedTokensBought(props);
+      this.startPriceInterval();
     }
   }
 
   setFinalPrice(props) {
-    let self = this;
     const { auctionInstance } = props;
 
     auctionInstance.final_price((err, res) => {
@@ -45,7 +54,7 @@ export default class AuctionStarted extends Component {
         console.log('setFinalPrice', err);
       }
       if(res) {
-        self.setState({ finalPrice: 
+        this.setState({ finalPrice: 
           {
             wei: res.toNumber().toLocaleString(),
             eth:  web3.fromWei(res, 'ether').toNumber()
@@ -55,12 +64,79 @@ export default class AuctionStarted extends Component {
     });
   }
 
-  setCurrentPrice(props) {
-    let self = this;
+  // Price function used in the Solidity contract
+  auctionPrice(timestamp) {
+    timestamp = timestamp || new Date().getTime();
+    const { decimals, priceFactor, priceConst, startTimestamp } = this.props;
+    let multiplier = Math.pow(10, decimals);
+
+    // Solidity timestamp is in seconds, not miliseconds
+    let elapsed = (timestamp - startTimestamp) / 1000;
+    let price = multiplier * priceFactor / (elapsed + priceConst) + 1;
+    return price;
+  }
+
+  getMarketCap() {
+    const { totalSupply } = this.props;
+    return totalSupply * this.auctionPrice();
+  }
+
+  getValuation() {
+    const { tokensAuctioned } = this.state;
+
+    // Assuming no pre auction reserve
+    return this.getMarketCap() - tokensAuctioned * this.auctionPrice();
+  }
+
+  getPriceInInterval(start, end) {
+    let data = [],
+      interval = Math.min((end - start) / 100, this.graphDataUpdateInterval);
+
+    console.log('getPriceInInterval', start, new Date(start), end, new Date(end))
+    console.log('interval', interval, (end - start) / 100, this.graphDataUpdateInterval)
+    
+    for(let i = start; i < end; i += interval) {
+      let priceWei = this.auctionPrice(i);
+
+      data.push({
+        date: new Date(i),
+        timestamp: i,
+        priceWei,
+        priceEth: web3.fromWei(priceWei, 'ether') 
+      });
+    }
+    return data;
+  }
+
+  startPriceInterval() {
+    let currentPrice = this.auctionPrice(new Date().getTime());
+    this.setState({ currentPrice });
+
+    let updateGraphPrice = () => {
+      let priceData = this.state.priceData;
+      let now = new Date(),
+        priceWei = this.auctionPrice(now);
+
+      priceData.push({ 
+        date: now, 
+        timestamp: now.getTime(), 
+        priceWei,
+        priceEth: web3.fromWei(priceWei, 'ether') 
+      });
+      this.setState({ priceData });
+    }
+
+    this.priceInterval = setInterval(() => {
+      let currentPrice = this.auctionPrice(new Date().getTime())
+      this.setState({ currentPrice });
+    }, this.priceUpdateInterval);
+
+    this.priceGraphInterval = setInterval(function() {
+      updateGraphPrice();
+    }, this.graphDataUpdateInterval);
   }
 
   setTotalTokensAuctioned(props) {
-    let self = this;
     const { web3, auctionInstance } = props;
 
     auctionInstance.tokens_auctioned((err, res) => {
@@ -68,55 +144,54 @@ export default class AuctionStarted extends Component {
         console.log('setTotalTokensAuctioned', err);
       }
       if(res) {
-        const { decimals } = self.props;
+        const { decimals } = this.props;
         let tokenNo = res.toNumber();
         let decimalNo = Math.pow(10, decimals);
         tokenNo /= decimalNo;
 
-        self.setState({ tokensAuctioned: tokenNo.toLocaleString() });
+        this.setState({ tokensAuctioned: tokenNo.toLocaleString() });
       }
     });
   }
 
-  setEstimatedTokensBought(props) {
-    let self = this;
-  }
-
   setAuctionReserve(props) {
-    let self = this;
-    const { web3, auction, auctionInstance } = props;
+    const { web3, auction, auctionInstance, ended } = props;
 
     web3.eth.getBalance(auction.address, (err, res) => {
       if(err) {
         console.log('setAuctionReserve', err);
       }
       if(res) {
-        self.setState({ auctionReserve: web3.fromWei(res, 'ether').toNumber() });
+        let auctionReserve = web3.fromWei(res, 'ether').toNumber()
+        this.setState({ auctionReserve });
+        if(!ended) {
+          let estimatedTokensBough = (auctionReserve / this.auctionPrice()).toFixed(20);
+          this.setState({ estimatedTokensBough });
+        }
       }
     });
   }
 
-  setMarketCap(props) {
-    let self = this;
-  }
-
-  setValuation(props) {
-    let self = this;
-  }
-
   render() {
-    const { web3, networkId, account, contracts, auction, ended } = this.props;
+    const { web3, networkId, account, contracts, auction, ended, startTimestamp, endTimestamp } = this.props;
     const { 
       finalPrice,
-      currentPrice,
+      currentPrice: auctionPrice,
       tokensAuctioned,
       estimatedTokensBough,
       auctionReserve,
       marketCap,
       valuation,
-      noOfBidders
+      priceData,
     } = this.state;
-
+    
+    let currentPrice;
+    if(auctionPrice) {
+      currentPrice = {
+        wei: auctionPrice.toLocaleString(),
+        eth: web3.fromWei(auctionPrice, 'ether')
+      }
+    }
 
     return React.createElement('div', { className: 'dapp-flex-content' },
       React.createElement('div', { className: 'col col-1-1 tablet-col-1-1' },
@@ -161,10 +236,16 @@ export default class AuctionStarted extends Component {
           valuation || ''
         ),
         React.createElement('div', {}, 
-          'Price Graph'
+          React.createElement(PriceChart, { 
+            data: priceData,
+            width: 650,
+            height: 400,
+            ratio: 1,
+            priceKey: 'priceWei'
+          })
         ),
         React.createElement('div', {}, 
-          'Market Cap / Valuation Graph'
+          'Market Cap / Valuation Graph:'
         )
       )
     )
