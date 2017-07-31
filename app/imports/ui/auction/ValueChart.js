@@ -27,10 +27,10 @@ import { last } from 'react-stockcharts/lib/utils';
 
 import { LabelAnnotation, Label, Annotate } from 'react-stockcharts/lib/annotation';
 
-class PriceChart extends React.Component {
+class ValueChart extends React.Component {
   render() {
-    const { data: initialData, type, width, ratio, priceKey } = this.props;
-
+    const { data: initialData, type, width, ratio } = this.props;
+    //console.log('initialData', JSON.stringify(initialData));
     const xScaleProvider = discontinuousTimeScaleProvider
       .inputDateAccessor(d => d.date);
     const {
@@ -45,12 +45,14 @@ class PriceChart extends React.Component {
     ];
     const margin = { left: 70, right: 140, top: 80, bottom: 30 };
     const height = 400;
+    console.log('xExtents', xExtents);
 
     const [yAxisLabelX, yAxisLabelY] = [
       width - margin.left - 60,
       (height - margin.top - margin.bottom) / 2
     ];
 
+    //console.log('data', JSON.stringify(data));
     return React.createElement(ChartCanvas, {
         ratio, 
         width,
@@ -68,12 +70,16 @@ class PriceChart extends React.Component {
           x: (width - margin.left - margin.right) / 2,
           y: - margin.top / 2,
           fontSize: '20',
-          text: 'Auction Price'
+          text: 'Market Cap & Valuation Graph'
         }
       ),
       React.createElement(Chart, {
           id: 1,
-          yExtents: d => [d[priceKey], d[priceKey] - Math.pow(10, 12)]
+          //yExtents: d => [d.marketCap, d.valuation]
+          yExtents: d => [
+            d.marketCap + 5 * Math.pow(10, Math.log10(d.marketCap) - 3), 
+            d.valuation - 5 * Math.pow(10, Math.log10(d.valuation) - 3)
+          ]
         },
         React.createElement(XAxis, {
           axisAt: 'bottom',
@@ -82,11 +88,7 @@ class PriceChart extends React.Component {
         React.createElement(YAxis, {
           axisAt: 'right',
           orient: 'right',
-          tickFormat: format('.4s'),
-          //tickPadding: ,
-          //tickSize: 100,
-          // tickInterval: {5}
-          // tickValues: {[40, 60]}
+          tickFormat: format(',.3f'),
           ticks: 10
         }),
         React.createElement(Label, {
@@ -94,42 +96,36 @@ class PriceChart extends React.Component {
             y: yAxisLabelY,
             rotate: -90,
             fontSize: '12',
-            text: 'Price in WEI'
+            text: 'Tokens * Price in ETH'
           }
         ),
         React.createElement(MouseCoordinateX, {
           at: 'bottom',
           orient: 'bottom',
           rectWidth: 130,
-          //displayFormat: timeFormat('%Y-%m-%d')
           displayFormat: timeFormat('%B %d, %X')
         }),
         React.createElement(MouseCoordinateY, {
           at: 'right',
           orient: 'right',
           rectWidth: 130,
-          displayFormat: format(',.0f') 
-          //displayFormat: format('.6s')
+          displayFormat: format(',.3f') 
         }),
         React.createElement(CrossHairCursor),
         React.createElement(LineSeries, {
-          yAccessor: d => d[priceKey],
+          yAccessor: d => d.marketCap,
           strokeDasharray: 'Solid' 
         }),
-        /*React.createElement(ScatterSeries, {
-          yAccessor: d => d[priceKey],
-          marker: CircleMarker,
-          markerProps: { r: 2 }
-        }),*/
-        /*React.createElement(OHLCTooltip, {
-          forChart: 1,
-          origin: [-40, 0]
-        })*/
+        React.createElement(LineSeries, {
+          yAccessor: d => d.valuation,
+          stroke: '#D78050',
+          strokeDasharray: 'Solid' 
+        })
       )
     )
   }
 }
 
-PriceChart = fitWidth(PriceChart);
+ValueChart = fitWidth(ValueChart);
 
-export default PriceChart;
+export default ValueChart;

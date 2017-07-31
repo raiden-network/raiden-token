@@ -11,15 +11,23 @@ export default class AuctionPage extends Component {
   constructor(props) {
     super(props);
 
-    this.state = { stage: 'deployed' };
+    this.state = this.getInitialState();
     this.setValues(props);
 
     this.addressBuilder = this.addressBuilder.bind(this);
     this.getEventFilter = this.getEventFilter.bind(this);
   }
 
+  getInitialState() {
+    return {
+      stage: 'deployed',
+      totalSupplyTKN: 0,
+      decimals: 0
+    }
+  }
+
   componentWillReceiveProps(newProps) {
-    this.setState({ stage: 'deployed' });
+    this.setState(this.getInitialState());
     this.setValues(newProps);
   }
 
@@ -60,10 +68,13 @@ export default class AuctionPage extends Component {
   setTokenSupply(tokenInstance) {
     tokenInstance.totalSupply((err, res) => {
       if(err) {
-        console.log('setTokenSupply event', err);
+        console.log('setTKNSupply event', err);
         return;
       }
-      this.setState({ totalSupply: res.toNumber() });
+      let decimals = this.state.decimals,
+        totalSupplyTKN = res.toNumber() / Math.pow(10, decimals);
+      console.log('set totalSupplyTKN', totalSupplyTKN);
+      this.setState({ totalSupplyTKN });
     });
   }
 
@@ -179,7 +190,7 @@ export default class AuctionPage extends Component {
       auctionInstance,
       stage,
       decimals,
-      totalSupply,
+      totalSupplyTKN,
       priceFactor, 
       priceConst, 
       startTimestamp,
@@ -210,7 +221,7 @@ export default class AuctionPage extends Component {
             web3, 
             networkId,
             decimals,
-            totalSupply,
+            totalSupplyTKN,
             auction,
             auctionInstance,
             getEventFilter,
