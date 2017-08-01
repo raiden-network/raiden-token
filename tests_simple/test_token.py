@@ -36,6 +36,57 @@ def receiveReserve(web3, proxy_contract):
     return get
 
 
+def test_token_allowance(chain, web3, get_token_contract, proxy_contract):
+    (A, B, C) = web3.eth.accounts[:3]
+    preallocs = [
+        500 * multiplier,
+        800 * multiplier,
+        1100 * multiplier
+    ]
+    token = get_token_contract([
+        proxy_contract.address,
+        initial_supply,
+        [A, B, C],
+        preallocs
+    ])
+
+    # TODO
+    # token.transact({'from': A}).transferFrom(A, B, 300)
+    # allowance
+    # approve
+
+    # Check approve method
+    with pytest.raises(tester.TransactionFailed):
+        token.transact({'from': A}).approve(B, 0)
+    with pytest.raises(TypeError):
+        token.transact({'from': A}).approve(B, -3)
+
+    token.transact({'from': A}).approve(B, 300)
+    token.transact({'from': B}).approve(C, 650)
+
+    assert token.call().allowance(A, B) == 300
+    assert token.call().allowance(B, C) == 650
+
+    with pytest.raises(tester.TransactionFailed):
+        token.transact().transferFrom(A, B, 0)
+    with pytest.raises(TypeError):
+        token.transact().transferFrom(A, B, -1)
+    with pytest.raises(tester.TransactionFailed):
+        token.transact().transferFrom(A, B, 301)
+
+    token.transact().transferFrom(A, B, 150)
+    assert token.call().allowance(A, B) == 150
+    with pytest.raises(tester.TransactionFailed):
+        token.transact().transferFrom(A, B, 151)
+    token.transact().transferFrom(A, B, 20)
+    assert token.call().allowance(A, B) == 130
+
+    token.transact().transferFrom(B, C, 650)
+    assert token.call().allowance(B, C) == 0
+    with pytest.raises(tester.TransactionFailed):
+        token.transact().transferFrom(B, C, 5)
+
+
 def test_ctoken(chain, web3, get_token_contract, proxy_contract, receiveReserve):
     owners = web3.eth.accounts[:2]
     (A, B, C, D) = web3.eth.accounts[2:6]
@@ -67,11 +118,6 @@ def test_ctoken(chain, web3, get_token_contract, proxy_contract, receiveReserve)
     assert token.call().balanceOf(owners[0]) == prealloc[0] - 1000 * multiplier
     assert token.call().balanceOf(A) == 600 * multiplier
     assert token.call().balanceOf(B) == 400 * multiplier
-
-    # TODO
-    # token.transact({'from': A}).transferFrom(A, B, 300)
-    # allowance
-    # approve
 
     # Cannot destroy more tokens than existing balance
     tokens_A = token.call().balanceOf(A)
