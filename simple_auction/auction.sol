@@ -123,7 +123,8 @@ contract DutchAuction {
         stage = Stages.AuctionSetUp;
         Setup();
 
-        assert(tokens_auctioned > 0);
+        // Tei auctioned
+        assert(tokens_auctioned > multiplier);
     }
 
     /// @dev Changes auction start price factor before auction is started.
@@ -227,8 +228,6 @@ contract DutchAuction {
         // rounding errors are included to not block the contract
         funds_claimed += bids[receiver];
 
-        ClaimedTokens(receiver, bids[receiver], num);
-
         // Set receiver bid to 0 before assigning tokens
         bids[receiver] = 0;
 
@@ -272,6 +271,8 @@ contract DutchAuction {
         end_time = now;
         stage = Stages.AuctionEnded;
         AuctionEnded(final_price);
+
+        assert(final_price > 0);
     }
 
     /// @dev Transfer auction balance to the token.
