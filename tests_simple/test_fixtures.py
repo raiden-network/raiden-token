@@ -73,6 +73,15 @@ def accounts(web3):
     return get
 
 
+@pytest.fixture
+def gasUsed(chain, web3):
+    def get(txn_hash):
+        receipt = chain.wait.for_receipt(txn_hash)
+        gas_used = receipt['gasUsed'] * web3.eth.gasPrice
+        return gas_used
+    return get
+
+
 def create_contract(chain, contract_type, arguments, transaction=None):
     print(chain, contract_type, arguments, transaction)
     deploy_txn_hash = contract_type.deploy(transaction=transaction, args=arguments)

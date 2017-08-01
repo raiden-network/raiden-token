@@ -1,6 +1,7 @@
 import pytest
 from ethereum import tester
 from test_fixtures import (
+    create_contract,
     auction_contract,
     get_token_contract,
     token_contract,
@@ -8,12 +9,46 @@ from test_fixtures import (
     initial_supply,
     auction_supply,
     prealloc,
-    multiplier
+    multiplier,
+    gasUsed
 )
 import math
 from functools import (
     reduce
 )
+
+
+def test_auction_init(chain, web3):
+    Auction = chain.provider.get_contract_factory('DutchAuction')
+
+    with pytest.raises(TypeError):
+        auction_contract = create_contract(chain, Auction, [])
+    with pytest.raises(TypeError):
+        auction_contract = create_contract(chain, Auction, [-3, 2])
+    with pytest.raises(TypeError):
+        auction_contract = create_contract(chain, Auction, [3, -2])
+    with pytest.raises(tester.TransactionFailed):
+        auction_contract = create_contract(chain, Auction, [0, 2])
+    with pytest.raises(tester.TransactionFailed):
+        auction_contract = create_contract(chain, Auction, [2, 0])
+
+    auction_contract = create_contract(chain, Auction, auction_args[0])
+
+
+def test_auction_variable_access(chain, web3):
+    Auction = chain.provider.get_contract_factory('DutchAuction')
+    auction = create_contract(chain, Auction, auction_args[0])
+
+    assert auction.call().owner() == web3.eth.coinbase
+    assert auction.call().price_factor() == auction_args[0][0]
+    assert auction.call().price_const() == auction_args[0][1]
+    assert auction.call().start_time() == 0
+    assert auction.call().end_time() == 0
+    assert auction.call().start_block() == 0
+    assert auction.call().funds_claimed() == 0
+    assert auction.call().tokens_auctioned() == 0
+    assert auction.call().final_price() == 0
+    assert auction.call().stage() == 0
 
 
 def test_auction(chain, web3, auction_contract, get_token_contract):

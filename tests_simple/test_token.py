@@ -8,7 +8,8 @@ from test_fixtures import (
     initial_supply,
     auction_supply,
     prealloc,
-    auction_args
+    auction_args,
+    gasUsed
 )
 
 
@@ -33,15 +34,6 @@ def receiveReserve(web3, proxy_contract):
             token_contract.address,
             "receiveReserve()"
         )
-    return get
-
-
-@pytest.fixture
-def gasUsed(chain, web3):
-    def get(txn_hash):
-        receipt = chain.wait.for_receipt(txn_hash)
-        gas_used = receipt['gasUsed'] * web3.eth.gasPrice
-        return gas_used
     return get
 
 
