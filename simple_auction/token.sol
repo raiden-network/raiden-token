@@ -40,6 +40,7 @@ contract StandardToken is Token {
         require(_to != 0x0);
         require(_value > 0);
         require(balances[msg.sender] >= _value);
+        require(balances[_to] + _value > balances[_to]);
 
         balances[msg.sender] -= _value;
         balances[_to] += _value;
@@ -56,8 +57,12 @@ contract StandardToken is Token {
         public
         returns (bool)
     {
+        require(_from != 0x0);
+        require(_to != 0x0);
+        require(_value > 0);
         require(balances[_from] >= _value);
         require(allowed[_from][msg.sender] >= _value);
+        require(balances[_to] + _value > balances[_to]);
 
         balances[_to] += _value;
         balances[_from] -= _value;
@@ -74,6 +79,9 @@ contract StandardToken is Token {
         public
         returns (bool)
     {
+        require(_spender != 0x0);
+        require(_value > 0);
+
         allowed[msg.sender][_spender] = _value;
         Approval(msg.sender, _spender, _value);
         return true;
@@ -141,6 +149,7 @@ contract ReserveToken is StandardToken {
         // Auction address should not be null.
         require(auction != 0x0);
         require(owners.length == tokens.length);
+        // Initial supply is in Tei
         require(initial_supply > multiplier);
 
         owner = msg.sender;
@@ -155,6 +164,8 @@ contract ReserveToken is StandardToken {
             // Address should not be null.
             require(owners[i] != 0x0);
             require(tokens[i] > 0);
+            require(balances[owners[i]] + tokens[i] > balances[owners[i]]);
+            require(prealloc_tokens + tokens[i] > prealloc_tokens);
 
             balances[owners[i]] += tokens[i];
             prealloc_tokens += tokens[i];
@@ -165,6 +176,8 @@ contract ReserveToken is StandardToken {
         Transfer(0, auction_address, balances[auction]);
 
         Deployed(auction_address, totalSupply, balances[auction]);
+
+        assert(totalSupply == balances[auction_address] + prealloc_tokens);
     }
 
     /// @dev Transfers auction's reserve; called from auction after it has ended.
@@ -176,6 +189,7 @@ contract ReserveToken is StandardToken {
         require(msg.value > 0);
 
         ReceivedReserve(msg.value);
+        assert(this.balance > 0);
     }
 
     /// @dev Allows to destroy tokens and receive the corresponding amount of ether, implements the floor price
