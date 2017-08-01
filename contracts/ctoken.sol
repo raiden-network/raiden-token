@@ -8,7 +8,7 @@ contract ContinuousToken is StandardToken {
 
     string constant public name = 'Continuous Token';
     string constant public symbol = '';
-    uint8 constant public decimals = 24;
+    uint8 constant public decimals = 18;
 
     Mint mint;
     address public owner;

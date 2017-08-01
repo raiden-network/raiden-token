@@ -1,19 +1,19 @@
 # Continous Token
 
-Smart Contracts, Unittests and Infrastructure.
+## Smart Contracts, Unittests and Infrastructure.
 
-## Installation
+### Installation
 
-### Prerequisites
+#### Prerequisites
 
  * Python 3.6
  * [pip](https://pip.pypa.io/en/stable/)
 
-### Setup
+#### Setup
 
  * pip install -r requirements.txt
 
-### Usage
+#### Usage
 
  * populus compile
  * pytest
@@ -46,4 +46,26 @@ For deployment on Ropsten, connect to the chain and change the `populus.json` se
     }
   }
 }
+```
+
+## Web App
+
+### Installation
+
+#### Prerequisites
+
+ * Meteor 1.5
+
+#### Setup
+
+```
+cd app
+meteor npm install
+```
+
+#### Usage
+
+```
+cd app
+meteor
 ```

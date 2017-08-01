@@ -24,7 +24,7 @@ contract Auction {
     uint public issued_value = 0;
 
     // No more auctions if this flag is true
-    bool final_auction = false;
+    uint final_auction = 0;
 
     mapping(address => uint256) public bidders;
 
@@ -53,23 +53,25 @@ contract Auction {
         _;
     }
 
-    modifier auctionSettingsCanBeSetUp() {
-        require(final_auction == false);
+    modifier auctionStartable() {
+        require(final_auction < 2);
         require(stage == Stages.AuctionSetUp || stage == Stages.AuctionSettled);
         _;
     }
 
     event Deployed(address indexed _auction, uint _price_factor, uint _price_const);
     event Setup(uint indexed _stage, address indexed _mint);
-    event SettingsChanged(uint indexed _stage, uint indexed _price_factor, uint indexed _price_const, bool _final_auction);
+    event SettingsChanged(uint indexed _stage, uint indexed _price_factor, uint indexed _price_const, uint _final_auction);
     event AuctionStarted(uint indexed _stage);
 
     event Ordered(address indexed _recipient, uint _sent_value, uint _accepted_value, uint indexed _missing_reserve);
     event ClaimedTokens(address indexed _recipient, uint _sent_value, uint _num);
     event AuctionEnded(uint indexed _stage, uint indexed _received_value, uint indexed  _total_issuance);
     event AuctionSettled(uint indexed _stage);
-    event AuctionPrice(uint indexed _price, uint indexed _timestamp);
+    event AuctionPrice(uint indexed _price, uint _supply, uint indexed _timestamp);
     event MissingReserve(uint indexed _balance, uint indexed _missing_reserve, uint indexed _timestamp);
+    event MaxMarketCap(uint _market_cap, uint _supply, uint indexed _timestamp);
+    event MaxValuation(uint _valuation, uint indexed _timestamp);
 
     function Auction(uint _price_factor, uint _price_const) {
         price_factor = _price_factor;
@@ -103,24 +105,32 @@ contract Auction {
 
         public
         isOwner
-        auctionSettingsCanBeSetUp
+        auctionStartable
     {
         price_factor = _price_factor;
         price_const = _price_const;
-        final_auction = _final_auction;
+        if(_final_auction) {
+            final_auction = 1;
+        }
+        else {
+            final_auction = 0;
+        }
         stage = Stages.AuctionSetUp;
 
-        SettingsChanged(uint(stage), price_factor, price_const, _final_auction);
+        SettingsChanged(uint(stage), price_factor, price_const, final_auction);
     }
 
     function startAuction()
         public
         isOwner
-        atStage(Stages.AuctionSetUp)
+        auctionStartable
     {
         mint.auctionStarted();
         stage = Stages.AuctionStarted;
         startTimestamp = now;
+        if(final_auction == 1) {
+            final_auction = 2;
+        }
 
         AuctionStarted(uint(stage));
     }
@@ -139,14 +149,13 @@ contract Auction {
 
         // Add value to bidder
         bidders[msg.sender] = SafeMath.add(bidders[msg.sender], accepted_value);
+        Ordered(msg.sender, msg.value, accepted_value, missing_reserve);
 
         // Send back funds if order is bigger than max auction reserve
         if (accepted_value < msg.value) {
             uint send_back = SafeMath.sub(msg.value, accepted_value);
             msg.sender.transfer(send_back);
         }
-
-        Ordered(msg.sender, msg.value, accepted_value, missing_reserve);
 
         if (missing_reserve <= msg.value) {
             finalizeAuction();
@@ -163,11 +172,10 @@ contract Auction {
         // Calculate number of tokens that will be issued for the amount paid, based on the final auction price
         uint num = bidders[recipient] * total_issuance / received_value;
 
-        ClaimedTokens(recipient, bidders[recipient], num);
-
         // Keep track of claimed tokens
         issued_value += bidders[recipient];
         bidders[recipient] = 0;
+        ClaimedTokens(recipient, bidders[recipient], num);
 
         // Mint contract issues the tokens
         mint.issueFromAuction(recipient, num);
@@ -183,13 +191,23 @@ contract Auction {
     function price()
         public
         constant
+        atStage(Stages.AuctionStarted)
         returns(uint)
     {
         uint elapsed = SafeMath.sub(now, startTimestamp);
         uint auction_price = SafeMath.add(price_factor / elapsed, price_const);
-        AuctionPrice(auction_price, now);
+        AuctionPrice(auction_price, mint.curveSupplyAtPrice(auction_price), now);
 
         return auction_price;
+    }
+
+    // Current auction reserve/balance
+    function balanceOf(address recipient)
+        public
+        constant
+        returns (uint)
+    {
+        return bidders[recipient];
     }
 
     // Implements the price requirement for the auction to be active
@@ -243,7 +261,7 @@ contract Auction {
     }
 
     // The market cap if the auction would end at the current price
-    function auctionMarketCap()
+    function maxMarketCap()
         public
         constant
         returns (uint)
@@ -252,17 +270,20 @@ contract Auction {
 
         // We calculate the supply based on the current auction price
         uint auction_supply = mint.curveSupplyAtPrice(auction_price);
-
-        return SafeMath.mul(auction_price, auction_supply);
+        uint market_cap = SafeMath.mul(auction_price, auction_supply);
+        MaxMarketCap(market_cap, auction_supply, now);
+        return market_cap;
     }
 
     // The valuation if the auction would end at the current price
-    function auctionValuation()
+    function maxValuation()
         public
         constant
         returns (uint)
     {
-        return mint.ownerFraction(auctionMarketCap());
+        uint valuation = mint.ownerFraction(maxMarketCap());
+        MaxValuation(valuation, now);
+        return valuation;
     }
 
     function mintAsk()
