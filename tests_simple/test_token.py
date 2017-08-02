@@ -9,7 +9,7 @@ from test_fixtures import (
     auction_supply,
     prealloc,
     auction_args,
-    gasUsed
+    txnCost
 )
 
 
@@ -178,7 +178,7 @@ def test_token_variables(chain, web3, get_token_contract, proxy_contract):
     assert token.call().totalSupply() == initial_supply
 
 
-def test_burn(chain, web3, get_token_contract, proxy_contract, gasUsed):
+def test_burn(chain, web3, get_token_contract, proxy_contract, txnCost):
     eth = web3.eth
     (A, B, C) = web3.eth.accounts[:3]
     preallocs = [
@@ -202,11 +202,11 @@ def test_burn(chain, web3, get_token_contract, proxy_contract, gasUsed):
     tokens_B = token.call().balanceOf(B)
     balance_B = eth.getBalance(B)
     burnt = 250 * multiplier
-    gas_used = gasUsed(token.transact({'from': B}).burn(burnt))
+    txn_cost = txnCost(token.transact({'from': B}).burn(burnt))
 
     assert token.call().totalSupply() == initial_supply - burnt
     assert token.call().balanceOf(B) == tokens_B - burnt
-    assert balance_B == eth.getBalance(B) + gas_used
+    assert balance_B == eth.getBalance(B) + txn_cost
 
 
 def test_token_receiveReserve(
@@ -215,7 +215,7 @@ def test_token_receiveReserve(
     get_token_contract,
     proxy_contract,
     receiveReserve,
-    gasUsed
+    txnCost
 ):
     owners = web3.eth.accounts[:2]
     (A, B, C, D) = web3.eth.accounts[2:6]
@@ -273,10 +273,10 @@ def test_token_receiveReserve(
     balance_A = eth.getBalance(A)
     expected_payment = eth.getBalance(token.address) * redeemed // initial_supply
 
-    gas_used = gasUsed(token.transact({'from': A}).redeem(redeemed))
+    txn_cost = txnCost(token.transact({'from': A}).redeem(redeemed))
     assert token.call().totalSupply() == initial_supply - redeemed
     assert token.call().balanceOf(A) == tokens_A - redeemed
     assert eth.getBalance(token.address) == int(balance_token - expected_payment)
 
-    expected_balance = balance_A + expected_payment - gas_used
+    expected_balance = balance_A + expected_payment - txn_cost
     assert eth.getBalance(A) == expected_balance

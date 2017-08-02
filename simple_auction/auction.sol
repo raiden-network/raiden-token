@@ -79,7 +79,7 @@ contract DutchAuction {
     event Setup();
     event SettingsChanged(uint indexed price_factor, uint indexed price_const);
     event AuctionStarted(uint indexed start_time, uint indexed block_number);
-    event BidSubmission(address indexed sender, uint amount, uint returned_amount, uint indexed missing_reserve);
+    event BidSubmission(address indexed sender, uint amount, uint indexed missing_reserve);
     event ClaimedTokens(address indexed recipient, uint sent_amount, uint num);
     event AuctionEnded(uint indexed final_price);
     event TokensDistributed();
@@ -183,20 +183,24 @@ contract DutchAuction {
         uint pre_receiver_funds = bids[receiver];
 
         // Missing reserve without the current bid amount
-        uint maxWei = missingReserveToEndAuction(this.balance - amount);
+        uint missing_reserve = missingReserveToEndAuction(this.balance - amount);
 
         // Only invest maximum possible amount.
-        if (amount > maxWei) {
-            amount = maxWei;
-            // Send change back to receiver address.
-            // TODO add test for this
-            receiver.transfer(msg.value - amount);
+        if (amount > missing_reserve) {
+            amount = missing_reserve;
+
+            // Send surplus back to receiver address.
+            uint surplus = msg.value - amount;
+            uint sender_balance = receiver.balance;
+            receiver.transfer(surplus);
+
+            assert(receiver.balance == sender_balance + surplus);
         }
         bids[receiver] += amount;
-        BidSubmission(receiver, amount, msg.value - amount, maxWei);
+        BidSubmission(receiver, amount, missing_reserve);
 
-        if (maxWei == amount) {
-            // When maxWei is equal to the big amount the auction is ended and finalizeAuction is triggered.
+        if (missing_reserve == amount) {
+            // When missing_reserve is equal to the big amount the auction is ended and finalizeAuction is triggered.
             finalizeAuction();
         }
 

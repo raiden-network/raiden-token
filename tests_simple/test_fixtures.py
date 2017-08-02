@@ -74,11 +74,11 @@ def accounts(web3):
 
 
 @pytest.fixture
-def gasUsed(chain, web3):
+def txnCost(chain, web3):
     def get(txn_hash):
         receipt = chain.wait.for_receipt(txn_hash)
-        gas_used = receipt['gasUsed'] * web3.eth.gasPrice
-        return gas_used
+        txn_cost = receipt['gasUsed'] * web3.eth.gasPrice
+        return txn_cost
     return get
 
 

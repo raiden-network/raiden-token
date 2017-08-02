@@ -10,7 +10,7 @@ from test_fixtures import (
     auction_supply,
     prealloc,
     multiplier,
-    gasUsed
+    txnCost
 )
 import math
 from functools import (
@@ -51,7 +51,7 @@ def test_auction_variable_access(chain, web3):
     assert auction.call().stage() == 0
 
 
-def test_auction(chain, web3, auction_contract, get_token_contract):
+def test_auction(chain, web3, auction_contract, get_token_contract, txnCost):
     eth = web3.eth
     auction = auction_contract
 
@@ -128,36 +128,36 @@ def test_auction(chain, web3, auction_contract, get_token_contract):
     auction.transact({'from': bidders[1], "value": 1}).bid()
     index = 2
     bidded = 2
+    approx_bid_txn_cost = 4000000
 
     while auction.call().missingReserveToEndAuction() > 0:
         if bidders_len < index:
             print('!! Not enough accounts to simulate bidders')
 
         bidder = bidders[index]
-        balance = eth.getBalance(bidder)
+        bidder_balance = eth.getBalance(bidder)
         assert auction.call().bids(bidder) == 0
 
         missing_reserve = auction.call().missingReserveToEndAuction()
-        amount = int(min(balance - 4000000, maxBid))
+        amount = int(min(bidder_balance - approx_bid_txn_cost, maxBid))
 
-        auction.transact({'from': bidder, "value": amount}).bid()
+        txn_cost = txnCost(auction.transact({'from': bidder, "value": amount}).bid())
         bidded += min(amount, missing_reserve)
 
         if amount <= missing_reserve:
             assert auction.call().bids(bidder) == amount
+            post_balance = bidder_balance - amount - txn_cost
         else:
             assert auction.call().bids(bidder) == missing_reserve
+            post_balance = bidder_balance - missing_reserve - txn_cost
+            print('-------! LAST BIDDER surplus to be returned:', amount - missing_reserve)
 
+        assert eth.getBalance(bidder) == post_balance
         index += 1
 
     assert eth.getBalance(auction.address) == bidded
     assert auction.call().missingReserveToEndAuction() == 0
     print('NO OF BIDDERS', index)
-
-    # TODO check if account has received back the difference
-    # gas_price = eth.gasPrice
-    # receive_back -= receipt['gasUsed'] * gas_price
-    # assert eth.getBalance(D) == receive_back
 
     # Auction ended, no more orders possible
     if bidders_len < index:
