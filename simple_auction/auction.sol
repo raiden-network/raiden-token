@@ -6,8 +6,24 @@ import './token.sol';
 /// @author [..] credits to Stefan George - <stefan.george@consensys.net>
 contract DutchAuction {
     /*
+    Auction for the TKN Token.
+    Usage of the contract implies agreement of the Terms & Conditions
+        Link: http://xyz.eth/tc.pdf
+        MD5: e18de70182a134687249aebe6656049c
+
+    Only addresses which signed the contract are allowed to call `bid`
+    Users needs to called below, to explicitly sign agreement with the terms:
+    `DutchAuction.sign('e18de70182a134687249aebe6656049c')`
+    */
+
+    /*
      *  Storage
      */
+
+    // Keep track of signing the Terms and Conditions
+    mapping (address => bool) public terms_signed;
+    bytes32 terms_hash = 'e18de70182a134687249aebe6656049c';
+
     ReserveToken public token;
     address public owner;
 
@@ -30,6 +46,8 @@ contract DutchAuction {
     uint public final_price;
 
     mapping (address => uint) public bids;
+
+
     Stages public stage;
 
     // Terminology:
@@ -66,6 +84,12 @@ contract DutchAuction {
         _;
     }
 
+    modifier signedTerms() {
+        require(terms_signed[msg.sender]);
+        _;
+    }
+
+
     modifier isValidPayload() {
         require(msg.data.length == 4 || msg.data.length == 36);
         _;
@@ -79,6 +103,7 @@ contract DutchAuction {
     event Setup();
     event SettingsChanged(uint indexed price_factor, uint indexed price_const);
     event AuctionStarted(uint indexed start_time, uint indexed block_number);
+    event TermsSigned(address indexed sender, bytes32 indexed _terms_hash);
     event BidSubmission(address indexed sender, uint amount, uint returned_amount, uint indexed missing_reserve);
     event ClaimedTokens(address indexed recipient, uint sent_amount, uint num);
     event AuctionEnded(uint indexed final_price);
@@ -159,6 +184,16 @@ contract DutchAuction {
 
     /// --------------------------------- Auction Functions -------------------------------------------
 
+    /// @dev Allows to sing the terms.
+    function sign(bytes32 _terms_hash)
+        public
+        atStage(Stages.AuctionStarted)
+    {
+        require(_terms_hash == terms_hash); // check if the correct terms are signed
+        terms_signed[msg.sender]; // register digital signature
+        TermsSigned(msg.sender, _terms_hash);
+    }
+
     /// @dev Allows to send a bid to the auction.
     function bid()
         public
@@ -174,6 +209,7 @@ contract DutchAuction {
         public
         payable
         isValidPayload
+        signedTerms
         atStage(Stages.AuctionStarted)
     {
         require(receiver != 0x0);
