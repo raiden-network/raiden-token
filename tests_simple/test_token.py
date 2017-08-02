@@ -16,9 +16,9 @@ from test_fixtures import (
 # Proxy contract needed because receiveReserve
 # can only be called from an Auction contract
 @pytest.fixture()
-def proxy_contract(chain):
+def proxy_contract(chain, create_contract):
     AuctionProxy = chain.provider.get_contract_factory('Proxy')
-    proxy_contract = create_contract(chain, AuctionProxy, [])
+    proxy_contract = create_contract(AuctionProxy, [])
 
     print_logs(proxy_contract, 'Payable', 'Proxy')
 
