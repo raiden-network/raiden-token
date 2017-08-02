@@ -36,7 +36,7 @@ contract DutchAuction {
     // 1 token unit = Tei
     // 1 token = TKN = Tei * multiplier
     // multiplier set from token's number of decimals (i.e. 10**decimals)
-    uint multiplier;
+    uint public multiplier;
 
     // TODO - remove after testing
     uint rounding_error_tokens;
@@ -97,6 +97,8 @@ contract DutchAuction {
         uint _price_const)
         public
     {
+        require(this.balance == 0);
+
         owner = msg.sender;
         stage = Stages.AuctionDeployed;
         Deployed(this, price_factor, price_const);
@@ -113,6 +115,7 @@ contract DutchAuction {
         require(_token != 0x0);
         token = ReserveToken(_token);
         require(token.owner() == owner);
+        require(token.auction_address() == address(this));
 
         // Get number of tokens to be auctioned from token auction balance
         tokens_auctioned = token.balanceOf(this);
