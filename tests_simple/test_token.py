@@ -8,16 +8,17 @@ from test_fixtures import (
     initial_supply,
     auction_supply,
     prealloc,
-    xassert
+    auction_args,
+    txnCost
 )
 
 
 # Proxy contract needed because receiveReserve
 # can only be called from an Auction contract
 @pytest.fixture()
-def proxy_contract(chain):
+def proxy_contract(chain, create_contract):
     AuctionProxy = chain.provider.get_contract_factory('Proxy')
-    proxy_contract = create_contract(chain, AuctionProxy, [])
+    proxy_contract = create_contract(AuctionProxy, [])
 
     print_logs(proxy_contract, 'Payable', 'Proxy')
 
@@ -36,13 +37,190 @@ def receiveReserve(web3, proxy_contract):
     return get
 
 
-def test_ctoken(chain, web3, get_token_contract, proxy_contract, receiveReserve):
+def test_token_init(chain, web3, get_token_contract, proxy_contract):
+    (A, B, C, D) = web3.eth.accounts[:4]
+    auction = proxy_contract
+    preallocs = [
+        500 * multiplier,
+        800 * multiplier,
+        1100 * multiplier,
+        770 * multiplier
+    ]
+
+    # Transaction fails if different length arrays for owners & preallocation values
+    with pytest.raises(tester.TransactionFailed):
+        token = get_token_contract([
+            auction.address,
+            initial_supply,
+            [A, B, C, D],
+            [4000, 3000, 5000]
+        ])
+
+    with pytest.raises(tester.TransactionFailed):
+        token = get_token_contract([
+            proxy_contract.address,
+            multiplier - 2,
+            [A, B, C, D],
+            preallocs
+        ])
+
+    token = get_token_contract([
+        proxy_contract.address,
+        initial_supply,
+        [A, B, C, D],
+        preallocs
+    ])
+
+
+def test_token_transfer(chain, web3, get_token_contract, proxy_contract):
+    (A, B, C) = web3.eth.accounts[:3]
+    preallocs = [
+        500,
+        800,
+        1100
+    ]
+    token = get_token_contract([
+        proxy_contract.address,
+        initial_supply,
+        [A, B, C],
+        preallocs
+    ])
+
+    with pytest.raises(tester.TransactionFailed):
+        token.transact({'from': A}).transfer(B, 0)
+    with pytest.raises(TypeError):
+        token.transact({'from': A}).transfer(B, -5)
+    with pytest.raises(tester.TransactionFailed):
+        token.transact({'from': A}).transfer(B, preallocs[0] + 1)
+
+    token.transact({'from': A}).transfer(B, 120)
+    assert token.call().balanceOf(A) == 380
+    assert token.call().balanceOf(B) == 920
+
+    token.transact({'from': B}).transfer(C, 66)
+    assert token.call().balanceOf(B) == 920 - 66
+    assert token.call().balanceOf(C) == 1166
+
+
+def test_token_transfer_from(chain, web3, get_token_contract, proxy_contract):
+    (A, B, C) = web3.eth.accounts[:3]
+    preallocs = [
+        500,
+        800,
+        1100
+    ]
+    token = get_token_contract([
+        proxy_contract.address,
+        initial_supply,
+        [A, B, C],
+        preallocs
+    ])
+
+    # Check approve method
+    with pytest.raises(tester.TransactionFailed):
+        token.transact({'from': A}).approve(B, 0)
+    with pytest.raises(TypeError):
+        token.transact({'from': A}).approve(B, -3)
+
+    token.transact({'from': A}).approve(B, 300)
+    token.transact({'from': B}).approve(C, 650)
+
+    assert token.call().allowance(A, B) == 300
+    assert token.call().allowance(B, C) == 650
+
+    with pytest.raises(tester.TransactionFailed):
+        token.transact().transferFrom(A, B, 0)
+    with pytest.raises(TypeError):
+        token.transact().transferFrom(A, B, -1)
+    with pytest.raises(tester.TransactionFailed):
+        token.transact().transferFrom(A, B, 301)
+
+    token.transact().transferFrom(A, B, 150)
+    assert token.call().allowance(A, B) == 150
+    assert token.call().balanceOf(A) == 350
+    assert token.call().balanceOf(B) == 950
+
+    with pytest.raises(tester.TransactionFailed):
+        token.transact().transferFrom(A, B, 151)
+
+    token.transact().transferFrom(A, B, 20)
+    assert token.call().allowance(A, B) == 130
+    assert token.call().balanceOf(A) == 330
+    assert token.call().balanceOf(B) == 970
+
+    token.transact().transferFrom(B, C, 650)
+    assert token.call().allowance(B, C) == 0
+    assert token.call().balanceOf(B) == 970 - 650
+    assert token.call().balanceOf(C) == preallocs[2] + 650
+    with pytest.raises(tester.TransactionFailed):
+        token.transact().transferFrom(B, C, 5)
+
+
+def test_token_variables(chain, web3, get_token_contract, proxy_contract):
+    (A, B, C) = web3.eth.accounts[:3]
+    preallocs = [
+        500,
+        800,
+        1100
+    ]
+    token = get_token_contract([
+        proxy_contract.address,
+        initial_supply,
+        [A, B, C],
+        preallocs
+    ])
+
+    assert token.call().name() == 'The Token'
+    assert token.call().symbol() == 'TKN'
+    assert token.call().decimals() == 18
+    assert token.call().owner() == web3.eth.coinbase
+    assert token.call().auction_address() == proxy_contract.address
+    assert token.call().totalSupply() == initial_supply
+
+
+def test_burn(chain, web3, get_token_contract, proxy_contract, txnCost):
+    eth = web3.eth
+    (A, B, C) = web3.eth.accounts[:3]
+    preallocs = [
+        500 * multiplier,
+        800 * multiplier,
+        1100 * multiplier
+    ]
+    token = get_token_contract([
+        proxy_contract.address,
+        initial_supply,
+        [A, B, C],
+        preallocs
+    ])
+
+    with pytest.raises(tester.TransactionFailed):
+        token.transact({'from': B}).burn(0)
+    with pytest.raises(tester.TransactionFailed):
+        token.transact({'from': B}).burn(preallocs[1] + 1)
+
+    # Balance should not change besides transaction costs
+    tokens_B = token.call().balanceOf(B)
+    balance_B = eth.getBalance(B)
+    burnt = 250 * multiplier
+    txn_cost = txnCost(token.transact({'from': B}).burn(burnt))
+
+    assert token.call().totalSupply() == initial_supply - burnt
+    assert token.call().balanceOf(B) == tokens_B - burnt
+    assert balance_B == eth.getBalance(B) + txn_cost
+
+
+def test_token_receiveReserve(
+    chain,
+    web3,
+    get_token_contract,
+    proxy_contract,
+    receiveReserve,
+    txnCost
+):
     owners = web3.eth.accounts[:2]
     (A, B, C, D) = web3.eth.accounts[2:6]
     auction = proxy_contract
     eth = web3.eth
-
-    # TODO - Token initalization with no preallocation of tokens? - fails
 
     # Token initalization + preallocation of tokens
     token = get_token_contract([
@@ -68,11 +246,6 @@ def test_ctoken(chain, web3, get_token_contract, proxy_contract, receiveReserve)
     assert token.call().balanceOf(A) == 600 * multiplier
     assert token.call().balanceOf(B) == 400 * multiplier
 
-    # TODO
-    # token.transact({'from': A}).transferFrom(A, B, 300)
-    # allowance
-    # approve
-
     # Cannot destroy more tokens than existing balance
     tokens_A = token.call().balanceOf(A)
     with pytest.raises(tester.TransactionFailed):
@@ -93,33 +266,17 @@ def test_ctoken(chain, web3, get_token_contract, proxy_contract, receiveReserve)
     receiveReserve(token, auction_balance)
     assert eth.getBalance(token.address) == auction_balance
 
-    # Check token redeem / sell
-    # TODO add transaction cost to be more exact
+    # Check token redeem
     balance_token = eth.getBalance(token.address)
     tokens_A = token.call().balanceOf(A)
     redeemed = 250 * multiplier
     balance_A = eth.getBalance(A)
     expected_payment = eth.getBalance(token.address) * redeemed // initial_supply
 
-    token.transact({'from': A}).redeem(redeemed)
+    txn_cost = txnCost(token.transact({'from': A}).redeem(redeemed))
     assert token.call().totalSupply() == initial_supply - redeemed
     assert token.call().balanceOf(A) == tokens_A - redeemed
     assert eth.getBalance(token.address) == int(balance_token - expected_payment)
 
-    # transaction costs estimation
-    # FIXME seems like A gets back more than the expected_payment
-    # though the token contract shows correct balance when logging the values
-    # threshhold should be lower - ~40000
-    xassert(eth.getBalance(A), balance_A + expected_payment, 5 * 10**18)
-
-    balance_token = eth.getBalance(token.address)
-    tokens_B = token.call().balanceOf(B)
-    balance_B = eth.getBalance(B)
-    burnt = 250 * multiplier
-    token.transact({'from': B}).burn(burnt)
-
-    assert token.call().totalSupply() == initial_supply - redeemed - burnt
-    assert token.call().balanceOf(B) == tokens_B - burnt
-    assert eth.getBalance(token.address) == balance_token
-    # transaction costs estimation
-    xassert(eth.getBalance(B), balance_B, 40000)
+    expected_balance = balance_A + expected_payment - txn_cost
+    assert eth.getBalance(A) == expected_balance

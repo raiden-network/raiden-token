@@ -54,7 +54,7 @@ contract DutchAuction {
     // 1 token unit = Tei
     // 1 token = TKN = Tei * multiplier
     // multiplier set from token's number of decimals (i.e. 10**decimals)
-    uint multiplier;
+    uint public multiplier;
 
     // TODO - remove after testing
     uint rounding_error_tokens;
@@ -104,7 +104,7 @@ contract DutchAuction {
     event SettingsChanged(uint indexed price_factor, uint indexed price_const);
     event AuctionStarted(uint indexed start_time, uint indexed block_number);
     event TermsSigned(address indexed sender, bytes32 indexed _terms_hash);
-    event BidSubmission(address indexed sender, uint amount, uint returned_amount, uint indexed missing_reserve);
+    event BidSubmission(address indexed sender, uint amount, uint indexed missing_reserve);
     event ClaimedTokens(address indexed recipient, uint sent_amount, uint num);
     event AuctionEnded(uint indexed final_price);
     event TokensDistributed();
@@ -122,6 +122,8 @@ contract DutchAuction {
         uint _price_const)
         public
     {
+        require(this.balance == 0);
+
         owner = msg.sender;
         stage = Stages.AuctionDeployed;
         Deployed(this, price_factor, price_const);
@@ -138,6 +140,7 @@ contract DutchAuction {
         require(_token != 0x0);
         token = ReserveToken(_token);
         require(token.owner() == owner);
+        require(token.auction_address() == address(this));
 
         // Get number of tokens to be auctioned from token auction balance
         tokens_auctioned = token.balanceOf(this);
@@ -219,20 +222,24 @@ contract DutchAuction {
         uint pre_receiver_funds = bids[receiver];
 
         // Missing reserve without the current bid amount
-        uint maxWei = missingReserveToEndAuction(this.balance - amount);
+        uint missing_reserve = missingReserveToEndAuction(this.balance - amount);
 
         // Only invest maximum possible amount.
-        if (amount > maxWei) {
-            amount = maxWei;
-            // Send change back to receiver address.
-            // TODO add test for this
-            receiver.transfer(msg.value - amount);
+        if (amount > missing_reserve) {
+            amount = missing_reserve;
+
+            // Send surplus back to receiver address.
+            uint surplus = msg.value - amount;
+            uint sender_balance = receiver.balance;
+            receiver.transfer(surplus);
+
+            assert(receiver.balance == sender_balance + surplus);
         }
         bids[receiver] += amount;
-        BidSubmission(receiver, amount, msg.value - amount, maxWei);
+        BidSubmission(receiver, amount, missing_reserve);
 
-        if (maxWei == amount) {
-            // When maxWei is equal to the big amount the auction is ended and finalizeAuction is triggered.
+        if (missing_reserve == amount) {
+            // When missing_reserve is equal to the big amount the auction is ended and finalizeAuction is triggered.
             finalizeAuction();
         }
 
