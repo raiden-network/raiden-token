@@ -254,6 +254,7 @@ def test_price(web3, auction_contract, token_contract, auction_bid_tested):
 # Test signing Terms and Consitions
 def test_auction_sign(web3, auction_contract, token_contract, auction_bid_tested):
     auction = auction_contract
+    token = token_contract(auction.address)
     A = web3.eth.accounts[2]
     another_hash = 'e18de70182a134687249aebe6656048c'
 
