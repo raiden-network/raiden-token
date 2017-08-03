@@ -18,6 +18,9 @@ auction_args = [
     [3, 7500]
 ]
 
+# Terms hash
+terms_hash = 'e18de70182a134687249aebe6656049c'
+
 
 @pytest.fixture()
 def auction_contract(chain, create_contract):
@@ -28,6 +31,7 @@ def auction_contract(chain, create_contract):
     print_logs(auction_contract, 'Setup', 'DutchAuction')
     print_logs(auction_contract, 'SettingsChanged', 'DutchAuction')
     print_logs(auction_contract, 'AuctionStarted', 'DutchAuction')
+    print_logs(auction_contract, 'TermsSigned', 'DutchAuction')
     print_logs(auction_contract, 'BidSubmission', 'DutchAuction')
     print_logs(auction_contract, 'AuctionEnded', 'DutchAuction')
     print_logs(auction_contract, 'ClaimedTokens', 'DutchAuction')
