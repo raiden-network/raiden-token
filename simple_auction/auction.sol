@@ -188,12 +188,12 @@ contract DutchAuction {
     /// --------------------------------- Auction Functions -------------------------------------------
 
     /// @dev Allows to sing the terms.
-    /// @param _terms_hash Terms and Conditions hash
-    function sign(bytes32 _terms_hash)
+    /// @param _terms_hash valid param is sha3(terms_hash, msg.sender) to enforce individual agreement
+    function sign(bytes32 terms_address_hash)
         public
         atStage(Stages.AuctionStarted)
     {
-        require(_terms_hash == terms_hash); // check if the correct terms are signed
+        require(sha3(terms_hash, msg.sender) == terms_address_hash); // check if the correct terms are signed
         terms_signed[msg.sender] = true; // register digital signature
         TermsSigned(msg.sender, _terms_hash);
     }
@@ -277,6 +277,8 @@ contract DutchAuction {
 
         token.transfer(receiver, num);
         ClaimedTokens(receiver, num, token.balanceOf(receiver));
+
+        terms_signed[msg.sender] = false; // free storage
 
         // Test for a correct claimed tokens calculation
         /* TODO remove this after testing */
