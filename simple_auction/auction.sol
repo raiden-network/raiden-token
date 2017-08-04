@@ -13,7 +13,7 @@ contract DutchAuction {
 
     Only addresses which signed the contract are allowed to call `bid`
     Users needs to called below, to explicitly sign agreement with the terms:
-    `DutchAuction.sign('e18de70182a134687249aebe6656049c')`
+    `DutchAuction.sign(sha3('e18de70182a134687249aebe6656049c', user_address))`
     */
 
     /*
@@ -188,14 +188,14 @@ contract DutchAuction {
     /// --------------------------------- Auction Functions -------------------------------------------
 
     /// @dev Allows to sing the terms.
-    /// @param _terms_hash valid param is sha3(terms_hash, msg.sender) to enforce individual agreement
+    /// @param terms_address_hash valid param is sha3(terms_hash, msg.sender) to enforce individual agreement
     function sign(bytes32 terms_address_hash)
         public
         atStage(Stages.AuctionStarted)
     {
         require(sha3(terms_hash, msg.sender) == terms_address_hash); // check if the correct terms are signed
         terms_signed[msg.sender] = true; // register digital signature
-        TermsSigned(msg.sender, _terms_hash);
+        TermsSigned(msg.sender, terms_address_hash);
     }
 
     /// @dev Allows to send a bid to the auction.
