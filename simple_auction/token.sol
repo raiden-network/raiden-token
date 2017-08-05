@@ -61,12 +61,12 @@ contract StandardToken is Token {
         require(_to != 0x0);
         require(_value > 0);
         require(balances[_from] >= _value);
-        require(allowed[_from][msg.sender] >= _value);
+        require(allowed[_from][_to] >= _value);
         require(balances[_to] + _value > balances[_to]);
 
         balances[_to] += _value;
         balances[_from] -= _value;
-        allowed[_from][msg.sender] -= _value;
+        allowed[_from][_to] -= _value;
         Transfer(_from, _to, _value);
         return true;
     }

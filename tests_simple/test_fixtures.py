@@ -18,16 +18,20 @@ auction_args = [
     [3, 7500]
 ]
 
+# Terms hash
+terms_hash = 'e18de70182a134687249aebe6656049c'
+
 
 @pytest.fixture()
-def auction_contract(chain):
+def auction_contract(chain, create_contract):
     Auction = chain.provider.get_contract_factory('DutchAuction')
-    auction_contract = create_contract(chain, Auction, auction_args[0])
+    auction_contract = create_contract(Auction, auction_args[0])
 
     print_logs(auction_contract, 'Deployed', 'DutchAuction')
     print_logs(auction_contract, 'Setup', 'DutchAuction')
     print_logs(auction_contract, 'SettingsChanged', 'DutchAuction')
     print_logs(auction_contract, 'AuctionStarted', 'DutchAuction')
+    print_logs(auction_contract, 'TermsSigned', 'DutchAuction')
     print_logs(auction_contract, 'BidSubmission', 'DutchAuction')
     print_logs(auction_contract, 'AuctionEnded', 'DutchAuction')
     print_logs(auction_contract, 'ClaimedTokens', 'DutchAuction')
@@ -38,11 +42,11 @@ def auction_contract(chain):
 
 
 @pytest.fixture()
-def get_token_contract(chain):
+def get_token_contract(chain, create_contract):
     # contract can be auction contract or proxy contract
-    def get(arguments):
+    def get(arguments, transaction=None):
         ReserveToken = chain.provider.get_contract_factory('ReserveToken')
-        token_contract = create_contract(chain, ReserveToken, arguments)
+        token_contract = create_contract(ReserveToken, arguments, transaction)
 
         print_logs(token_contract, 'Redeemed', 'ReserveToken')
         print_logs(token_contract, 'Transfer', 'ReserveToken')
@@ -53,15 +57,16 @@ def get_token_contract(chain):
 
 
 @pytest.fixture()
-def token_contract(chain, get_token_contract):
-    def get(owners, prealloc, auction):
+def token_contract(chain, web3, get_token_contract):
+    def get(auction_address, transaction=None):
+        owners = web3.eth.accounts[:2]
         token_contract = get_token_contract([
-            auction.address,
+            auction_address,
             initial_supply,
             owners,
             prealloc
-        ])
-        auction.transact().setup(token_contract.address)
+        ], transaction)
+
         return token_contract
     return get
 
@@ -73,12 +78,23 @@ def accounts(web3):
     return get
 
 
-def create_contract(chain, contract_type, arguments):
-    print(chain, contract_type, arguments)
-    deploy_txn_hash = contract_type.deploy(args=arguments)
-    contract_address = chain.wait.for_contract_address(deploy_txn_hash)
-    contract = contract_type(address=contract_address)
-    return contract
+@pytest.fixture
+def txnCost(chain, web3):
+    def get(txn_hash):
+        receipt = chain.wait.for_receipt(txn_hash)
+        txn_cost = receipt['gasUsed'] * web3.eth.gasPrice
+        return txn_cost
+    return get
+
+
+@pytest.fixture
+def create_contract(chain):
+    def get(contract_type, arguments, transaction=None):
+        deploy_txn_hash = contract_type.deploy(transaction=transaction, args=arguments)
+        contract_address = chain.wait.for_contract_address(deploy_txn_hash)
+        contract = contract_type(address=contract_address)
+        return contract
+    return get
 
 
 def print_logs(contract, event, name=''):
