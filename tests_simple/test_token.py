@@ -1,6 +1,6 @@
 import pytest
 from ethereum import tester
-from test_fixtures import (
+from fixtures import (
     get_token_contract,
     create_contract,
     print_logs,

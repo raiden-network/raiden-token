@@ -3,6 +3,14 @@ from functools import (
     reduce
 )
 
+from web3.utils.compat import (
+    Timeout,
+)
+
+from utils import (
+    print_logs,
+)
+
 # multiplier based on token decimals: 10^decimals
 multiplier = 10**18
 initial_supply = 10000000 * multiplier
@@ -95,25 +103,3 @@ def create_contract(chain):
         contract = contract_type(address=contract_address)
         return contract
     return get
-
-
-def print_logs(contract, event, name=''):
-    transfer_filter_past = contract.pastEvents(event)
-    past_events = transfer_filter_past.get()
-    if len(past_events):
-        print('--(', name, ') past events for ', event, past_events)
-
-    transfer_filter = contract.on(event)
-    events = transfer_filter.get()
-    if len(events):
-        print('--(', name, ') events for ', event, events)
-
-    transfer_filter.watch(lambda x: print('--(', name, ') event ', event, x['args']))
-
-
-# Almost equal
-def xassert(a, b, threshold=0.0001):
-    if min(a, b) > 0:
-        assert abs(a - b) / min(a, b) <= threshold, (a, b)
-    assert abs(a - b) <= threshold, (a, b)
-    return True

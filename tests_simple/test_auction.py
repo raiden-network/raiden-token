@@ -1,126 +1,39 @@
 import pytest
 from ethereum import tester
-from test_fixtures import (
-    create_contract,
-    auction_contract,
-    get_token_contract,
-    token_contract,
+from functools import (
+    reduce
+)
+from web3.utils.compat import (
+    Timeout,
+)
+from fixtures import (
     auction_args,
     initial_supply,
     auction_supply,
     prealloc,
     multiplier,
+    create_contract,
+    get_token_contract,
+    token_contract,
+    auction_contract,
     txnCost,
-    terms_hash
-)
-import math
-from functools import (
-    reduce
+    terms_hash,
 )
 
+from auction_fixtures import (
+    auction_setup_contract,
+    auction_started_fast_decline,
+    auction_ended,
+    auction_bid_tested,
+    auction_end_tests,
+)
+
+from utils import (
+    hash_sign_msg,
+)
 
 # TODO: missingReserveToEndAuction, transferReserveToToken,
 # TODO: review edge cases for claimTokens, bid
-
-
-# sha3 for multiple arguments (for now, only of type str)
-# we need this because web3.sha3 does not support multiple arguments
-def sol_sha3(web3, *args):
-    def arg_prep(arg):
-        if type(arg) == str:
-            if arg[0:2] == '0x':
-                return arg[2:]
-            else:
-                return web3.toHex(arg)[2:]
-        else:
-            return ''
-
-    joined = ''
-    for arg in args:
-        joined += arg_prep(arg)
-    return web3.sha3(joined)
-
-
-@pytest.fixture()
-def sign_hash(web3):
-    def get(sender):
-        newhash = sol_sha3(web3, terms_hash, sender)
-        return web3.toAscii(newhash)
-    return get
-
-
-@pytest.fixture()
-def auction_setup_contract(web3, auction_contract, get_token_contract):
-    auction = auction_contract
-    owners = web3.eth.accounts[:2]
-
-    # Initialize token
-    token = get_token_contract([
-        auction.address,
-        initial_supply,
-        owners,
-        prealloc
-    ])
-    auction.transact().setup(token.address)
-    return auction
-
-
-@pytest.fixture()
-def auction_started_fast_decline(web3, auction_setup_contract):
-    auction = auction_setup_contract
-    # Higher price decline
-    auction.transact().changeSettings(2, multiplier)
-    auction.transact().startAuction()
-    return auction
-
-
-# Bid + tests that should run when bidding
-@pytest.fixture()
-def auction_bid_tested(web3, txnCost, sign_hash):
-    def get(auction, bidder, amount):
-        # If bidder has not signed Terms and Conditions, he cannot bid
-        if not auction.call().terms_signed(bidder):
-            with pytest.raises(tester.TransactionFailed):
-                auction.transact({'from': bidder, 'value': amount}).bid()
-
-            # Sign Terms
-            bidder_hash = sign_hash(bidder)
-            auction.transact({'from': bidder}).sign(bidder_hash)
-
-        assert auction.call().terms_signed(bidder)
-
-        bidder_pre_balance = web3.eth.getBalance(bidder)
-        bidder_pre_a_balance = auction.call().bids(bidder)
-        auction_pre_balance = web3.eth.getBalance(auction.address)
-        missing_reserve = auction.call().missingReserveToEndAuction()
-        accepted_amount = min(missing_reserve, amount)
-
-        txn_cost = txnCost(auction.transact({'from': bidder, 'value': amount}).bid())
-
-        assert auction.call().bids(bidder) == bidder_pre_a_balance + accepted_amount
-        assert web3.eth.getBalance(auction.address) == auction_pre_balance + accepted_amount
-        assert web3.eth.getBalance(bidder) == bidder_pre_balance - accepted_amount - txn_cost
-    return get
-
-
-# Tests that should run after the auction has ended
-@pytest.fixture()
-def auction_end_tests(sign_hash):
-    def get(auction, bidder):
-        assert auction.call().stage() == 3  # AuctionEnded
-        assert auction.call().missingReserveToEndAuction() == 0
-        assert auction.call().price() == 0  # UI has to call final_price
-        assert auction.call().final_price() > 0
-
-        with pytest.raises(tester.TransactionFailed):
-            auction.transact({'from': bidder}).sign(sign_hash(bidder))
-        with pytest.raises(tester.TransactionFailed):
-            auction.transact({'from': bidder, "value": 1000}).bid()
-        with pytest.raises(tester.TransactionFailed):
-            auction.transact({'from': bidder, "value": 1}).bid()
-        with pytest.raises(tester.TransactionFailed):
-            auction.transact({'from': bidder, "value": 0}).bid()
-    return get
 
 
 def test_auction_init(chain, web3, create_contract):
@@ -281,38 +194,8 @@ def test_price(web3, auction_contract, token_contract, auction_bid_tested):
     assert auction.call().final_price() == price
 
 
-# Test signing Terms and Consitions
-def test_auction_sign(web3, auction_contract, token_contract, auction_bid_tested, sign_hash):
-    auction = auction_contract
-    token = token_contract(auction.address)
-    (A, B) = web3.eth.accounts[2:4]
-    A_hash = sign_hash(A)
-    B_hash = sign_hash(B)
-
-    assert not auction.call().terms_signed(A)
-
-    # Fail if auction has not started
-    with pytest.raises(tester.TransactionFailed):
-        auction.transact({'from': A}).sign(A_hash)
-
-    auction.transact().setup(token.address)
-
-    # Fail if auction has not started
-    with pytest.raises(tester.TransactionFailed):
-        auction.transact({'from': A}).sign(A_hash)
-
-    auction.transact().startAuction()
-
-    # Fail if hash is not correct
-    with pytest.raises(tester.TransactionFailed):
-        auction.transact({'from': A}).sign(B_hash)
-
-    auction.transact({'from': A}).sign(A_hash)
-    assert auction.call().terms_signed(A)
-
-
 # Test sending ETH to the auction contract
-def test_auction_payable(chain, web3, auction_contract, get_token_contract, txnCost, sign_hash):
+def test_auction_payable(chain, web3, auction_contract, get_token_contract, txnCost):
     eth = web3.eth
     auction = auction_contract
     owners = web3.eth.accounts[:2]
@@ -334,7 +217,7 @@ def test_auction_payable(chain, web3, auction_contract, get_token_contract, txnC
             'value': 100
         })
     with pytest.raises(tester.TransactionFailed):
-        auction.transact({'from': bidder}).sign(sign_hash(bidder))
+        auction.transact({'from': bidder}).sign(hash_sign_msg(terms_hash, bidder))
     with pytest.raises(tester.TransactionFailed):
         auction.transact({'from': bidder, "value": 100}).bid()
 
@@ -343,7 +226,7 @@ def test_auction_payable(chain, web3, auction_contract, get_token_contract, txnC
     # Higher price decline
     auction.transact().changeSettings(2, multiplier)
     auction.transact().startAuction()
-    auction.transact({'from': bidder}).sign(sign_hash(bidder))
+    auction.transact({'from': bidder}).sign(hash_sign_msg(terms_hash, bidder))
 
     # End auction by bidding the needed amount
     missing_reserve = auction.call().missingReserveToEndAuction()
@@ -470,8 +353,7 @@ def test_auction_simulation(
     get_token_contract,
     auction_bid_tested,
     auction_end_tests,
-    txnCost,
-    sign_hash
+    txnCost
 ):
     eth = web3.eth
     auction = auction_contract
@@ -548,7 +430,7 @@ def test_auction_simulation(
             print('!! Not enough accounts to simulate bidders')
 
         bidder = bidders[index]
-        auction.transact({'from': bidder}).sign(sign_hash(bidder))
+        auction.transact({'from': bidder}).sign(hash_sign_msg(terms_hash, bidder))
 
         bidder_balance = eth.getBalance(bidder)
         assert auction.call().bids(bidder) == 0
@@ -652,3 +534,8 @@ def test_auction_simulation(
 
     # Check if auction stage has been changed
     assert auction.call().stage() == 5  # TradingStarted
+
+
+def test_waitfor_last_events_timeout():
+    with Timeout(20) as timeout:
+        timeout.sleep(2)
