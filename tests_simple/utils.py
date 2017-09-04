@@ -5,6 +5,10 @@ from eth_utils import (
     encode_hex
 )
 
+from web3.utils.compat import (
+    Timeout,
+)
+
 
 def hash_sign_msg(terms_hash, sender):
     return sol_sha3(terms_hash, sender)
@@ -65,18 +69,24 @@ def print_logs(contract, event, name=''):
     transfer_filter.watch(lambda x: print('--(', name, ') event ', event, x['args']))
 
 
-def save_logs(contract, event_name, add):
-    transfer_filter_past = contract.pastEvents(event_name)
+def handle_logs(contract, event, params=None, callback=lambda x: print(x)):
+    event_name = event
+    filter_params = params
+
+    '''
+    transfer_filter_past = contract.pastEvents(event_name, filter_params)
     past_events = transfer_filter_past.get()
     for event in past_events:
-        add(event)
+        callback(event)
+    '''
 
-    transfer_filter = contract.on(event_name)
+    transfer_filter = contract.on(event_name, filter_params)
 
     events = transfer_filter.get()
     for event in events:
-        add(event)
-    transfer_filter.watch(lambda x: add(x))
+        callback(event)
+    transfer_filter.watch(filter_params, lambda x: callback(x))
+    return transfer_filter
 
 
 def get_gas_used(chain, trxid):

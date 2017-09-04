@@ -3,9 +3,7 @@ from ethereum import tester
 from functools import (
     reduce
 )
-from web3.utils.compat import (
-    Timeout,
-)
+
 from fixtures import (
     create_contract,
     auction_contract,

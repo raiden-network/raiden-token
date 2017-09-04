@@ -16,7 +16,7 @@ contract Token {
 }
 
 
-/// @title Standard token contract - Standard token interface implementation.
+/// @title Standard token contract - Standard token implementation.
 contract StandardToken is Token {
 
     /*

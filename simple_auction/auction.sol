@@ -105,7 +105,7 @@ contract DutchAuction {
     event AuctionStarted(uint indexed start_time, uint indexed block_number);
     event TermsSigned(address indexed sender, bytes32 indexed _terms_hash);
     event BidSubmission(address indexed sender, uint amount, uint indexed missing_reserve);
-    event ClaimedTokens(address indexed recipient, uint sent_amount, uint num);
+    event ClaimedTokens(address indexed recipient, uint sent_amount);
     event AuctionEnded(uint indexed final_price);
     event TokensDistributed();
     event TradingStarted();
@@ -114,7 +114,7 @@ contract DutchAuction {
      *  Public functions
      */
 
-    /// @dev Contract constructor function sets owner.
+    /// @dev Contract constructor function sets .
     /// @param _price_factor Auction price factor.
     /// @param _price_const Auction price divisor constant.
     function DutchAuction(
@@ -276,7 +276,8 @@ contract DutchAuction {
         bids[receiver] = 0;
 
         token.transfer(receiver, num);
-        ClaimedTokens(receiver, num, token.balanceOf(receiver));
+
+        ClaimedTokens(receiver, num);
 
         terms_signed[msg.sender] = false; // free storage
 
