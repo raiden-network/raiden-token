@@ -236,7 +236,7 @@
     }
   },
   "compilation": {
-    "contracts_source_dir": "./simple_auction",
+    "contracts_source_dir": "./contracts",
     "settings": {
       "optimize": false
     }

@@ -1,343 +1,397 @@
 pragma solidity ^0.4.11;
 
-import './safe_math.sol';
-import './utils.sol';
-import './mint.sol';
+import './token.sol';
 
-contract Auction {
+/// @title Dutch auction contract - distribution of tokens using an auction.
+/// @author [..] credits to Stefan George - <stefan.george@consensys.net>
+contract DutchAuction {
+    /*
+    Auction for the TKN Token.
+    Usage of the contract implies agreement of the Terms & Conditions
+        Link: http://xyz.eth/tc.pdf
+        MD5: e18de70182a134687249aebe6656049c
+
+    Only addresses which signed the contract are allowed to call `bid`
+    Users needs to called below, to explicitly sign agreement with the terms:
+    `DutchAuction.sign(sha3('e18de70182a134687249aebe6656049c', user_address))`
+    */
+
+    /*
+     *  Storage
+     */
+
+    // Keep track of signing the Terms and Conditions
+    mapping (address => bool) public terms_signed;
+    bytes32 terms_hash = 'e18de70182a134687249aebe6656049c';
+
+    ReserveToken public token;
     address public owner;
-    Mint mint;
 
     // Price function parameters
     uint public price_factor;
     uint public price_const;
 
     // For calculating elapsed time for price
-    uint public startTimestamp;
-    uint public endTimestamp;
+    uint public start_time;
+    uint public end_time;
+    uint public start_block;
 
-    // When auction ends, we memorize total value, tokens issued
-    uint public received_value = 0;
-    uint public total_issuance = 0;
+    // Keep track of funds claimed after auction has ended
+    uint public funds_claimed;
 
-    // Keep track of how many tokens were assigned to buyers
-    uint public issued_value = 0;
+    // Total number of tokens that will be auctioned
+    uint public tokens_auctioned;
 
-    // No more auctions if this flag is true
-    uint final_auction = 0;
+    // Wei per TKN (Tei * multiplier)
+    uint public final_price;
 
-    mapping(address => uint256) public bidders;
+    mapping (address => uint) public bids;
 
+
+    Stages public stage;
+
+    // Terminology:
+    // 1 token unit = Tei
+    // 1 token = TKN = Tei * multiplier
+    // multiplier set from token's number of decimals (i.e. 10**decimals)
+    uint public multiplier;
+
+    // TODO - remove after testing
+    uint rounding_error_tokens;
+
+    /*
+     *  Enums
+     */
     enum Stages {
         AuctionDeployed,
         AuctionSetUp,
         AuctionStarted,
         AuctionEnded,
-        AuctionSettled
+        TokensDistributed,
+        TradingStarted
     }
 
-    Stages public stage;
+    /*
+     *  Modifiers
+     */
+    modifier atStage(Stages _stage) {
+        require(stage == _stage);
+        _;
+    }
 
     modifier isOwner() {
         require(msg.sender == owner);
         _;
     }
 
+    modifier signedTerms() {
+        require(terms_signed[msg.sender]);
+        _;
+    }
+
+
     modifier isValidPayload() {
         require(msg.data.length == 4 || msg.data.length == 36);
         _;
     }
 
-    modifier atStage(Stages _stage) {
-        require(stage == _stage);
-        _;
-    }
+    /*
+     *  Events
+     */
 
-    modifier auctionStartable() {
-        require(final_auction < 2);
-        require(stage == Stages.AuctionSetUp || stage == Stages.AuctionSettled);
-        _;
-    }
+    event Deployed(address indexed auction, uint indexed price_factor, uint indexed price_const);
+    event Setup();
+    event SettingsChanged(uint indexed price_factor, uint indexed price_const);
+    event AuctionStarted(uint indexed start_time, uint indexed block_number);
+    event TermsSigned(address indexed sender, bytes32 indexed _terms_hash);
+    event BidSubmission(address indexed sender, uint amount, uint indexed missing_reserve);
+    event ClaimedTokens(address indexed recipient, uint sent_amount);
+    event AuctionEnded(uint indexed final_price);
+    event TokensDistributed();
+    event TradingStarted();
 
-    event Deployed(address indexed _auction, uint _price_factor, uint _price_const);
-    event Setup(uint indexed _stage, address indexed _mint);
-    event SettingsChanged(uint indexed _stage, uint indexed _price_factor, uint indexed _price_const, uint _final_auction);
-    event AuctionStarted(uint indexed _stage);
+    /*
+     *  Public functions
+     */
 
-    event Ordered(address indexed _recipient, uint _sent_value, uint _accepted_value, uint indexed _missing_reserve);
-    event ClaimedTokens(address indexed _recipient, uint _sent_value, uint _num);
-    event AuctionEnded(uint indexed _stage, uint indexed _received_value, uint indexed  _total_issuance);
-    event AuctionSettled(uint indexed _stage);
-    event AuctionPrice(uint indexed _price, uint _supply, uint indexed _timestamp);
-    event MissingReserve(uint indexed _balance, uint indexed _missing_reserve, uint indexed _timestamp);
-    event MaxMarketCap(uint _market_cap, uint _supply, uint indexed _timestamp);
-    event MaxValuation(uint _valuation, uint indexed _timestamp);
+    /// @dev Contract constructor function sets .
+    /// @param _price_factor Auction price factor.
+    /// @param _price_const Auction price divisor constant.
+    function DutchAuction(
+        uint _price_factor,
+        uint _price_const)
+        public
+    {
+        require(this.balance == 0);
 
-    function Auction(uint _price_factor, uint _price_const) {
-        price_factor = _price_factor;
-        price_const = _price_const;
-        stage = Stages.AuctionDeployed;
         owner = msg.sender;
-
-        Deployed(this, _price_factor, _price_const);
+        stage = Stages.AuctionDeployed;
+        Deployed(this, price_factor, price_const);
+        changeSettings(_price_factor, _price_const);
     }
 
-    // Fallback function
-    function() payable {
-        order();
-    }
-
-    function setup(address _mint)
+    /// @dev Setup function sets external contracts' addresses.
+    /// @param _token Token address.
+    function setup(address _token)
         public
         isOwner
         atStage(Stages.AuctionDeployed)
     {
-        require(_mint != 0x0);
-        mint = Mint(_mint);
+        require(_token != 0x0);
+        token = ReserveToken(_token);
+        require(token.owner() == owner);
+        require(token.auction_address() == address(this));
+
+        // Get number of tokens to be auctioned from token auction balance
+        tokens_auctioned = token.balanceOf(this);
+
+        // Set number of tokens multiplier from token decimals
+        multiplier = 10**uint(token.decimals());
+
         stage = Stages.AuctionSetUp;
-        Setup(uint(stage), _mint);
+        Setup();
+
+        // Tei auctioned
+        assert(tokens_auctioned > multiplier);
     }
 
+    /// @dev Changes auction start price factor before auction is started.
+    /// @param _price_factor Updated price factor.
+    /// @param _price_const Updated price divisor constant.
     function changeSettings(
         uint _price_factor,
-        uint _price_const,
-        bool _final_auction)
-
+        uint _price_const)
         public
         isOwner
-        auctionStartable
     {
+        require(stage == Stages.AuctionDeployed || stage == Stages.AuctionSetUp);
+        require(_price_factor > 0);
+        require(_price_const > 0);
+
         price_factor = _price_factor;
         price_const = _price_const;
-        if(_final_auction) {
-            final_auction = 1;
-        }
-        else {
-            final_auction = 0;
-        }
-        stage = Stages.AuctionSetUp;
-
-        SettingsChanged(uint(stage), price_factor, price_const, final_auction);
+        SettingsChanged(price_factor, price_const);
     }
 
+    /// @dev Starts auction and sets start_time.
     function startAuction()
         public
         isOwner
-        auctionStartable
+        atStage(Stages.AuctionSetUp)
     {
-        mint.auctionStarted();
         stage = Stages.AuctionStarted;
-        startTimestamp = now;
-        if(final_auction == 1) {
-            final_auction = 2;
-        }
-
-        AuctionStarted(uint(stage));
+        start_time = now;
+        start_block = block.number;
+        AuctionStarted(start_time, start_block);
     }
 
-    // This is the function used by bidders
-    function order()
+    /// --------------------------------- Auction Functions -------------------------------------------
+
+    /// @dev Allows to sing the terms.
+    /// @param terms_address_hash valid param is sha3(terms_hash, msg.sender) to enforce individual agreement
+    function sign(bytes32 terms_address_hash)
+        public
+        atStage(Stages.AuctionStarted)
+    {
+        require(sha3(terms_hash, msg.sender) == terms_address_hash); // check if the correct terms are signed
+        terms_signed[msg.sender] = true; // register digital signature
+        TermsSigned(msg.sender, terms_address_hash);
+    }
+
+    /// @dev Allows to send a bid to the auction.
+    function bid()
+        public
+        payable
+        atStage(Stages.AuctionStarted)
+    {
+        bid(msg.sender);
+    }
+
+    /// @dev Allows to send a bid to the auction.
+    /// @param receiver Bidder account address.
+    function bid(address receiver)
         public
         payable
         isValidPayload
+        signedTerms
         atStage(Stages.AuctionStarted)
     {
-        // Calculate missing balance until auction should end
-        // !! at this point, auction balance contains the order value
-        uint missing_reserve = missingReserveToEndAuction(mint.combinedReserve() - msg.value);
-        uint accepted_value = SafeMath.min256(missing_reserve, msg.value);
+        require(receiver != 0x0);
+        require(msg.value > 0);
 
-        // Add value to bidder
-        bidders[msg.sender] = SafeMath.add(bidders[msg.sender], accepted_value);
-        Ordered(msg.sender, msg.value, accepted_value, missing_reserve);
+        uint amount = msg.value;
+        uint pre_receiver_funds = bids[receiver];
 
-        // Send back funds if order is bigger than max auction reserve
-        if (accepted_value < msg.value) {
-            uint send_back = SafeMath.sub(msg.value, accepted_value);
-            msg.sender.transfer(send_back);
+        // Missing reserve without the current bid amount
+        uint missing_reserve = missingReserveToEndAuction(this.balance - amount);
+
+        // Only invest maximum possible amount.
+        if (amount > missing_reserve) {
+            amount = missing_reserve;
+
+            // Send surplus back to receiver address.
+            uint surplus = msg.value - amount;
+            uint sender_balance = receiver.balance;
+            receiver.transfer(surplus);
+
+            assert(receiver.balance == sender_balance + surplus);
         }
+        bids[receiver] += amount;
+        BidSubmission(receiver, amount, missing_reserve);
 
-        if (missing_reserve <= msg.value) {
+        if (missing_reserve == amount) {
+            // When missing_reserve is equal to the big amount the auction is ended and finalizeAuction is triggered.
             finalizeAuction();
         }
+
+        assert(bids[receiver] == pre_receiver_funds + amount);
     }
 
-    // Function used to assign auction tokens to each bidder
-    // will be called from an external contract that loops through the accounts
-    function claimTokens(address recipient)
+    /// @dev Claims tokens for bidder after auction. To be used if tokens can be claimed by bidders, individually.
+    function claimTokens()
+        public
+        atStage(Stages.AuctionEnded)
+    {
+        claimTokens(msg.sender);
+    }
+
+    /// @dev Claims tokens for bidder after auction.
+    /// @param receiver Tokens will be assigned to this address if set.
+    function claimTokens(address receiver)
         public
         isValidPayload
         atStage(Stages.AuctionEnded)
     {
-        // Calculate number of tokens that will be issued for the amount paid, based on the final auction price
-        uint num = bidders[recipient] * total_issuance / received_value;
+        require(receiver != 0x0);
+        require(bids[receiver] > 0);
 
-        // Keep track of claimed tokens
-        issued_value += bidders[recipient];
-        bidders[recipient] = 0;
-        ClaimedTokens(recipient, bidders[recipient], num);
+        // Number of Tei = bidded_wei / wei_per_TKN * multiplier
+        uint num = multiplier * bids[receiver] / final_price;
 
-        // Mint contract issues the tokens
-        mint.issueFromAuction(recipient, num);
+        // Update funds claimed with full bidded amount
+        // rounding errors are included to not block the contract
+        funds_claimed += bids[receiver];
 
-        // If all of the tokens from the previous auction have been issued,
-        // we can start minting new tokens
-        if (issued_value == received_value) {
-            settleAuction();
+        // Set receiver bid to 0 before assigning tokens
+        bids[receiver] = 0;
+
+        token.transfer(receiver, num);
+
+        ClaimedTokens(receiver, num);
+
+        terms_signed[msg.sender] = false; // free storage
+
+        // Test for a correct claimed tokens calculation
+        /* TODO remove this after testing */
+        uint auction_unclaimed_tokens = token.balanceOf(this);
+
+        uint unclaimed_tokens = (this.balance - funds_claimed) * multiplier / final_price;
+        unclaimed_tokens += rounding_error_tokens;
+
+        if(auction_unclaimed_tokens != unclaimed_tokens) {
+            rounding_error_tokens += 1;
+            unclaimed_tokens += 1;
         }
-    }
+        assert(auction_unclaimed_tokens == unclaimed_tokens);
+        /* End of removable test */
 
-    // Price function used in Dutch Auction; price starts high and decreases over time
-    function price()
-        public
-        constant
-        atStage(Stages.AuctionStarted)
-        returns(uint)
-    {
-        uint elapsed = SafeMath.sub(now, startTimestamp);
-        uint auction_price = SafeMath.add(price_factor / elapsed, price_const);
-        AuctionPrice(auction_price, mint.curveSupplyAtPrice(auction_price), now);
-
-        return auction_price;
-    }
-
-    // Current auction reserve/balance
-    function balanceOf(address recipient)
-        public
-        constant
-        returns (uint)
-    {
-        return bidders[recipient];
-    }
-
-    // Implements the price requirement for the auction to be active
-    // TODO this is not used currently,
-    // to be removed or used at the next code review
-    function auctionIsActive()
-        public
-        constant
-        atStage(Stages.AuctionStarted)
-        returns (bool)
-    {
-        if(price() > mint.curvePriceAtReserve(mint.combinedReserve())) {
-            return true;
-        }
-        return false;
-    }
-
-    // Calculate how much currency we need to attain
-    // a reserve / balance that would end the auction
-    function missingReserveToEndAuction()
-        public
-        constant
-        atStage(Stages.AuctionStarted)
-        returns (uint)
-    {
-        return missingReserveToEndAuction(mint.combinedReserve());
-    }
-
-    // We have 2 functions here, because order() already updates the balance
-    // We need to calculate missing reserve without the order value
-    function missingReserveToEndAuction(uint current_reserve)
-        public
-        constant
-        atStage(Stages.AuctionStarted)
-        returns (uint)
-    {
-        // Calculate reserve at the current auction price
-        uint auction_price = price();
-        auction_price -= mint.ownerFraction(auction_price);
-        uint simulated_reserve = mint.curveReserveAtPrice(auction_price);
-
-        // Auction ends when simulated auction reserve is < the current reserve (auction + mint reserve)
-        if(simulated_reserve < current_reserve) {
-            return 0;
+        if (funds_claimed == this.balance) {
+            stage = Stages.TokensDistributed;
+            TokensDistributed();
+            transferReserveToToken();
         }
 
-        uint missing_reserve = SafeMath.sub(simulated_reserve, current_reserve);
-        MissingReserve(current_reserve, missing_reserve, now);
-
-        return missing_reserve;
+        assert(num == token.balanceOf(receiver));
+        assert(bids[receiver] == 0);
     }
 
-    // The market cap if the auction would end at the current price
-    function maxMarketCap()
-        public
-        constant
-        returns (uint)
-    {
-        uint auction_price = price();
+    /*
+     *  Private functions
+     */
 
-        // We calculate the supply based on the current auction price
-        uint auction_supply = mint.curveSupplyAtPrice(auction_price);
-        uint market_cap = SafeMath.mul(auction_price, auction_supply);
-        MaxMarketCap(market_cap, auction_supply, now);
-        return market_cap;
-    }
-
-    // The valuation if the auction would end at the current price
-    function maxValuation()
-        public
-        constant
-        returns (uint)
-    {
-        uint valuation = mint.ownerFraction(maxMarketCap());
-        MaxValuation(valuation, now);
-        return valuation;
-    }
-
-    function mintAsk()
-        private
-        returns (uint)
-    {
-        uint mint_price = mint.curvePriceAtReserve(mint.combinedReserve());
-        mint_price -= mint.ownerFraction(mint_price);
-        return mint_price;
-    }
-
-    // Auction has ended, we calculate total reserve and supply
+    /// @dev Finalize auction and set the final token price.
     function finalizeAuction()
         private
         atStage(Stages.AuctionStarted)
     {
-        // TODO
-        // Utils.xassert(price(), mintAsk())
-
-        // Get already issued tokens and the combined mint+auction reserve
-        uint issued_supply = mint.issuedSupply();
-        uint combined_reserve = mint.combinedReserve();
-
-        // Number of tokens that should be issued at the current balance
-        uint supply_at_reserve = mint.curveSupplyAtReserve(combined_reserve);
-
-        // Calculate total number of tokens issued in this auction
-        total_issuance = SafeMath.sub(supply_at_reserve, issued_supply);
-
-        // Memorize received funds
-        received_value = this.balance;
-
-        // Send all funds to mint
-        mint.fundsFromAuction.value(received_value)();
-
+        final_price = calcTokenPrice();
+        end_time = now;
         stage = Stages.AuctionEnded;
-        endTimestamp = now;
-        AuctionEnded(uint(stage), received_value, total_issuance);
+        AuctionEnded(final_price);
 
-        // No need to claimTokens
-        if(received_value == 0) {
-            stage = Stages.AuctionSettled;
-            AuctionSettled(uint(stage));
-            mint.startMinting();
-        }
+        assert(final_price > 0);
     }
 
-    function settleAuction()
+    /// @dev Transfer auction balance to the token.
+    function transferReserveToToken()
         private
-        atStage(Stages.AuctionEnded)
+        atStage(Stages.TokensDistributed)
     {
-        assert(issued_value == received_value);
-        stage = Stages.AuctionSettled;
-        AuctionSettled(uint(stage));
-        mint.startMinting();
+        uint pre_balance = this.balance;
+
+        token.receiveReserve.value(this.balance)();
+        stage = Stages.TradingStarted;
+        TradingStarted();
+
+        assert(this.balance == 0);
+        assert(token.balance == pre_balance);
+    }
+
+    /// @dev Calculates the token price at the current timestamp during the auction; elapsed time = 0 before auction starts.
+    /// @dev At AuctionDeployed the price is 1, because multiplier is 0
+    /// @return Returns the token price - Wei per TKN.
+    function calcTokenPrice()
+        constant
+        private
+        returns (uint)
+    {
+        uint elapsed;
+        if(stage == Stages.AuctionStarted) {
+            elapsed = now - start_time;
+        }
+        return multiplier * price_factor / (elapsed + price_const) + 1;
+    }
+
+    /// --------------------------------- Price Functions -------------------------------------------
+
+    /// @dev Calculates current token price.
+    /// @return Returns num Wei per TKN (multiplier * Tei).
+    function price()
+        public
+        constant
+        returns (uint)
+    {
+        if (stage == Stages.AuctionEnded ||
+            stage == Stages.TokensDistributed ||
+            stage == Stages.TradingStarted)
+        {
+            return 0;
+        }
+        return calcTokenPrice();
+    }
+
+    /// @dev The missing reserve amount necessary to end the auction at the current price.
+    /// @return Returns the missing reserve amount.
+    function missingReserveToEndAuction()
+        constant
+        public
+        returns (uint)
+    {
+        return missingReserveToEndAuction(this.balance);
+    }
+
+    /// @dev The missing reserve amount necessary to end the auction at the current price, for a provided reserve/balance.
+    /// @param reserve Reserve amount - might be current balance or current balance without current bid value for bid().
+    /// @return Returns the missing reserve amount.
+    function missingReserveToEndAuction(uint reserve)
+        constant
+        public
+        returns (uint)
+    {
+        uint reserve_at_price = tokens_auctioned * price() / multiplier;
+        if(reserve_at_price < reserve) {
+            return 0;
+        }
+        return reserve_at_price - reserve;
     }
 }

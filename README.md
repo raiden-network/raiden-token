@@ -21,8 +21,8 @@
 populus compile
 
 # tests
-pytest tests_simple -p no:warnings -s
-pytest tests_simple/test_auction.py -p no:warnings -s
+pytest -p no:warnings -s
+pytest tests/test_auction.py -p no:warnings -s
 
 ```
 
