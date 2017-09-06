@@ -134,7 +134,7 @@
         "$ref": "web3.TestRPC"
       }
     },
-    "testrpclocal": {
+    "privtest": {
       "chain": {
         "class": "populus.chain.ExternalChain"
       },

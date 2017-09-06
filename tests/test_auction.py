@@ -157,7 +157,7 @@ def test_auction_start(chain, web3, auction_contract, token_contract, auction_bi
     # Finalize auction
     amount = web3.eth.getBalance(A) - 10000000
     auction_bid_tested(auction, A, amount)
-    assert auction.call().stage() == 3
+    assert auction.call().stage() == 3  # AuctionEnded
 
     with pytest.raises(tester.TransactionFailed):
         auction.transact().startAuction()
