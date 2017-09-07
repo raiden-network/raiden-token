@@ -74,7 +74,7 @@ contract DutchAuction {
     }
 
     modifier isValidPayload() {
-        require(msg.data.length == 4 || msg.data.length == 36);
+        require(msg.data.length == 0 || msg.data.length == 4 || msg.data.length == 36);
         _;
     }
 
@@ -117,7 +117,7 @@ contract DutchAuction {
         payable
         atStage(Stages.AuctionStarted)
     {
-        privateBid(msg.sender);
+        bid(msg.sender);
     }
 
     /// @dev Setup function sets external contracts' addresses.
@@ -183,7 +183,7 @@ contract DutchAuction {
         payable
         atStage(Stages.AuctionStarted)
     {
-        privateBid(msg.sender);
+        bid(msg.sender);
     }
 
     /// @dev Allows to send a bid to the auction.
@@ -194,7 +194,24 @@ contract DutchAuction {
         isValidPayload
         atStage(Stages.AuctionStarted)
     {
-        privateBid(receiver);
+        require(receiver != 0x0);
+        require(msg.value > 0);
+
+        uint pre_receiver_funds = bids[receiver];
+
+        // Missing funds without the current bid value
+        uint missing_funds = missingFundsToEndAuction(this.balance - msg.value);
+        require(msg.value <= missing_funds);
+
+        bids[receiver] += msg.value;
+        BidSubmission(receiver, msg.value, missing_funds);
+
+        if (missing_funds == msg.value) {
+            // When missing_funds is equal to the big value the auction is ended and finalizeAuction is triggered.
+            finalizeAuction();
+        }
+
+        assert(bids[receiver] == pre_receiver_funds + msg.value);
     }
 
     /// @dev Claims tokens for bidder after auction. To be used if tokens can be claimed by bidders, individually.
@@ -256,30 +273,6 @@ contract DutchAuction {
     /*
      *  Private functions
      */
-
-    function privateBid(address receiver)
-        private
-        atStage(Stages.AuctionStarted)
-    {
-        require(receiver != 0x0);
-        require(msg.value > 0);
-
-        uint pre_receiver_funds = bids[receiver];
-
-        // Missing funds without the current bid value
-        uint missing_funds = missingFundsToEndAuction(this.balance - msg.value);
-        require(msg.value <= missing_funds);
-
-        bids[receiver] += msg.value;
-        BidSubmission(receiver, msg.value, missing_funds);
-
-        if (missing_funds == msg.value) {
-            // When missing_funds is equal to the big value the auction is ended and finalizeAuction is triggered.
-            finalizeAuction();
-        }
-
-        assert(bids[receiver] == pre_receiver_funds + msg.value);
-    }
 
     /// @dev Finalize auction and set the final token price.
     function finalizeAuction()
