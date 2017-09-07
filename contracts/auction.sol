@@ -82,13 +82,26 @@ contract DutchAuction {
      *  Events
      */
 
-    event Deployed(address indexed _auction, uint indexed _price_factor, uint indexed _price_const);
+    event Deployed(
+        address indexed _auction,
+        uint indexed _price_factor,
+        uint indexed _price_const);
     event Setup();
-    event SettingsChanged(uint indexed _price_factor, uint indexed _price_const);
-    event AuctionStarted(uint indexed _start_time, uint indexed _block_number);
-    event BidSubmission(address indexed _sender, uint indexed _amount, uint indexed _missing_funds);
-    event ClaimedTokens(address indexed _recipient, uint indexed _sent_amount);
-    event AuctionEnded(uint indexed _final_price);
+    event SettingsChanged(
+        uint indexed _price_factor,
+        uint indexed _price_const);
+    event AuctionStarted(
+        uint indexed _start_time,
+        uint indexed _block_number);
+    event BidSubmission(
+        address indexed _sender,
+        uint indexed _amount,
+        uint indexed _missing_funds);
+    event ClaimedTokens(
+        address indexed _recipient,
+        uint indexed _sent_amount);
+    event AuctionEnded(
+        uint indexed _final_price);
     event TokensDistributed();
     event TradingStarted();
 
