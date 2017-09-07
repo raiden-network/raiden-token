@@ -3,26 +3,17 @@ Deploy ReserveToken and DutchAuction on a testnet
 """
 import click
 from populus import Project
-from populus.utils.wait import wait_for_transaction_receipt
 from web3 import Web3
-from testnet_fixtures import createWallet
+from utils import (
+    createWallet,
+    check_succesful_tx
+)
+from simulation import (
+    getAuctionFactors,
+    auction_simulation
+)
 
 multiplier = 10**18
-# price_factor, _price_const
-auction_args = [
-    [2, 7500],
-    [3, 7500]
-]
-
-
-def check_succesful_tx(web3: Web3, txid: str, timeout=180) -> dict:
-
-    receipt = wait_for_transaction_receipt(web3, txid, timeout=timeout)
-    txinfo = web3.eth.getTransaction(txid)
-
-    # EVM has only one error mode and it's consume all gas
-    assert txinfo["gas"] != receipt["gasUsed"]
-    return receipt
 
 
 @click.command()
@@ -42,13 +33,17 @@ def check_succesful_tx(web3: Web3, txid: str, timeout=180) -> dict:
 )
 @click.option(
     '--price-factor',
-    default=2,
+    default=6,
     help='Price factor used in auction price calculation.'
 )
 @click.option(
     '--price-constant',
-    default=7500,
+    default=66,
     help='Price constant used in auction price calculation.'
+)
+@click.option(
+    '--price-points',
+    help='2 price points "price1_in_wei,elapsed_seconds1,price2_in_wei,elapsed_seconds2" used to calculate the price factor and constant for the auction price function. Example: "100000000000000000,0,10000000000000000,600"'
 )
 @click.option(
     '--prealloc-addresses',
@@ -58,6 +53,31 @@ def check_succesful_tx(web3: Web3, txid: str, timeout=180) -> dict:
     '--prealloc-amounts',
     help='Token amounts separated by a comma, for preallocating tokens.'
 )
+@click.option(
+    '--simulation',
+    is_flag=True,
+    help='Run auction simulation.'
+)
+@click.option(
+    '--bidders',
+    default=10,
+    help='Number of bidders. Only if the --simulation flag is set'
+)
+@click.option(
+    '--bids',
+    default=10,
+    help='Number of bidders. Only if the --simulation flag is set'
+)
+@click.option(
+    '--bid-price',
+    default=50000000000000000,
+    help='Price per TKN in WEI at which the first bid should start. Only if the --simulation flag is set'
+)
+@click.option(
+    '--bid-interval',
+    default=5,
+    help='Time interval in seconds between bids. Only if the --simulation flag is set'
+)
 def main(**kwargs):
     project = Project()
 
@@ -66,6 +86,18 @@ def main(**kwargs):
     supply = kwargs['supply'] * multiplier
     price_factor = kwargs['price_factor']
     price_constant = kwargs['price_constant']
+    simulation = kwargs['simulation']
+    bidders = int(kwargs['bidders'])
+    bid_start_price = int(kwargs['bid_price'])
+    bid_interval = kwargs['bid_interval']
+    bids_number = int(kwargs['bids'])
+    price_points = kwargs['price_points']
+
+    if price_points:
+        price_points = price_points.split(',')
+        (a, b) = getAuctionFactors(int(price_points[0]), int(price_points[1]), int(price_points[2]), int(price_points[3]), multiplier)
+        price_factor = a
+        price_constant = b
 
     print("Make sure {} chain is running, you can connect to it and it is synced, or you'll get timeout".format(chain_name))
 
@@ -78,7 +110,7 @@ def main(**kwargs):
             prealloc_addresses = kwargs['prealloc_addresses'].split(',')
         else:
             if len(web3.eth.accounts) >= 2:
-                prealloc_addresses = web3.eth.accounts[:2]
+                prealloc_addresses = web3.eth.accounts[1:3]
             else:
                 # Create needed accounts if they don't exist
                 prealloc_addresses = []
@@ -102,7 +134,9 @@ def main(**kwargs):
         print("Web3 provider is", web3.currentProvider)
         assert owner, "Make sure owner account is created"
         print('Owner', owner)
-        print('Preallocation addresses & amounts', prealloc_addresses, prealloc_amounts)
+        print('Preallocation addresses & amounts in WEI', prealloc_addresses, prealloc_amounts)
+        print('Auction price factor:', price_factor)
+        print('Auction price constant:', price_constant)
 
         # Load Populus contract proxy classes
         Auction = chain.provider.get_contract_factory('DutchAuction')
@@ -136,8 +170,22 @@ def main(**kwargs):
         check_succesful_tx(web3, txhash)
 
         # Do some contract reads to see everything looks ok
-        print("Token total supply is", token.call().totalSupply())
-        print("Auction price is", auction.call().price())
+        print("Token total supply is", token.call().totalSupply(), 'Tei = ', int(token.call().totalSupply() / multiplier), 'TKN')
+        print("Auction price at elapsed = 0 is", auction.call().price(), 'WEI', web3.fromWei(auction.call().price(), 'ether'), 'ETH')
+
+        # Start simulation if --simulation flag is set
+        if simulation:
+            print('Starting simulation setup for', bidders, 'bidders')
+            bidder_addresses = []
+            bidder_addresses = web3.eth.accounts[3:(bidders + 3)]
+            print('Creating more bidder accounts:', bidders -  len(bidder_addresses), 'accounts')
+            for i in range(len(bidder_addresses), bidders):
+                address = web3.personal.newAccount('0')
+                bidder_addresses.append(address)
+
+            print('Simulating', len(bidder_addresses), 'bidders', bidder_addresses)
+            print('Bids will start at', bid_start_price, 'WEI = ', web3.fromWei(bid_start_price, 'ether'), 'ETH  / TKN')
+            auction_simulation(web3, token, auction, owner, bidder_addresses, bids_number, bid_interval, bid_start_price)
 
 
 if __name__ == "__main__":

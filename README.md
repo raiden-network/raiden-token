@@ -88,6 +88,14 @@ python deploy/deploy_testnet.py \
     --prealloc-addresses \ '0xe2e429949e97f2e31cd82facd0a7ae38f65e2f38,0xd1bf222ef7289ae043b723939d86c8a91f3aac3f' \
     --prealloc-amounts '300,600'
 
+# Simulation options (only when the --simulation flag is set)
+    --simulation
+    --bidders 10  # number of bidders
+    --bids 10  # number of bids
+    --price-points 100000000000000000,0,10000000000000000,600  # calculates price_factor & price_constant from 2 price points (wei/TKN, elapsed_seconds)
+    --bid-price  # price per TKN in WEI at which the first bid should start
+    --bid-interval  # time interval in seconds between bids
+
 
 ```
 
