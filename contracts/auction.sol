@@ -7,24 +7,13 @@ import './token.sol';
 contract DutchAuction {
     /*
     Auction for the TKN Token.
-    Usage of the contract implies agreement of the Terms & Conditions
-        Link: http://xyz.eth/tc.pdf
-        MD5: e18de70182a134687249aebe6656049c
-
-    Only addresses which signed the contract are allowed to call `bid`
-    Users needs to called below, to explicitly sign agreement with the terms:
-    `DutchAuction.sign(sha3('e18de70182a134687249aebe6656049c', user_address))`
     */
 
     /*
      *  Storage
      */
 
-    // Keep track of signing the Terms and Conditions
-    mapping (address => bool) public terms_signed;
-    bytes32 terms_hash = 'e18de70182a134687249aebe6656049c';
-
-    ReserveToken public token;
+    CustomToken public token;
     address public owner;
 
     // Price function parameters
@@ -84,12 +73,6 @@ contract DutchAuction {
         _;
     }
 
-    modifier signedTerms() {
-        require(terms_signed[msg.sender]);
-        _;
-    }
-
-
     modifier isValidPayload() {
         require(msg.data.length == 4 || msg.data.length == 36);
         _;
@@ -99,14 +82,13 @@ contract DutchAuction {
      *  Events
      */
 
-    event Deployed(address indexed auction, uint indexed price_factor, uint indexed price_const);
+    event Deployed(address indexed _auction, uint indexed _price_factor, uint indexed _price_const);
     event Setup();
-    event SettingsChanged(uint indexed price_factor, uint indexed price_const);
-    event AuctionStarted(uint indexed start_time, uint indexed block_number);
-    event TermsSigned(address indexed sender, bytes32 indexed _terms_hash);
-    event BidSubmission(address indexed sender, uint amount, uint indexed missing_reserve);
-    event ClaimedTokens(address indexed recipient, uint sent_amount);
-    event AuctionEnded(uint indexed final_price);
+    event SettingsChanged(uint indexed _price_factor, uint indexed _price_const);
+    event AuctionStarted(uint indexed _start_time, uint indexed _block_number);
+    event BidSubmission(address indexed _sender, uint indexed _amount, uint indexed _missing_funds);
+    event ClaimedTokens(address indexed _recipient, uint indexed _sent_amount);
+    event AuctionEnded(uint indexed _final_price);
     event TokensDistributed();
     event TradingStarted();
 
@@ -130,6 +112,14 @@ contract DutchAuction {
         changeSettings(_price_factor, _price_const);
     }
 
+    function ()
+        public
+        payable
+        atStage(Stages.AuctionStarted)
+    {
+        privateBid(msg.sender);
+    }
+
     /// @dev Setup function sets external contracts' addresses.
     /// @param _token Token address.
     function setup(address _token)
@@ -138,7 +128,7 @@ contract DutchAuction {
         atStage(Stages.AuctionDeployed)
     {
         require(_token != 0x0);
-        token = ReserveToken(_token);
+        token = CustomToken(_token);
         require(token.owner() == owner);
         require(token.auction_address() == address(this));
 
@@ -187,24 +177,13 @@ contract DutchAuction {
 
     /// --------------------------------- Auction Functions -------------------------------------------
 
-    /// @dev Allows to sing the terms.
-    /// @param terms_address_hash valid param is sha3(terms_hash, msg.sender) to enforce individual agreement
-    function sign(bytes32 terms_address_hash)
-        public
-        atStage(Stages.AuctionStarted)
-    {
-        require(sha3(terms_hash, msg.sender) == terms_address_hash); // check if the correct terms are signed
-        terms_signed[msg.sender] = true; // register digital signature
-        TermsSigned(msg.sender, terms_address_hash);
-    }
-
     /// @dev Allows to send a bid to the auction.
     function bid()
         public
         payable
         atStage(Stages.AuctionStarted)
     {
-        bid(msg.sender);
+        privateBid(msg.sender);
     }
 
     /// @dev Allows to send a bid to the auction.
@@ -213,38 +192,9 @@ contract DutchAuction {
         public
         payable
         isValidPayload
-        signedTerms
         atStage(Stages.AuctionStarted)
     {
-        require(receiver != 0x0);
-        require(msg.value > 0);
-
-        uint amount = msg.value;
-        uint pre_receiver_funds = bids[receiver];
-
-        // Missing reserve without the current bid amount
-        uint missing_reserve = missingReserveToEndAuction(this.balance - amount);
-
-        // Only invest maximum possible amount.
-        if (amount > missing_reserve) {
-            amount = missing_reserve;
-
-            // Send surplus back to receiver address.
-            uint surplus = msg.value - amount;
-            uint sender_balance = receiver.balance;
-            receiver.transfer(surplus);
-
-            assert(receiver.balance == sender_balance + surplus);
-        }
-        bids[receiver] += amount;
-        BidSubmission(receiver, amount, missing_reserve);
-
-        if (missing_reserve == amount) {
-            // When missing_reserve is equal to the big amount the auction is ended and finalizeAuction is triggered.
-            finalizeAuction();
-        }
-
-        assert(bids[receiver] == pre_receiver_funds + amount);
+        privateBid(receiver);
     }
 
     /// @dev Claims tokens for bidder after auction. To be used if tokens can be claimed by bidders, individually.
@@ -279,8 +229,6 @@ contract DutchAuction {
 
         ClaimedTokens(receiver, num);
 
-        terms_signed[msg.sender] = false; // free storage
-
         // Test for a correct claimed tokens calculation
         /* TODO remove this after testing */
         uint auction_unclaimed_tokens = token.balanceOf(this);
@@ -298,7 +246,7 @@ contract DutchAuction {
         if (funds_claimed == this.balance) {
             stage = Stages.TokensDistributed;
             TokensDistributed();
-            transferReserveToToken();
+            transferFundsToOwner();
         }
 
         assert(num == token.balanceOf(receiver));
@@ -308,6 +256,30 @@ contract DutchAuction {
     /*
      *  Private functions
      */
+
+    function privateBid(address receiver)
+        private
+        atStage(Stages.AuctionStarted)
+    {
+        require(receiver != 0x0);
+        require(msg.value > 0);
+
+        uint pre_receiver_funds = bids[receiver];
+
+        // Missing funds without the current bid value
+        uint missing_funds = missingFundsToEndAuction(this.balance - msg.value);
+        require(msg.value <= missing_funds);
+
+        bids[receiver] += msg.value;
+        BidSubmission(receiver, msg.value, missing_funds);
+
+        if (missing_funds == msg.value) {
+            // When missing_funds is equal to the big value the auction is ended and finalizeAuction is triggered.
+            finalizeAuction();
+        }
+
+        assert(bids[receiver] == pre_receiver_funds + msg.value);
+    }
 
     /// @dev Finalize auction and set the final token price.
     function finalizeAuction()
@@ -323,18 +295,19 @@ contract DutchAuction {
     }
 
     /// @dev Transfer auction balance to the token.
-    function transferReserveToToken()
+    function transferFundsToOwner()
         private
         atStage(Stages.TokensDistributed)
     {
         uint pre_balance = this.balance;
 
-        token.receiveReserve.value(this.balance)();
+        owner.transfer(this.balance);
+
         stage = Stages.TradingStarted;
         TradingStarted();
 
         assert(this.balance == 0);
-        assert(token.balance == pre_balance);
+        assert(owner.balance >= pre_balance);
     }
 
     /// @dev Calculates the token price at the current timestamp during the auction; elapsed time = 0 before auction starts.
@@ -370,28 +343,28 @@ contract DutchAuction {
         return calcTokenPrice();
     }
 
-    /// @dev The missing reserve amount necessary to end the auction at the current price.
-    /// @return Returns the missing reserve amount.
-    function missingReserveToEndAuction()
+    /// @dev The missing funds amount necessary to end the auction at the current price.
+    /// @return Returns the missing funds amount.
+    function missingFundsToEndAuction()
         constant
         public
         returns (uint)
     {
-        return missingReserveToEndAuction(this.balance);
+        return missingFundsToEndAuction(this.balance);
     }
 
-    /// @dev The missing reserve amount necessary to end the auction at the current price, for a provided reserve/balance.
-    /// @param reserve Reserve amount - might be current balance or current balance without current bid value for bid().
-    /// @return Returns the missing reserve amount.
-    function missingReserveToEndAuction(uint reserve)
+    /// @dev The missing funds amount necessary to end the auction at the current price, for a provided balance.
+    /// @param funds Current balance or current balance without current bid value for bid().
+    /// @return Returns the missing funds amount.
+    function missingFundsToEndAuction(uint funds)
         constant
         public
         returns (uint)
     {
-        uint reserve_at_price = tokens_auctioned * price() / multiplier;
-        if(reserve_at_price < reserve) {
+        uint funds_at_price = tokens_auctioned * price() / multiplier;
+        if(funds_at_price < funds) {
             return 0;
         }
-        return reserve_at_price - reserve;
+        return funds_at_price - funds;
     }
 }

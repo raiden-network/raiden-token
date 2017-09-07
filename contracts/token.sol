@@ -7,9 +7,9 @@ contract Token {
     function approve(address spender, uint256 value) returns (bool success);
 
     // This is not an abstract function, because solc won't recognize generated getter functions for public variables as functions.
-    function totalSupply() constant returns (uint256 supply) {}
-    function balanceOf(address owner) constant returns (uint256 balance);
-    function allowance(address owner, address spender) constant returns (uint256 remaining);
+    function totalSupply() constant returns (uint256) {}
+    function balanceOf(address owner) constant returns (uint256);
+    function allowance(address owner, address spender) constant returns (uint256);
 
     event Transfer(address indexed from, address indexed to, uint256 value);
     event Approval(address indexed owner, address indexed spender, uint256 value);
@@ -117,7 +117,7 @@ contract StandardToken is Token {
 
 /// @title Gnosis token contract
 /// @author [..] credits to Stefan George - <stefan.george@consensys.net>
-contract ReserveToken is StandardToken {
+contract CustomToken is StandardToken {
 
     /*
      *  Token meta data
@@ -133,7 +133,7 @@ contract ReserveToken is StandardToken {
     event Deployed(address indexed auction, uint indexed initial_supply, uint indexed auction_supply);
     event Redeemed(address indexed receiver, uint num, uint unlocked, uint _totalSupply);
     event Burnt(address indexed receiver, uint num, uint _totalSupply);
-    event ReceivedReserve(uint num);
+    event ReceivedFunds(uint num);
 
     /*
      *  Public functions
@@ -143,7 +143,7 @@ contract ReserveToken is StandardToken {
     /// @param initial_supply Number of initially provided tokens.
     /// @param owners Array of addresses receiving preassigned tokens.
     /// @param tokens Array of preassigned token amounts.
-    function ReserveToken(address auction, uint initial_supply, address[] owners, uint[] tokens)
+    function CustomToken(address auction, uint initial_supply, address[] owners, uint[] tokens)
         public
     {
         // Auction address should not be null.
@@ -180,15 +180,15 @@ contract ReserveToken is StandardToken {
         assert(totalSupply == balances[auction_address] + prealloc_tokens);
     }
 
-    /// @dev Transfers auction's reserve; called from auction after it has ended.
-    function receiveReserve()
+    /// @dev Transfers auction funds; called from auction after it has ended.
+    function receiveFunds()
         public
         payable
     {
         require(msg.sender == auction_address);
         require(msg.value > 0);
 
-        ReceivedReserve(msg.value);
+        ReceivedFunds(msg.value);
         assert(this.balance > 0);
     }
 
