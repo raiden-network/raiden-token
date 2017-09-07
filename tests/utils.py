@@ -10,10 +10,6 @@ from web3.utils.compat import (
 )
 
 
-def hash_sign_msg(terms_hash, sender):
-    return sol_sha3(terms_hash, sender)
-
-
 def sol_sha3(*args) -> bytes:
     return keccak(pack(*args))
 

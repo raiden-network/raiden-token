@@ -13,7 +13,7 @@ from fixtures import (
 )
 
 
-# Proxy contract needed because receiveReserve
+# Proxy contract needed because receiveFunds
 # can only be called from an Auction contract
 @pytest.fixture()
 def proxy_contract(chain, create_contract):
@@ -28,11 +28,11 @@ def proxy_contract(chain, create_contract):
 # TODO generalize this for any method - send bytes instead of args
 # see contracts/proxies.sol
 @pytest.fixture
-def receiveReserve(web3, proxy_contract):
+def receiveFunds(web3, proxy_contract):
     def get(token_contract, value):
         return proxy_contract.transact({'value': value}).proxyPayable(
             token_contract.address,
-            "receiveReserve()"
+            "receiveFunds()"
         )
     return get
 
@@ -209,12 +209,12 @@ def test_burn(chain, web3, get_token_contract, proxy_contract, txnCost):
     assert balance_B == eth.getBalance(B) + txn_cost
 
 
-def test_token_receiveReserve(
+def test_token_receiveFunds(
     chain,
     web3,
     get_token_contract,
     proxy_contract,
-    receiveReserve,
+    receiveFunds,
     txnCost
 ):
     owners = web3.eth.accounts[:2]
@@ -263,7 +263,7 @@ def test_token_receiveReserve(
     assert auction_balance == 2 * 10**5 * multiplier
 
     assert eth.getBalance(token.address) == 0
-    receiveReserve(token, auction_balance)
+    receiveFunds(token, auction_balance)
     assert eth.getBalance(token.address) == auction_balance
 
     # Check token redeem

@@ -81,7 +81,7 @@ def test_distributor_distribute(web3, token_contract, distributor_contract, auct
 
     # Retrieve bidder addresses from contract bid events
     def get_bidders_addresses(event):
-        address = event['args']['sender']
+        address = event['args']['_sender']
 
         if address not in addresses:
             addresses.append(address)
@@ -90,7 +90,7 @@ def test_distributor_distribute(web3, token_contract, distributor_contract, auct
         else:
             index = addresses.index(address)
 
-        values[index] += event['args']['amount']
+        values[index] += event['args']['_amount']
 
     handle_logs(contract=auction, event='BidSubmission', callback=get_bidders_addresses)
 
@@ -113,7 +113,7 @@ def test_distributor_distribute(web3, token_contract, distributor_contract, auct
         def verify_claim(event):
             # Check for double claiming
             assert address not in verified_claim
-            sent_amount = event['args']['sent_amount']
+            sent_amount = event['args']['_sent_amount']
             verified_claim.append(address)
 
             # TODO assert sent_amount == token balance
@@ -122,7 +122,7 @@ def test_distributor_distribute(web3, token_contract, distributor_contract, auct
         handle_logs(contract=auction,
             event='ClaimedTokens',
             params={
-                'filter': {'recipient': address}
+                'filter': {'_recipient': address}
             },
             callback=verify_claim)
 
