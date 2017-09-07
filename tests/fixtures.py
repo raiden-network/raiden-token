@@ -26,9 +26,6 @@ auction_args = [
     [3, 7500]
 ]
 
-# Terms hash
-terms_hash = 'e18de70182a134687249aebe6656049c'
-
 
 @pytest.fixture()
 def auction_contract(chain, create_contract):
@@ -39,7 +36,6 @@ def auction_contract(chain, create_contract):
     print_logs(auction_contract, 'Setup', 'DutchAuction')
     print_logs(auction_contract, 'SettingsChanged', 'DutchAuction')
     print_logs(auction_contract, 'AuctionStarted', 'DutchAuction')
-    print_logs(auction_contract, 'TermsSigned', 'DutchAuction')
     print_logs(auction_contract, 'BidSubmission', 'DutchAuction')
     print_logs(auction_contract, 'AuctionEnded', 'DutchAuction')
     print_logs(auction_contract, 'ClaimedTokens', 'DutchAuction')
@@ -53,12 +49,12 @@ def auction_contract(chain, create_contract):
 def get_token_contract(chain, create_contract):
     # contract can be auction contract or proxy contract
     def get(arguments, transaction=None):
-        ReserveToken = chain.provider.get_contract_factory('ReserveToken')
-        token_contract = create_contract(ReserveToken, arguments, transaction)
+        CustomToken = chain.provider.get_contract_factory('CustomToken')
+        token_contract = create_contract(CustomToken, arguments, transaction)
 
-        print_logs(token_contract, 'Redeemed', 'ReserveToken')
-        print_logs(token_contract, 'Transfer', 'ReserveToken')
-        print_logs(token_contract, 'ReceivedReserve', 'ReserveToken')
+        print_logs(token_contract, 'Redeemed', 'CustomToken')
+        print_logs(token_contract, 'Transfer', 'CustomToken')
+        print_logs(token_contract, 'ReceivedFunds', 'CustomToken')
 
         return token_contract
     return get

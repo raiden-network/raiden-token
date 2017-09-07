@@ -17,7 +17,6 @@ from fixtures import (
     token_contract,
     auction_contract,
     txnCost,
-    terms_hash,
 )
 
 from auction_fixtures import (
@@ -28,11 +27,7 @@ from auction_fixtures import (
     auction_end_tests,
 )
 
-from utils import (
-    hash_sign_msg,
-)
-
-# TODO: missingReserveToEndAuction, transferReserveToToken,
+# TODO: missingFundsToEndAuction, transferFundsToToken,
 # TODO: review edge cases for claimTokens, bid
 
 
@@ -122,10 +117,6 @@ def test_auction_access(chain, web3, create_contract):
     assert auction.call().final_price() == 0
     assert auction.call().stage() == 0
     assert auction.call().token()
-    assert not auction.call().terms_signed(A)
-
-    with pytest.raises(ValueError):  # No matching functions found
-        auction.call().terms_hash()
 
 
 def test_auction_start(chain, web3, auction_contract, token_contract, auction_bid_tested):
@@ -156,7 +147,15 @@ def test_auction_start(chain, web3, auction_contract, token_contract, auction_bi
 
     # Finalize auction
     amount = web3.eth.getBalance(A) - 10000000
-    auction_bid_tested(auction, A, amount)
+    missing_funds = auction.call().missingFundsToEndAuction()
+
+    # Fails if amount is > missing_funds
+    if(missing_funds < amount):
+        with pytest.raises(tester.TransactionFailed):
+            auction_bid_tested(auction, A, amount)
+
+    auction_bid_tested(auction, A, missing_funds)
+
     assert auction.call().stage() == 3  # AuctionEnded
 
     with pytest.raises(tester.TransactionFailed):
@@ -183,8 +182,8 @@ def test_price(web3, auction_contract, token_contract, auction_bid_tested):
     auction.transact().startAuction()
     assert auction.call().price() < initial_price
 
-    amount = web3.eth.getBalance(A) - 10000000
-    auction_bid_tested(auction, A, amount)
+    missing_funds = auction.call().missingFundsToEndAuction()
+    auction_bid_tested(auction, A, missing_funds)
 
     # Calculate final price
     elapsed = auction.call().end_time() - auction.call().start_time()
@@ -216,8 +215,7 @@ def test_auction_payable(chain, web3, auction_contract, get_token_contract, txnC
             'to': auction.address,
             'value': 100
         })
-    with pytest.raises(tester.TransactionFailed):
-        auction.transact({'from': bidder}).sign(hash_sign_msg(terms_hash, bidder))
+
     with pytest.raises(tester.TransactionFailed):
         auction.transact({'from': bidder, "value": 100}).bid()
 
@@ -226,11 +224,17 @@ def test_auction_payable(chain, web3, auction_contract, get_token_contract, txnC
     # Higher price decline
     auction.transact().changeSettings(2, multiplier)
     auction.transact().startAuction()
-    auction.transact({'from': bidder}).sign(hash_sign_msg(terms_hash, bidder))
 
     # End auction by bidding the needed amount
-    missing_reserve = auction.call().missingReserveToEndAuction()
-    auction.transact({'from': bidder, "value": missing_reserve}).bid()
+    missing_funds = auction.call().missingFundsToEndAuction()
+
+    # Test fallback function
+    eth.sendTransaction({
+        'from': bidder,
+        'to': auction.address,
+        'value': 100
+    })
+    auction.transact({'from': bidder, "value": missing_funds - 100}).bid()
     assert auction.call().stage() == 3
 
     # Any payable transactions should fail now
@@ -257,7 +261,7 @@ def test_auction_payable(chain, web3, auction_contract, get_token_contract, txnC
         })
 
 
-# Final bid amount == missing_reserve
+# Final bid amount == missing_funds
 def test_auction_final_bid_0(
     web3,
     auction_started_fast_decline,
@@ -267,12 +271,12 @@ def test_auction_final_bid_0(
     auction = auction_started_fast_decline
     (bidder, late_bidder) = web3.eth.accounts[2:4]
 
-    missing_reserve = auction.call().missingReserveToEndAuction()
-    auction_bid_tested(auction, bidder, missing_reserve)
+    missing_funds = auction.call().missingFundsToEndAuction()
+    auction_bid_tested(auction, bidder, missing_funds)
     auction_end_tests(auction, late_bidder)
 
 
-# Final bid amount == missing_reserve + 1    + 1 bid of 1 wei
+# Final bid amount == missing_funds + 1    + 1 bid of 1 wei
 def test_auction_final_bid_more(
     web3,
     auction_started_fast_decline,
@@ -282,13 +286,13 @@ def test_auction_final_bid_more(
     auction = auction_started_fast_decline
     (bidder, late_bidder) = web3.eth.accounts[2:4]
 
-    missing_reserve = auction.call().missingReserveToEndAuction()
-    amount = missing_reserve + 1
-    auction_bid_tested(auction, bidder, amount)
-    auction_end_tests(auction, late_bidder)
+    missing_funds = auction.call().missingFundsToEndAuction()
+    amount = missing_funds + 1
+    with pytest.raises(tester.TransactionFailed):
+        auction_bid_tested(auction, bidder, amount)
 
 
-# Final bid amount == missing_reserve - 1    + 1 bid of 1 wei
+# Final bid amount == missing_funds - 1    + 1 bid of 1 wei
 def test_auction_final_bid_1(
     web3,
     auction_started_fast_decline,
@@ -298,14 +302,14 @@ def test_auction_final_bid_1(
     auction = auction_started_fast_decline
     (bidder, late_bidder) = web3.eth.accounts[2:4]
 
-    missing_reserve = auction.call().missingReserveToEndAuction()
-    amount = missing_reserve - 1
+    missing_funds = auction.call().missingFundsToEndAuction()
+    amount = missing_funds - 1
     auction_bid_tested(auction, bidder, amount)
     auction_bid_tested(auction, bidder, 1)
     auction_end_tests(auction, late_bidder)
 
 
-# Final bid amount == missing_reserve - 2
+# Final bid amount == missing_funds - 2
 def test_auction_final_bid_2(
     web3,
     auction_started_fast_decline,
@@ -315,15 +319,19 @@ def test_auction_final_bid_2(
     auction = auction_started_fast_decline
     (A, B, late_bidder) = web3.eth.accounts[2:5]
 
-    missing_reserve = auction.call().missingReserveToEndAuction()
-    amount = missing_reserve - 2
+    missing_funds = auction.call().missingFundsToEndAuction()
+    amount = missing_funds - 2
     auction_bid_tested(auction, A, amount)
-    auction_bid_tested(auction, B, 3)
+
+    with pytest.raises(tester.TransactionFailed):
+        auction_bid_tested(auction, B, 3)
+
+    auction_bid_tested(auction, B, 2)
 
     auction_end_tests(auction, late_bidder)
 
 
-# Final bid amount == missing_reserve - 5  + 5 bids of 1 wei
+# Final bid amount == missing_funds - 5  + 5 bids of 1 wei
 def test_auction_final_bid_5(
     web3,
     auction_started_fast_decline,
@@ -333,8 +341,8 @@ def test_auction_final_bid_5(
     auction = auction_started_fast_decline
     (A, late_bidder, *bidders) = web3.eth.accounts[:7]
 
-    missing_reserve = auction.call().missingReserveToEndAuction()
-    amount = missing_reserve - 5
+    missing_funds = auction.call().missingFundsToEndAuction()
+    amount = missing_funds - 5
     # FIXME weird bug where A's final balance is bigger than initially
     # auction_bid_tested(auction, A, amount)
 
@@ -395,21 +403,23 @@ def test_auction_simulation(
     auction.transact().startAuction()
     assert auction.call().stage() == 2  # AuctionStarted
 
+    owner_balance_initial = web3.eth.getBalance(auction.call().owner())
+
     # Cannot changeSettings after auction starts
     with pytest.raises(tester.TransactionFailed):
         auction.transact().changeSettings(*auction_args[1])
 
-    # transferReserveToToken should fail (private)
+    # transferFundsToToken should fail (private)
     with pytest.raises(ValueError):
-        auction.transact({'from': bidders[1]}).transferReserveToToken()
+        auction.transact({'from': bidders[1]}).transferFundsToToken()
 
     # finalizeAuction should fail (private)
     with pytest.raises(ValueError):
         auction.transact({'from': bidders[1]}).finalizeAuction()
 
     # Set maximum amount for a bid - we don't want 1 account draining the auction
-    missing_reserve = auction.call().missingReserveToEndAuction()
-    maxBid = missing_reserve / 4
+    missing_funds = auction.call().missingFundsToEndAuction()
+    maxBid = missing_funds / 4
 
     # TODO Test multiple orders from 1 buyer
 
@@ -425,29 +435,32 @@ def test_auction_simulation(
     bidded = 2
     approx_bid_txn_cost = 4000000
 
-    while auction.call().missingReserveToEndAuction() > 0:
+    while auction.call().missingFundsToEndAuction() > 0:
         if bidders_len < index:
             print('!! Not enough accounts to simulate bidders')
 
         bidder = bidders[index]
-        auction.transact({'from': bidder}).sign(hash_sign_msg(terms_hash, bidder))
 
         bidder_balance = eth.getBalance(bidder)
         assert auction.call().bids(bidder) == 0
 
-        missing_reserve = auction.call().missingReserveToEndAuction()
+        missing_funds = auction.call().missingFundsToEndAuction()
         amount = int(min(bidder_balance - approx_bid_txn_cost, maxBid))
 
-        txn_cost = txnCost(auction.transact({'from': bidder, "value": amount}).bid())
-        bidded += min(amount, missing_reserve)
-
-        if amount <= missing_reserve:
-            assert auction.call().bids(bidder) == amount
-            post_balance = bidder_balance - amount - txn_cost
+        if amount <= missing_funds:
+            txn_cost = txnCost(auction.transact({'from': bidder, "value": amount}).bid())
         else:
-            assert auction.call().bids(bidder) == missing_reserve
-            post_balance = bidder_balance - missing_reserve - txn_cost
-            print('-------! LAST BIDDER surplus to be returned:', amount - missing_reserve)
+            # Fail if we bid more than missing_funds
+            with pytest.raises(tester.TransactionFailed):
+                txn_cost = txnCost(auction.transact({'from': bidder, "value": amount}).bid())
+
+            # Bid exactly the amount needed in order to end the auction
+            amount = missing_funds
+            txn_cost = txnCost(auction.transact({'from': bidder, "value": amount}).bid())
+
+        assert auction.call().bids(bidder) == amount
+        post_balance = bidder_balance - amount - txn_cost
+        bidded += min(amount, missing_funds)
 
         assert eth.getBalance(bidder) == post_balance
         index += 1
@@ -482,9 +495,6 @@ def test_auction_simulation(
         # Number of Tei assigned to the bidder
         bidder_balance = token.call().balanceOf(bidder)
 
-        # Verfify again that Terms are signed
-        assert auction.call().terms_signed(bidder)
-
         # Claim tokens -> tokens will be assigned to bidder
         auction.transact({'from': bidder}).claimTokens()
 
@@ -497,8 +507,8 @@ def test_auction_simulation(
             unclaimed_token_supply = token.call().balanceOf(auction.address)
 
             # Calculated unclaimed tokens
-            unclaimed_reserve = eth.getBalance(auction.address) - auction.call().funds_claimed()
-            unclaimed_tokens = multiplier * unclaimed_reserve // auction.call().final_price()
+            unclaimed_funds = eth.getBalance(auction.address) - auction.call().funds_claimed()
+            unclaimed_tokens = multiplier * unclaimed_funds // auction.call().final_price()
 
             # Adding previous rounding errors
             unclaimed_tokens += rounding_error_tokens
@@ -530,7 +540,8 @@ def test_auction_simulation(
     # Test if Auction funds have been transfered to Token
     funds_claimed = auction.call().funds_claimed()
     assert eth.getBalance(auction.address) == 0
-    assert eth.getBalance(token.address) == funds_claimed
+    # TODO: make this more accurate (owner_balance_initial)
+    assert eth.getBalance(auction.call().owner()) >= funds_claimed
 
     # Check if auction stage has been changed
     assert auction.call().stage() == 5  # TradingStarted
