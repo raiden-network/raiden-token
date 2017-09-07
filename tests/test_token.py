@@ -248,12 +248,6 @@ def test_token_receiveFunds(
 
     # Cannot destroy more tokens than existing balance
     tokens_A = token.call().balanceOf(A)
-    with pytest.raises(tester.TransactionFailed):
-        token.transact({'from': A}).redeem(tokens_A + 1)
-
-    # Cannot destroy tokens before token receives auction balance
-    with pytest.raises(tester.TransactionFailed):
-        token.transact({'from': A}).redeem(250)
 
     # Simulate auction balance transfer
     # Send the auction some funds
@@ -265,18 +259,3 @@ def test_token_receiveFunds(
     assert eth.getBalance(token.address) == 0
     receiveFunds(token, auction_balance)
     assert eth.getBalance(token.address) == auction_balance
-
-    # Check token redeem
-    balance_token = eth.getBalance(token.address)
-    tokens_A = token.call().balanceOf(A)
-    redeemed = 250 * multiplier
-    balance_A = eth.getBalance(A)
-    expected_payment = eth.getBalance(token.address) * redeemed // initial_supply
-
-    txn_cost = txnCost(token.transact({'from': A}).redeem(redeemed))
-    assert token.call().totalSupply() == initial_supply - redeemed
-    assert token.call().balanceOf(A) == tokens_A - redeemed
-    assert eth.getBalance(token.address) == int(balance_token - expected_payment)
-
-    expected_balance = balance_A + expected_payment - txn_cost
-    assert eth.getBalance(A) == expected_balance

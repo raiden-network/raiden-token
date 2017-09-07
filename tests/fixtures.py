@@ -52,7 +52,6 @@ def get_token_contract(chain, create_contract):
         CustomToken = chain.provider.get_contract_factory('CustomToken')
         token_contract = create_contract(CustomToken, arguments, transaction)
 
-        print_logs(token_contract, 'Redeemed', 'CustomToken')
         print_logs(token_contract, 'Transfer', 'CustomToken')
         print_logs(token_contract, 'ReceivedFunds', 'CustomToken')
 

@@ -130,10 +130,15 @@ contract CustomToken is StandardToken {
     address public owner;
     address public auction_address;
 
-    event Deployed(address indexed auction, uint indexed initial_supply, uint indexed auction_supply);
-    event Redeemed(address indexed receiver, uint num, uint unlocked, uint _totalSupply);
-    event Burnt(address indexed receiver, uint num, uint _totalSupply);
-    event ReceivedFunds(uint num);
+    event Deployed(
+        address indexed _auction,
+        uint indexed _total_supply,
+        uint indexed _auction_supply);
+    event Burnt(
+        address indexed _receiver,
+        uint indexed _num,
+        uint indexed _total_supply);
+    event ReceivedFunds(uint indexed _num);
 
     /*
      *  Public functions
@@ -143,7 +148,11 @@ contract CustomToken is StandardToken {
     /// @param initial_supply Number of initially provided tokens.
     /// @param owners Array of addresses receiving preassigned tokens.
     /// @param tokens Array of preassigned token amounts.
-    function CustomToken(address auction, uint initial_supply, address[] owners, uint[] tokens)
+    function CustomToken(
+        address auction,
+        uint initial_supply,
+        address[] owners,
+        uint[] tokens)
         public
     {
         // Auction address should not be null.
@@ -190,33 +199,6 @@ contract CustomToken is StandardToken {
 
         ReceivedFunds(msg.value);
         assert(this.balance > 0);
-    }
-
-    /// @dev Allows to destroy tokens and receive the corresponding amount of ether, implements the floor price
-    /// @param num Number of tokens to redeem
-    function redeem(uint num)
-        public
-    {
-        require(num > 0);
-        require(this.balance > 0);
-
-        // Calculate amount of Wei to be transferred to sender before burning
-        uint unlocked = this.balance * num / totalSupply;
-
-        // Burn tokens before Wei transfer
-        burn(num);
-
-        uint pre_balance = this.balance;
-
-        // Transfer Wei to sender
-        msg.sender.transfer(unlocked);
-        Redeemed(msg.sender, num, unlocked, totalSupply);
-
-        assert(unlocked > 0);
-        assert(this.balance == pre_balance - unlocked);
-
-        // TODO remove after testing
-        assert(num == (unlocked * totalSupply / this.balance));
     }
 
     /// @dev Allows to destroy tokens without receiving the corresponding amount of ether
