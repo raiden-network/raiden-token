@@ -1,18 +1,54 @@
 pragma solidity ^0.4.11;
 
-/// @title Abstract token contract - Functions to be implemented by token contracts.
+import './ERC223ReceivingContract.sol';
+
+/// @title Base Token contract - Functions to be implemented by token contracts.
 contract Token {
-    function transfer(address to, uint256 value) returns (bool success);
-    function transferFrom(address from, address to, uint256 value) returns (bool success);
-    function approve(address spender, uint256 value) returns (bool success);
+    /*
+        Implements ERC 20 standard.
+        Added support for the ERC 223 "tokenFallback" function and "transfer" function with a payload.
+        https://github.com/ethereum/EIPs/issues/20
+        https://github.com/ethereum/EIPs/issues/223
+     */
 
-    // This is not an abstract function, because solc won't recognize generated getter functions for public variables as functions.
-    function totalSupply() constant returns (uint256) {}
-    function balanceOf(address owner) constant returns (uint256);
-    function allowance(address owner, address spender) constant returns (uint256);
+    /*
+        This is a slight change to the ERC20 base standard.
+        function totalSupply() constant returns (uint256 supply);
+        is replaced with:
+        uint256 public totalSupply;
+        This automatically creates a getter function for the totalSupply.
+        This is moved to the base contract since public getter functions are not
+        currently recognised as an implementation of the matching abstract
+        function by the compiler.
+    */
+    uint256 public totalSupply;
 
-    event Transfer(address indexed from, address indexed to, uint256 value);
-    event Approval(address indexed owner, address indexed spender, uint256 value);
+    /*
+     *  ERC 20
+     */
+    function balanceOf(address _owner) constant returns (uint256 balance);
+    function transfer(address _to, uint256 _value) returns (bool success);
+    function transferFrom(address _from, address _to, uint256 _value) returns (bool success);
+    function approve(address _spender, uint256 _value) returns (bool success);
+    function allowance(address _owner, address _spender) constant returns (uint256 remaining);
+
+    /*
+     *  ERC 223
+     */
+    function transfer(address _to, uint256 _value, bytes _data) returns (bool success);
+
+    /*
+     *  Events
+     */
+    event Transfer(
+        address indexed _from,
+        address indexed _to,
+        uint256 _value,
+        bytes indexed _data);
+    event Approval(
+        address indexed _owner,
+        address indexed _spender,
+        uint256 _value);
 }
 
 
@@ -24,7 +60,6 @@ contract StandardToken is Token {
      */
     mapping (address => uint256) balances;
     mapping (address => mapping (address => uint256)) allowed;
-    uint256 public totalSupply;
 
     /*
      *  Public functions
@@ -44,7 +79,44 @@ contract StandardToken is Token {
 
         balances[msg.sender] -= _value;
         balances[_to] += _value;
-        Transfer(msg.sender, _to, _value);
+
+        bytes memory empty;
+        Transfer(msg.sender, _to, _value, empty);
+        return true;
+    }
+
+    /// @dev Function that is called when a user or another contract wants to transfer funds.
+    /// @param _to Address of token receiver.
+    /// @param _value Number of tokens to transfer.
+    /// @param _data Data to be sent to tokenFallback
+    /// @return Returns success of function call.
+    function transfer(
+        address _to,
+        uint256 _value,
+        bytes _data)
+        public
+        returns (bool)
+    {
+        require(_to != 0x0);
+        require(_value > 0);
+        require(balances[msg.sender] >= _value);
+        require(balances[_to] + _value > balances[_to]);
+
+        uint codeLength;
+
+        assembly {
+            // Retrieve the size of the code on target address, this needs assembly .
+            codeLength := extcodesize(_to)
+        }
+
+        balances[msg.sender] -= _value;
+        balances[_to] += _value;
+
+        if(codeLength > 0) {
+            ERC223ReceivingContract receiver = ERC223ReceivingContract(_to);
+            receiver.tokenFallback(msg.sender, _value, _data);
+        }
+        Transfer(msg.sender, _to, _value, _data);
         return true;
     }
 
@@ -67,7 +139,9 @@ contract StandardToken is Token {
         balances[_to] += _value;
         balances[_from] -= _value;
         allowed[_from][_to] -= _value;
-        Transfer(_from, _to, _value);
+
+        bytes memory empty;
+        Transfer(_from, _to, _value, empty);
         return true;
     }
 
@@ -167,6 +241,8 @@ contract CustomToken is StandardToken {
         // total supply of Tei at deployment
         totalSupply = initial_supply;
 
+        bytes memory empty;
+
         // Preallocate tokens to beneficiaries
         uint prealloc_tokens;
         for (uint i=0; i<owners.length; i++) {
@@ -178,11 +254,11 @@ contract CustomToken is StandardToken {
 
             balances[owners[i]] += tokens[i];
             prealloc_tokens += tokens[i];
-            Transfer(0, owners[i], tokens[i]);
+            Transfer(0, owners[i], tokens[i], empty);
         }
 
         balances[auction_address] = totalSupply - prealloc_tokens;
-        Transfer(0, auction_address, balances[auction]);
+        Transfer(0, auction_address, balances[auction], empty);
 
         Deployed(auction_address, totalSupply, balances[auction]);
 

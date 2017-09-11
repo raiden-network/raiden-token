@@ -1,7 +1,9 @@
 import pytest
 from ethereum import tester
+from eth_utils import decode_hex
 from fixtures import (
     get_token_contract,
+    token_contract,
     create_contract,
     print_logs,
     multiplier,
@@ -154,6 +156,33 @@ def test_token_transfer_from(chain, web3, get_token_contract, proxy_contract):
     assert token.call().balanceOf(C) == preallocs[2] + 650
     with pytest.raises(tester.TransactionFailed):
         token.transact().transferFrom(B, C, 5)
+
+
+def test_token_transfer_erc223(chain, web3, token_contract, proxy_contract):
+    (A, B) = web3.eth.accounts[:2]
+
+    # proxy implements tokenFallback
+    proxy = proxy_contract
+    token = token_contract(proxy.address, {'from': A})
+
+    test_data = decode_hex(B)  # random content at this point
+    balance_A = token.call().balanceOf(A)
+    balance_proxy = token.call().balanceOf(proxy.address)
+
+    with pytest.raises(tester.TransactionFailed):
+        token.transact({'from': A}).transfer(proxy.address, 0)
+    with pytest.raises(TypeError):
+        token.transact({'from': A}).transfer(proxy.address, -5)
+    with pytest.raises(tester.TransactionFailed):
+        token.transact({'from': A}).transfer(proxy.address, balance_A + 1)
+    
+    token.transact({'from': A}).transfer(proxy.address, balance_A, test_data)
+    assert token.call().balanceOf(A) == 0
+    assert token.call().balanceOf(proxy.address) == balance_proxy + balance_A
+
+    # Arbitrary tests to see if the tokenFallback function from the proxy is called
+    assert proxy.call().sender() == A
+    assert proxy.call().value() == balance_A
 
 
 def test_token_variables(chain, web3, get_token_contract, proxy_contract):
