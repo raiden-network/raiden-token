@@ -72,8 +72,17 @@ contract StandardToken is Token {
         public
         returns (bool)
     {
+        require(_to != 0x0);
+        require(_value > 0);
+        require(balances[msg.sender] >= _value);
+        require(balances[_to] + _value > balances[_to]);
+
+        balances[msg.sender] -= _value;
+        balances[_to] += _value;
+
         bytes memory empty;
-        return transfer(_to, _value, empty);
+        Transfer(msg.sender, _to, _value, empty);
+        return true;
     }
 
     /// @dev Function that is called when a user or another contract wants to transfer funds.
