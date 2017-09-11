@@ -201,8 +201,8 @@ contract DutchAuction {
         uint missing_funds = missingFundsToEndAuction();
         assert(missing_funds == 0);
 
-        // Calculate the final price WEI / Tei
-        final_price = this.balance / tokens_auctioned;
+        // Calculate the final price WEI / TKN
+        final_price = this.balance / (tokens_auctioned / multiplier);
 
         end_time = now;
         stage = Stages.AuctionEnded;
