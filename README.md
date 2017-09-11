@@ -29,7 +29,7 @@ pytest tests/test_auction.py -p no:warnings -s
 #### Deployment
 
 
-#### Chain setup
+##### Chain setup
 
  * `privtest`
    - start:
@@ -88,6 +88,15 @@ python deploy/deploy_testnet.py \
     --prealloc-addresses \ '0xe2e429949e97f2e31cd82facd0a7ae38f65e2f38,0xd1bf222ef7289ae043b723939d86c8a91f3aac3f' \
     --prealloc-amounts '300,600'
 
+```
+
+
+#### Auction simulation
+
+Simulation will cycle funds, so we don't loose them: owner's account funds the bidder's accounts. When the auction ends, the owner's account receives the auction funds.
+
+```sh
+
 # Simulation options (only when the --simulation flag is set)
     --simulation
     --bidders 10  # number of bidders
@@ -95,11 +104,17 @@ python deploy/deploy_testnet.py \
     --price-points 100000000000000000,0,10000000000000000,600  # calculates price_factor & price_constant from 2 price points (wei/TKN, elapsed_seconds)
     --bid-price  # price per TKN in WEI at which the first bid should start
     --bid-interval  # time interval in seconds between bids
+    --no-fund   # does not fund the bidder accounts from the owner's
 
+# Testing simulation script locally - tricky,
+# because it usually either takes too long or is too expensive
+# solution: make Token's decimals = 1 and:
+python deploy/deploy_testnet.py --simulation --chain privtest --price-points 1000,0,500,60 --decimals 1 --bid-interval 0 --bidders 4 --no-fund
 
 ```
 
-### Automatic token distribution
+
+#### Automatic token distribution
 
 
 ```sh

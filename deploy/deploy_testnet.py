@@ -1,19 +1,18 @@
 """
-Deploy ReserveToken and DutchAuction on a testnet
+Deploy CustomToken and DutchAuction on a testnet
 """
 import click
 from populus import Project
 from web3 import Web3
 from utils import (
     createWallet,
-    check_succesful_tx
+    check_succesful_tx,
+    assignFundsToBidders
 )
 from simulation import (
     getAuctionFactors,
     auction_simulation
 )
-
-multiplier = 10**18
 
 
 @click.command()
@@ -30,6 +29,11 @@ multiplier = 10**18
     '--supply',
     default=10000000,
     help='Token contract supply (number of total issued tokens).'
+)
+@click.option(
+    '--decimals',
+    default=18,
+    help='Token contract decimals.'
 )
 @click.option(
     '--price-factor',
@@ -70,32 +74,61 @@ multiplier = 10**18
 )
 @click.option(
     '--bid-price',
-    default=50000000000000000,
     help='Price per TKN in WEI at which the first bid should start. Only if the --simulation flag is set'
 )
 @click.option(
     '--bid-interval',
-    default=5,
     help='Time interval in seconds between bids. Only if the --simulation flag is set'
+)
+@click.option(
+    '--fund/--no-fund',
+    default=True,
+    help='Fund bidders accounts with random ETH from the owner account. Done before starting the simulation.'
+)
+@click.option(
+    '--auction',
+    help='Auction contract address.'
+)
+@click.option(
+    '--token',
+    help='Token contract address.'
+)
+@click.option(
+    '--distributor',
+    help='Distributor contract address.'
 )
 def main(**kwargs):
     project = Project()
 
     chain_name = kwargs['chain']
     owner = kwargs['owner']
-    supply = kwargs['supply'] * multiplier
+    supply = kwargs['supply']
+    decimals = kwargs['decimals']
     price_factor = kwargs['price_factor']
     price_constant = kwargs['price_constant']
     simulation = kwargs['simulation']
     bidders = int(kwargs['bidders'])
-    bid_start_price = int(kwargs['bid_price'])
-    bid_interval = kwargs['bid_interval']
+    bid_start_price = int(kwargs['bid_price'] or 0)
+    bid_interval = int(kwargs['bid_interval'] or 0)
     bids_number = int(kwargs['bids'])
     price_points = kwargs['price_points']
+    fund_bidders = kwargs['fund']
+    # auction_addr = kwargs['auction']
+    # token_addr = kwargs['token']
+    # distributor_addr = kwargs['distributor']
+
+
+    multiplier = 10**decimals
+    supply *= multiplier
 
     if price_points:
         price_points = price_points.split(',')
-        (a, b) = getAuctionFactors(int(price_points[0]), int(price_points[1]), int(price_points[2]), int(price_points[3]), multiplier)
+        (a, b) = getAuctionFactors(
+            int(price_points[0]),
+            int(price_points[1]),
+            int(price_points[2]),
+            int(price_points[3]),
+            multiplier)
         price_factor = a
         price_constant = b
 
@@ -140,38 +173,51 @@ def main(**kwargs):
 
         # Load Populus contract proxy classes
         Auction = chain.provider.get_contract_factory('DutchAuction')
-        Token = chain.provider.get_contract_factory('ReserveToken')
+        Token = chain.provider.get_contract_factory('CustomToken')
+        Distributor = chain.provider.get_contract_factory('Distributor')
 
         # Deploy Auction
-        txhash = Auction.deploy(transaction={"from": owner}, args=[price_factor, price_constant])
-        print("Deploying auction, tx hash is", txhash)
-        receipt = check_succesful_tx(web3, txhash)
+        auction_txhash = Auction.deploy(transaction={"from": owner}, args=[price_factor, price_constant])
+        print("Deploying auction, tx hash is", auction_txhash)
+        receipt = check_succesful_tx(web3, auction_txhash)
         auction_address = receipt["contractAddress"]
         print("Auction contract address is", auction_address)
 
         # Deploy token
-        txhash = Token.deploy(transaction={"from": owner}, args=[
+        token_txhash = Token.deploy(transaction={"from": owner}, args=[
             auction_address,
             supply,
             prealloc_addresses,
             prealloc_amounts
         ])
-        print("Deploying token, tx hash is", txhash)
-        receipt = check_succesful_tx(web3, txhash)
+        print("Deploying token, tx hash is", token_txhash)
+        receipt = check_succesful_tx(web3, token_txhash)
         token_address = receipt["contractAddress"]
         print("Token contract address is", token_address)
+
+        # Deploy Distributor contract
+        distributor_txhash = Distributor.deploy(transaction={"from": owner}, args=[auction_address])
+        print("Deploying distributor, tx hash is", distributor_txhash)
+        receipt = check_succesful_tx(web3, distributor_txhash)
+        distributor_address = receipt["contractAddress"]
+        print("Distributor contract address is", distributor_address)
 
         # Make contracts aware of each other
         print("Initializing contracts")
         auction = Auction(address=auction_address)
         token = Token(address=token_address)
+        distributor = Distributor(address=distributor_address)
 
         txhash = auction.transact({"from": owner}).setup(token_address)
         check_succesful_tx(web3, txhash)
 
         # Do some contract reads to see everything looks ok
-        print("Token total supply is", token.call().totalSupply(), 'Tei = ', int(token.call().totalSupply() / multiplier), 'TKN')
-        print("Auction price at elapsed = 0 is", auction.call().price(), 'WEI', web3.fromWei(auction.call().price(), 'ether'), 'ETH')
+        print("Token total supply is {0} Tei = {1} TKN".format(
+            token.call().totalSupply(),
+            int(token.call().totalSupply() / multiplier)))
+        print("Auction price at 0 seconds (elapsed) is {0} WEI = {1} ETH".format(
+            auction.call().price(),
+            web3.fromWei(auction.call().price(), 'ether')))
 
         # Start simulation if --simulation flag is set
         if simulation:
@@ -184,7 +230,15 @@ def main(**kwargs):
                 bidder_addresses.append(address)
 
             print('Simulating', len(bidder_addresses), 'bidders', bidder_addresses)
-            print('Bids will start at', bid_start_price, 'WEI = ', web3.fromWei(bid_start_price, 'ether'), 'ETH  / TKN')
+            if bid_start_price:
+                print('Bids will start at {0} WEI = {1} ETH  / TKN'.format(
+                    bid_start_price,
+                    web3.fromWei(bid_start_price, 'ether')))
+
+            if fund_bidders:
+                print('Funding bidders accounts with random ETH from the owner account.')
+                assignFundsToBidders(web3, owner, bidders)
+
             auction_simulation(web3, token, auction, owner, bidder_addresses, bids_number, bid_interval, bid_start_price)
 
 
