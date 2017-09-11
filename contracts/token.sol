@@ -224,7 +224,6 @@ contract CustomToken is StandardToken {
         address indexed _receiver,
         uint indexed _num,
         uint indexed _total_supply);
-    event ReceivedFunds(uint indexed _num);
 
     /*
      *  Public functions
@@ -275,18 +274,6 @@ contract CustomToken is StandardToken {
         Deployed(auction_address, totalSupply, balances[auction]);
 
         assert(totalSupply == balances[auction_address] + prealloc_tokens);
-    }
-
-    /// @dev Transfers auction funds; called from auction after it has ended.
-    function receiveFunds()
-        public
-        payable
-    {
-        require(msg.sender == auction_address);
-        require(msg.value > 0);
-
-        ReceivedFunds(msg.value);
-        assert(this.balance > 0);
     }
 
     /// @notice Allows `msg.sender` to simply destroy `num` token units (Tei), without receiving the corresponding amount of ether. This means the total token supply will decrease.
