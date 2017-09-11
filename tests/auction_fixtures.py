@@ -115,6 +115,7 @@ def auction_ended(web3, auction_setup_contract, auction_bid_tested, auction_end_
     print('NO OF BIDDERS', index)
 
     assert eth.getBalance(auction.address) == bidded
+    auction.transact().finalizeAuction()
     auction_end_tests(auction, bidders[index])
 
     return auction
