@@ -15,8 +15,6 @@ from fixtures import (
 )
 
 
-# Proxy contract needed because receiveFunds
-# can only be called from an Auction contract
 @pytest.fixture()
 def proxy_contract(chain, create_contract):
     AuctionProxy = chain.provider.get_contract_factory('Proxy')
@@ -25,18 +23,6 @@ def proxy_contract(chain, create_contract):
     print_logs(proxy_contract, 'Payable', 'Proxy')
 
     return proxy_contract
-
-
-# TODO generalize this for any method - send bytes instead of args
-# see contracts/proxies.sol
-@pytest.fixture
-def receiveFunds(web3, proxy_contract):
-    def get(token_contract, value):
-        return proxy_contract.transact({'value': value}).proxyPayable(
-            token_contract.address,
-            "receiveFunds()"
-        )
-    return get
 
 
 def test_token_init(chain, web3, get_token_contract, proxy_contract):
@@ -175,7 +161,7 @@ def test_token_transfer_erc223(chain, web3, token_contract, proxy_contract):
         token.transact({'from': A}).transfer(proxy.address, -5)
     with pytest.raises(tester.TransactionFailed):
         token.transact({'from': A}).transfer(proxy.address, balance_A + 1)
-    
+
     token.transact({'from': A}).transfer(proxy.address, balance_A, test_data)
     assert token.call().balanceOf(A) == 0
     assert token.call().balanceOf(proxy.address) == balance_proxy + balance_A
@@ -236,55 +222,3 @@ def test_burn(chain, web3, get_token_contract, proxy_contract, txnCost):
     assert token.call().totalSupply() == initial_supply - burnt
     assert token.call().balanceOf(B) == tokens_B - burnt
     assert balance_B == eth.getBalance(B) + txn_cost
-
-
-def test_token_receiveFunds(
-    chain,
-    web3,
-    get_token_contract,
-    proxy_contract,
-    receiveFunds,
-    txnCost
-):
-    owners = web3.eth.accounts[:2]
-    (A, B, C, D) = web3.eth.accounts[2:6]
-    auction = proxy_contract
-    eth = web3.eth
-
-    # Token initalization + preallocation of tokens
-    token = get_token_contract([
-        auction.address,
-        initial_supply,
-        owners,
-        prealloc
-    ])
-    assert token.call().totalSupply() == initial_supply
-
-    # Check auction balance
-    assert token.call().balanceOf(auction.address) == auction_supply
-
-    # Check preallocations
-    for index, owner in enumerate(owners):
-        assert token.call().balanceOf(owner) == prealloc[index]
-
-    # Check token transfers
-    token.transact({'from': owners[0]}).transfer(A, 1000 * multiplier)
-    token.transact({'from': A}).transfer(B, 400 * multiplier)
-    assert token.call().totalSupply() == initial_supply
-    assert token.call().balanceOf(owners[0]) == prealloc[0] - 1000 * multiplier
-    assert token.call().balanceOf(A) == 600 * multiplier
-    assert token.call().balanceOf(B) == 400 * multiplier
-
-    # Cannot destroy more tokens than existing balance
-    tokens_A = token.call().balanceOf(A)
-
-    # Simulate auction balance transfer
-    # Send the auction some funds
-    auction.transact({'from': C, 'value': 10**5 * multiplier}).fund()
-    auction.transact({'from': D, 'value': 10**5 * multiplier}).fund()
-    auction_balance = eth.getBalance(auction.address)
-    assert auction_balance == 2 * 10**5 * multiplier
-
-    assert eth.getBalance(token.address) == 0
-    receiveFunds(token, auction_balance)
-    assert eth.getBalance(token.address) == auction_balance

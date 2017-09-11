@@ -53,7 +53,9 @@ def get_token_contract(chain, create_contract):
         token_contract = create_contract(CustomToken, arguments, transaction)
 
         print_logs(token_contract, 'Transfer', 'CustomToken')
-        print_logs(token_contract, 'ReceivedFunds', 'CustomToken')
+        print_logs(token_contract, 'Approval', 'CustomToken')
+        print_logs(token_contract, 'Deployed', 'CustomToken')
+        print_logs(token_contract, 'Burnt', 'CustomToken')
 
         return token_contract
     return get
