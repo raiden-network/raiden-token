@@ -2,6 +2,7 @@ pragma solidity ^0.4.11;
 
  /*
  * Contract that is working with ERC223 tokens
+ * https://github.com/ethereum/EIPs/issues/223
  */
 
 /// @title ERC223ReceivingContract - Standard contract implementation for compatibility with ERC223 tokens.

@@ -3,10 +3,14 @@ pragma solidity ^0.4.11;
 import './token.sol';
 
 /// @title Dutch auction contract - distribution of tokens using an auction.
-/// @author [..] credits to Stefan George - <stefan.george@consensys.net>
 contract DutchAuction {
     /*
-    Auction for the TKN Token.
+     *  Auction for the TKN Token.
+
+     *  Terminology:
+     *  1 token unit = Tei
+     *  1 token = TKN = Tei * multiplier
+     *  multiplier set from token's number of decimals (i.e. 10**decimals)
     */
 
     /*
@@ -28,7 +32,8 @@ contract DutchAuction {
     // Keep track of funds claimed after auction has ended
     uint public funds_claimed;
 
-    // Total number of tokens that will be auctioned
+    // Total number of Tei (TKN * multiplier) that will be auctioned
+    uint public multiplier;
     uint public tokens_auctioned;
 
     // Wei per TKN (Tei * multiplier)
@@ -36,14 +41,7 @@ contract DutchAuction {
 
     mapping (address => uint) public bids;
 
-
     Stages public stage;
-
-    // Terminology:
-    // 1 token unit = Tei
-    // 1 token = TKN = Tei * multiplier
-    // multiplier set from token's number of decimals (i.e. 10**decimals)
-    uint public multiplier;
 
     // TODO - remove after testing
     uint rounding_error_tokens;
@@ -109,7 +107,7 @@ contract DutchAuction {
      *  Public functions
      */
 
-    /// @dev Contract constructor function sets .
+    /// @dev Contract constructor function sets price factor and constant for calculating the Dutch Auction price.
     /// @param _price_factor Auction price factor.
     /// @param _price_const Auction price divisor constant.
     function DutchAuction(
@@ -125,6 +123,7 @@ contract DutchAuction {
         changeSettings(_price_factor, _price_const);
     }
 
+    /// @dev  Fallback function for the contract, which calls bid() if the auction has started.
     function ()
         public
         payable
@@ -133,7 +132,8 @@ contract DutchAuction {
         bid(msg.sender);
     }
 
-    /// @dev Setup function sets external contracts' addresses.
+    /// @notice Set `_token` as the token address to be used in the auction.
+    /// @dev Setup function sets external contracts addresses.
     /// @param _token Token address.
     function setup(address _token)
         public
@@ -145,7 +145,7 @@ contract DutchAuction {
         require(token.owner() == owner);
         require(token.auction_address() == address(this));
 
-        // Get number of tokens to be auctioned from token auction balance
+        // Get number of Tei (TKN * multiplier) to be auctioned from token auction balance
         tokens_auctioned = token.balanceOf(this);
 
         // Set number of tokens multiplier from token decimals
@@ -158,6 +158,7 @@ contract DutchAuction {
         assert(tokens_auctioned > multiplier);
     }
 
+    /// @notice Set `_price_factor` and `_price_const` as the new price factor and price divisor constant.
     /// @dev Changes auction start price factor before auction is started.
     /// @param _price_factor Updated price factor.
     /// @param _price_const Updated price divisor constant.
@@ -176,6 +177,7 @@ contract DutchAuction {
         SettingsChanged(price_factor, price_const);
     }
 
+    /// @notice Start the auction.
     /// @dev Starts auction and sets start_time.
     function startAuction()
         public
@@ -188,6 +190,7 @@ contract DutchAuction {
         AuctionStarted(start_time, start_block);
     }
 
+    /// @notice Finalize the auction - sets the final price and changes the auction stage.
     /// @dev Finalize auction and set the final token price.
     function finalizeAuction()
         public
@@ -210,6 +213,7 @@ contract DutchAuction {
 
     /// --------------------------------- Auction Functions -------------------------------------------
 
+    /// @notice Send `msg.value` WEI to the auction from the `msg.sender` account.
     /// @dev Allows to send a bid to the auction.
     function bid()
         public
@@ -219,6 +223,7 @@ contract DutchAuction {
         bid(msg.sender);
     }
 
+    /// @notice Send `msg.value` WEI to the auction from the `receiver` account.
     /// @dev Allows to send a bid to the auction.
     /// @param receiver Bidder account address.
     function bid(address receiver)
@@ -234,6 +239,8 @@ contract DutchAuction {
 
         // Missing funds without the current bid value
         uint missing_funds = missingFundsToEndAuction(this.balance - msg.value);
+
+        // We only allow bid values less than the missing funds to end the auction value.
         require(msg.value <= missing_funds);
 
         bids[receiver] += msg.value;
@@ -242,6 +249,7 @@ contract DutchAuction {
         assert(bids[receiver] == pre_receiver_funds + msg.value);
     }
 
+    /// @notice Claim auction tokens for `msg.sender` after the auction has ended.
     /// @dev Claims tokens for bidder after auction. To be used if tokens can be claimed by bidders, individually.
     function claimTokens()
         public
@@ -250,6 +258,7 @@ contract DutchAuction {
         claimTokens(msg.sender);
     }
 
+    /// @notice Claim auction tokens for `receiver` after the auction has ended.
     /// @dev Claims tokens for bidder after auction.
     /// @param receiver Tokens will be assigned to this address if set.
     function claimTokens(address receiver)
@@ -288,6 +297,8 @@ contract DutchAuction {
         assert(auction_unclaimed_tokens == unclaimed_tokens);
         /* End of removable test */
 
+        // After the last tokens are claimed, we send the auction balance to the owner
+        // and change the auction stage
         if (funds_claimed == this.balance) {
             stage = Stages.TokensDistributed;
             TokensDistributed();
@@ -318,7 +329,7 @@ contract DutchAuction {
         assert(owner.balance >= pre_balance);
     }
 
-    /// @dev Calculates the token price at the current timestamp during the auction; elapsed time = 0 before auction starts.
+    /// @dev Calculates the token price (WEI / TKN) at the current timestamp during the auction; elapsed time = 0 before auction starts.
     /// @dev At AuctionDeployed the price is 1, because multiplier is 0
     /// @return Returns the token price - Wei per TKN.
     function calcTokenPrice()
@@ -335,6 +346,7 @@ contract DutchAuction {
 
     /// --------------------------------- Price Functions -------------------------------------------
 
+    /// @notice Get the TKN price in WEI during the auction, at the moment of calling this method. Returns `0` if auction has ended.
     /// @dev Calculates current token price.
     /// @return Returns num Wei per TKN (multiplier * Tei).
     function price()
@@ -351,6 +363,7 @@ contract DutchAuction {
         return calcTokenPrice();
     }
 
+    /// @notice Get the missing funds needed to end the auction, calculated at the current TKN price.
     /// @dev The missing funds amount necessary to end the auction at the current price.
     /// @return Returns the missing funds amount.
     function missingFundsToEndAuction()
@@ -361,7 +374,8 @@ contract DutchAuction {
         return missingFundsToEndAuction(this.balance);
     }
 
-    /// @dev The missing funds amount necessary to end the auction at the current price, for a provided balance.
+    /// @notice Get the missing funds needed to end the auction, calculated at the current TKN price.
+    /// @dev The missing funds amount in WEI, necessary to end the auction at the current price (WEI/TKN), for a provided balance.
     /// @param funds Current balance or current balance without current bid value for bid().
     /// @return Returns the missing funds amount.
     function missingFundsToEndAuction(uint funds)

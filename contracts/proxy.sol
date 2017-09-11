@@ -2,7 +2,7 @@ pragma solidity ^0.4.11;
 
 import './ERC223ReceivingContract.sol';
 
-// Contract needed for testing
+// Contract needed for testing the token contract
 // TODO general function call with 1 data argument in bytes
 contract Proxy is ERC223ReceivingContract{
     address public sender;
