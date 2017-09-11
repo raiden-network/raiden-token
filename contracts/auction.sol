@@ -188,6 +188,26 @@ contract DutchAuction {
         AuctionStarted(start_time, start_block);
     }
 
+    /// @dev Finalize auction and set the final token price.
+    function finalizeAuction()
+        public
+        isOwner
+        atStage(Stages.AuctionStarted)
+    {
+        // Missing funds should be 0 at this point
+        uint missing_funds = missingFundsToEndAuction();
+        assert(missing_funds == 0);
+
+        // Calculate the final price WEI / Tei
+        final_price = this.balance / tokens_auctioned;
+
+        end_time = now;
+        stage = Stages.AuctionEnded;
+        AuctionEnded(final_price);
+
+        assert(final_price > 0);
+    }
+
     /// --------------------------------- Auction Functions -------------------------------------------
 
     /// @dev Allows to send a bid to the auction.
@@ -218,11 +238,6 @@ contract DutchAuction {
 
         bids[receiver] += msg.value;
         BidSubmission(receiver, msg.value, missing_funds);
-
-        if (missing_funds == msg.value) {
-            // When missing_funds is equal to the big value the auction is ended and finalizeAuction is triggered.
-            finalizeAuction();
-        }
 
         assert(bids[receiver] == pre_receiver_funds + msg.value);
     }
@@ -286,19 +301,6 @@ contract DutchAuction {
     /*
      *  Private functions
      */
-
-    /// @dev Finalize auction and set the final token price.
-    function finalizeAuction()
-        private
-        atStage(Stages.AuctionStarted)
-    {
-        final_price = calcTokenPrice();
-        end_time = now;
-        stage = Stages.AuctionEnded;
-        AuctionEnded(final_price);
-
-        assert(final_price > 0);
-    }
 
     /// @dev Transfer auction balance to the token.
     function transferFundsToOwner()
