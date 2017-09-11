@@ -99,6 +99,21 @@ python deploy/deploy_testnet.py \
 
 ```
 
+### Automatic token distribution
+
+
+```sh
+
+python deploy/distribute.py \
+    --chain privtest \
+    --distributor 0x8b96503f6b2cefaa83d385fa2cb269999ab4ac9f \
+    --distributor-tx 0xc4eaffce4009eb13cd432f3c25d6f5eafb42249d4cd81a6164e83225ad65abee \
+    --auction 0x66b14432eaad5956e57ab02316a50705f2dc4f25 \
+    --auction-tx 0x989bf8f2cf5bdfdd053c95b4ce711636054f06406df41cd77160b2fad31efe2c \
+    --claims 2  # number of addresses to be sent in a transaction (wip)
+
+```
+
 
 ## Web App
 

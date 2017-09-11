@@ -24,6 +24,7 @@ contract Distributor {
      *  Events
      */
 
+    event Deployed();
     event Distributed(address[] indexed addresses);
     event ClaimTokensCalled(address indexed bidder);
 
@@ -37,6 +38,7 @@ contract Distributor {
         owner = msg.sender;
         auction = DutchAuction(_auction);
         require(auction.owner() == owner);
+        Deployed();
     }
 
     function distribute(address[] addresses)
