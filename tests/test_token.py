@@ -25,7 +25,11 @@ def proxy_contract(chain, create_contract):
     return proxy_contract
 
 
-def test_token_init(chain, web3, get_token_contract, proxy_contract):
+def test_token_init(
+    chain,
+    web3,
+    get_token_contract,
+    proxy_contract):
     (A, B, C, D) = web3.eth.accounts[:4]
     auction = proxy_contract
     preallocs = [
@@ -60,7 +64,11 @@ def test_token_init(chain, web3, get_token_contract, proxy_contract):
     ])
 
 
-def test_token_transfer(chain, web3, get_token_contract, proxy_contract):
+def test_token_transfer(
+    chain,
+    web3,
+    get_token_contract,
+    proxy_contract):
     (A, B, C) = web3.eth.accounts[:3]
     preallocs = [
         500,
@@ -90,7 +98,11 @@ def test_token_transfer(chain, web3, get_token_contract, proxy_contract):
     assert token.call().balanceOf(C) == 1166
 
 
-def test_token_transfer_from(chain, web3, get_token_contract, proxy_contract):
+def test_token_transfer_from(
+    chain,
+    web3,
+    get_token_contract,
+    proxy_contract):
     (A, B, C) = web3.eth.accounts[:3]
     preallocs = [
         500,
@@ -144,7 +156,11 @@ def test_token_transfer_from(chain, web3, get_token_contract, proxy_contract):
         token.transact().transferFrom(B, C, 5)
 
 
-def test_token_transfer_erc223(chain, web3, token_contract, proxy_contract):
+def test_token_transfer_erc223(
+    chain,
+    web3,
+    token_contract,
+    proxy_contract):
     (A, B) = web3.eth.accounts[:2]
 
     # proxy implements tokenFallback
@@ -171,7 +187,11 @@ def test_token_transfer_erc223(chain, web3, token_contract, proxy_contract):
     assert proxy.call().value() == balance_A
 
 
-def test_token_variables(chain, web3, get_token_contract, proxy_contract):
+def test_token_variables(
+    chain,
+    web3,
+    get_token_contract,
+    proxy_contract):
     (A, B, C) = web3.eth.accounts[:3]
     preallocs = [
         500,
@@ -193,7 +213,12 @@ def test_token_variables(chain, web3, get_token_contract, proxy_contract):
     assert token.call().totalSupply() == initial_supply
 
 
-def test_burn(chain, web3, get_token_contract, proxy_contract, txnCost):
+def test_burn(
+    chain,
+    web3,
+    get_token_contract,
+    proxy_contract,
+    txnCost):
     eth = web3.eth
     (A, B, C) = web3.eth.accounts[:3]
     preallocs = [

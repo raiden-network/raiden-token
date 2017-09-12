@@ -3,10 +3,6 @@ from functools import (
     reduce
 )
 
-from web3.utils.compat import (
-    Timeout,
-)
-
 from utils import (
     print_logs,
 )

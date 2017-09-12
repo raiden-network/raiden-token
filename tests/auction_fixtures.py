@@ -1,8 +1,5 @@
 import pytest
 from ethereum import tester
-from functools import (
-    reduce
-)
 
 from fixtures import (
     create_contract,
@@ -19,7 +16,10 @@ from fixtures import (
 
 
 @pytest.fixture()
-def auction_setup_contract(web3, auction_contract, get_token_contract):
+def auction_setup_contract(
+    web3,
+    auction_contract,
+    get_token_contract):
     auction = auction_contract
     owners = web3.eth.accounts[:2]
 
@@ -62,7 +62,11 @@ def auction_started_fast_decline(web3, auction_setup_contract):
 
 
 @pytest.fixture()
-def auction_ended(web3, auction_setup_contract, auction_bid_tested, auction_end_tests):
+def auction_ended(
+    web3,
+    auction_setup_contract,
+    auction_bid_tested,
+    auction_end_tests):
     eth = web3.eth
     auction = auction_setup_contract
     bidders = eth.accounts[2:]
@@ -143,11 +147,12 @@ def auction_end_tests():
 @pytest.fixture()
 def auction_claimed_tests(web3):
     def get(auction, owner_pre_balance, auction_pre_balance):
+        owner = auction.call().owner()
         assert auction.call().stage() == 5  # TradingStarted
 
         # Test if Auction funds have been transfered to the owner
         assert web3.eth.getBalance(auction.address) == 0
         assert auction.call().funds_claimed() == auction_pre_balance
-        # assert web3.eth.getBalance(auction.call().owner()) == owner_pre_balance + auction_pre_balance
-        assert web3.eth.getBalance(auction.call().owner()) >= owner_pre_balance + auction_pre_balance
+        # assert web3.eth.getBalance(owner) == owner_pre_balance + auction_pre_balance
+        assert web3.eth.getBalance(owner) >= owner_pre_balance + auction_pre_balance
     return get

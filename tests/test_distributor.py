@@ -27,7 +27,10 @@ from auction_fixtures import (
 
 
 @pytest.fixture()
-def distributor_contract(chain, create_contract, auction_contract):
+def distributor_contract(
+    chain,
+    create_contract,
+    auction_contract):
     Distributor = chain.provider.get_contract_factory('Distributor')
     distributor_contract = create_contract(Distributor, [auction_contract.address])
 
@@ -55,11 +58,13 @@ def test_distributor_init(chain, web3, create_contract):
     distributor_contract = create_contract(Distributor, [auction.address])
 
 
-def claim_tokens(auction, distributor, addresses):
-    get_bidders_addresses
-
-
-def auction_post_claim_tokens_tests(token, auction, bidder, value, bidder_pre_balance, auction_pre_balance):
+def auction_post_claim_tokens_tests(
+    token,
+    auction,
+    bidder,
+    value,
+    bidder_pre_balance,
+    auction_pre_balance):
     # Check if bidder has the correct number of tokens
     bidder_balance = bidder_pre_balance + value
     auction_balance = auction_pre_balance + value
@@ -71,7 +76,12 @@ def auction_post_claim_tokens_tests(token, auction, bidder, value, bidder_pre_ba
         auction.transact({'from': bidder}).claimTokens()
 
 
-def test_distributor_distribute(web3, token_contract, distributor_contract, auction_ended, auction_claimed_tests):
+def test_distributor_distribute(
+    web3,
+    token_contract,
+    distributor_contract,
+    auction_ended,
+    auction_claimed_tests):
     distributor = distributor_contract
     token = token_contract
     auction = auction_ended
@@ -106,7 +116,7 @@ def test_distributor_distribute(web3, token_contract, distributor_contract, auct
     for i in range(0, steps):
         start = i * safe_distribution_no
         end = (i + 1) * safe_distribution_no
-        distributor.transact({}).distribute(addresses[start : end])
+        distributor.transact({}).distribute(addresses[start:end])
 
     auction_claimed_tests(auction, owner_pre_balance, auction_pre_balance)
 
@@ -119,20 +129,19 @@ def test_distributor_distribute(web3, token_contract, distributor_contract, auct
         def verify_claim(event):
             # Check for double claiming
             assert address not in verified_claim
-            sent_amount = event['args']['_sent_amount']
+            # sent_amount = event['args']['_sent_amount']
             verified_claim.append(address)
 
             # TODO assert sent_amount == token balance
 
         # check if auction event was triggered for this user
-        handle_logs(contract=auction,
+        handle_logs(
+            contract=auction,
             event='ClaimedTokens',
             params={
                 'filter': {'_recipient': address}
             },
             callback=verify_claim)
-
-
 
 
 def test_waitfor_last_events_timeout():

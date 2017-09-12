@@ -32,7 +32,10 @@ from auction_fixtures import (
 # TODO: review edge cases for claimTokens, bid
 
 
-def test_auction_init(chain, web3, create_contract):
+def test_auction_init(
+    chain,
+    web3,
+    create_contract):
     Auction = chain.provider.get_contract_factory('DutchAuction')
 
     with pytest.raises(TypeError):
@@ -46,12 +49,15 @@ def test_auction_init(chain, web3, create_contract):
     with pytest.raises(tester.TransactionFailed):
         auction_contract = create_contract(Auction, [2, 0])
 
-    auction_contract = create_contract(Auction, auction_args[0])
+    create_contract(Auction, auction_args[0])
 
 
-def test_auction_setup(web3, auction_contract, token_contract):
+def test_auction_setup(
+    web3,
+    auction_contract,
+    token_contract):
     auction = auction_contract
-    owners = web3.eth.accounts[:2]
+    # owners = web3.eth.accounts[:2]
     A = web3.eth.accounts[2]
 
     assert auction.call().stage() == 0  # AuctionDeployed
@@ -73,7 +79,10 @@ def test_auction_setup(web3, auction_contract, token_contract):
         auction.call().setup(token.address)
 
 
-def test_auction_change_settings(web3, auction_contract, token_contract):
+def test_auction_change_settings(
+    web3,
+    auction_contract,
+    token_contract):
     auction = auction_contract
     token = token_contract(auction.address)
     A = web3.eth.accounts[2]
@@ -102,10 +111,12 @@ def test_auction_change_settings(web3, auction_contract, token_contract):
 
 
 # Make sure the variables have appropriate access from outside the contract
-def test_auction_access(chain, web3, create_contract):
+def test_auction_access(
+    chain,
+    web3,
+    create_contract):
     Auction = chain.provider.get_contract_factory('DutchAuction')
     auction = create_contract(Auction, auction_args[0])
-    A = web3.eth.accounts[2]
 
     assert auction.call().owner() == web3.eth.coinbase
     assert auction.call().price_factor() == auction_args[0][0]
@@ -120,7 +131,13 @@ def test_auction_access(chain, web3, create_contract):
     assert auction.call().token()
 
 
-def test_auction_start(chain, web3, auction_contract, token_contract, auction_bid_tested, auction_end_tests):
+def test_auction_start(
+    chain,
+    web3,
+    auction_contract,
+    token_contract,
+    auction_bid_tested,
+    auction_end_tests):
     auction = auction_contract
     token = token_contract(auction.address)
     (A, B) = web3.eth.accounts[2:4]
@@ -166,7 +183,12 @@ def test_auction_start(chain, web3, auction_contract, token_contract, auction_bi
 
 
 # Test price function at the different auction stages
-def test_price(web3, auction_contract, token_contract, auction_bid_tested, auction_end_tests):
+def test_price(
+    web3,
+    auction_contract,
+    token_contract,
+    auction_bid_tested,
+    auction_end_tests):
     auction = auction_contract
     token = token_contract(auction.address)
     (A, B) = web3.eth.accounts[2:4]
@@ -192,7 +214,9 @@ def test_price(web3, auction_contract, token_contract, auction_bid_tested, aucti
     auction_end_tests(auction, B)
 
     # Calculate final price
-    final_price = web3.eth.getBalance(auction.address) // (auction.call().tokens_auctioned() // multiplier)
+    auction_balance = web3.eth.getBalance(auction.address)
+    tokens_auctioned = auction.call().tokens_auctioned()
+    final_price = auction_balance // (tokens_auctioned // multiplier)
 
     # Old final price calculation, left just for comparison
     elapsed = auction.call().end_time() - auction.call().start_time()
@@ -203,7 +227,13 @@ def test_price(web3, auction_contract, token_contract, auction_bid_tested, aucti
 
 
 # Test sending ETH to the auction contract
-def test_auction_payable(chain, web3, auction_contract, get_token_contract, txnCost, auction_end_tests):
+def test_auction_payable(
+    chain,
+    web3,
+    auction_contract,
+    get_token_contract,
+    txnCost,
+    auction_end_tests):
     eth = web3.eth
     auction = auction_contract
     owners = web3.eth.accounts[:2]
@@ -558,7 +588,6 @@ def test_auction_simulation(
         # Bidder cannot claim tokens again
         with pytest.raises(tester.TransactionFailed):
             auction.transact({'from': bidder}).claimTokens()
-
 
     # Check if all the auction tokens have been claimed
     total_tokens = auction.call().tokens_auctioned() + reduce((lambda x, y: x + y), prealloc)

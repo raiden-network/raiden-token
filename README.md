@@ -129,6 +129,62 @@ python deploy/distribute.py \
 
 ```
 
+### Solidity coding style
+
+For solidity we generally follow the style guide as shown in the [solidity documentation](http://solidity.readthedocs.io/en/develop/style-guide.html)
+with a few notable exceptions:
+
+**Variable Names**
+
+All variable name should be in snake case, just like in python. Function names on the other hand should be mixedCase.
+MixedCase is essentially like CamelCase but with the initial letter being a small letter.
+This helps us to easily determine which function calls are smart contract calls in the python code side.
+
+```js
+function iDoSomething(uint awesome_argument) {
+    doSomethingElse();
+}
+```
+
+**Modifiers in long function declarations**
+
+
+This is how the solidity documentation suggests it:
+
+```js
+function thisFunctionNameIsReallyLong(
+    address x,
+    address y,
+    address z,
+)
+    public
+    onlyowner
+    priced
+    returns (address)
+{
+    doSomething();
+}
+```
+
+This is the minor modification we make in order to make the code more readable when quickly skimming through it.
+The thinking here is to easily spot the start of the function's block when skimming and not have the modifiers
+appearing as if they are a block on their own due to the hanging parentheses.
+
+```js
+function thisFunctionNameIsReallyLong(
+    address x,
+    address y,
+    address z)
+
+    public
+    onlyowner
+    priced
+    returns (address)
+{
+    doSomething();
+}
+```
+
 
 ## Web App
 
