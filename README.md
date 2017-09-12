@@ -38,7 +38,7 @@ pytest tests/test_auction.py -p no:warnings -s
 
    # geth console
    # you have to mine yourself: miner.start()
-   geth attach ipc:/Users/loredana/Library/Ethereum/privtest/geth.ipc
+   geth attach ipc:/Users/user/Library/Ethereum/privtest/geth.ipc
    ```
 
  * `kovan`
