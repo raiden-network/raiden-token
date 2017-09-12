@@ -234,6 +234,7 @@ contract DutchAuction {
     {
         require(receiver != 0x0);
         require(msg.value > 0);
+        require(bids[receiver] + msg.value >= msg.value);
 
         uint pre_receiver_funds = bids[receiver];
 
