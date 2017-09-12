@@ -190,11 +190,10 @@ contract DutchAuction {
         AuctionStarted(start_time, start_block);
     }
 
-    /// @notice Finalize the auction - sets the final price and changes the auction stage.
+    /// @notice Finalize the auction - sets the final price and changes the auction stage after no bids are allowed anymore.
     /// @dev Finalize auction and set the final token price.
     function finalizeAuction()
         public
-        isOwner
         atStage(Stages.AuctionStarted)
     {
         // Missing funds should be 0 at this point

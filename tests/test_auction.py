@@ -518,9 +518,6 @@ def test_auction_simulation(
     if bidders_len < index:
         print('!! Not enough accounts to simulate bidders. 1 additional account needed')
 
-    with pytest.raises(tester.TransactionFailed):
-        auction.transact({'from': bidders[1]}).finalizeAuction()
-
     # Finalize Auction
     auction.transact().finalizeAuction()
 
