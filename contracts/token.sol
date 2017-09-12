@@ -79,18 +79,12 @@ contract StandardToken is Token {
         require(balances[msg.sender] >= _value);
         require(balances[_to] + _value >= balances[_to]);
 
-        bytes memory empty;
-
-        // Transfers of 0 values MUST be treated as normal transfers and fire the Transfer event.
-        if(_value == 0) {
-            Transfer(msg.sender, _to, _value, empty);
-            return true;
-        }
-
         balances[msg.sender] -= _value;
         balances[_to] += _value;
 
+        bytes memory empty;
         Transfer(msg.sender, _to, _value, empty);
+
         return true;
     }
 
@@ -110,12 +104,6 @@ contract StandardToken is Token {
         require(_to != 0x0);
         require(balances[msg.sender] >= _value);
         require(balances[_to] + _value >= balances[_to]);
-
-        // Transfers of 0 values MUST be treated as normal transfers and fire the Transfer event.
-        if(_value == 0) {
-            Transfer(msg.sender, _to, _value, _data);
-            return true;
-        }
 
         uint codeLength;
 
@@ -151,19 +139,13 @@ contract StandardToken is Token {
         require(allowed[_from][_to] >= _value);
         require(balances[_to] + _value >= balances[_to]);
 
-        bytes memory empty;
-
-        // Transfers of 0 values MUST be treated as normal transfers and fire the Transfer event.
-        if(_value == 0) {
-            Transfer(_from, _to, _value, empty);
-            return true;
-        }
-
         balances[_to] += _value;
         balances[_from] -= _value;
         allowed[_from][_to] -= _value;
 
+        bytes memory empty;
         Transfer(_from, _to, _value, empty);
+        
         return true;
     }
 
