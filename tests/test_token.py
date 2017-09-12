@@ -82,12 +82,14 @@ def test_token_transfer(
         preallocs
     ])
 
-    with pytest.raises(tester.TransactionFailed):
-        token.transact({'from': A}).transfer(B, 0)
     with pytest.raises(TypeError):
         token.transact({'from': A}).transfer(B, -5)
     with pytest.raises(tester.TransactionFailed):
         token.transact({'from': A}).transfer(B, preallocs[0] + 1)
+
+    token.transact({'from': A}).transfer(B, 0)
+    assert token.call().balanceOf(A) == 500
+    assert token.call().balanceOf(B) == 800
 
     token.transact({'from': A}).transfer(B, 120)
     assert token.call().balanceOf(A) == 380
@@ -128,12 +130,16 @@ def test_token_transfer_from(
     assert token.call().allowance(A, B) == 300
     assert token.call().allowance(B, C) == 650
 
-    with pytest.raises(tester.TransactionFailed):
-        token.transact().transferFrom(A, B, 0)
+
     with pytest.raises(TypeError):
         token.transact().transferFrom(A, B, -1)
     with pytest.raises(tester.TransactionFailed):
         token.transact().transferFrom(A, B, 301)
+
+    token.transact().transferFrom(A, B, 0)
+    assert token.call().allowance(A, B) == 300
+    assert token.call().balanceOf(A) == 500
+    assert token.call().balanceOf(B) == 800
 
     token.transact().transferFrom(A, B, 150)
     assert token.call().allowance(A, B) == 150
@@ -171,8 +177,6 @@ def test_token_transfer_erc223(
     balance_A = token.call().balanceOf(A)
     balance_proxy = token.call().balanceOf(proxy.address)
 
-    with pytest.raises(tester.TransactionFailed):
-        token.transact({'from': A}).transfer(proxy.address, 0)
     with pytest.raises(TypeError):
         token.transact({'from': A}).transfer(proxy.address, -5)
     with pytest.raises(tester.TransactionFailed):
@@ -185,6 +189,10 @@ def test_token_transfer_erc223(
     # Arbitrary tests to see if the tokenFallback function from the proxy is called
     assert proxy.call().sender() == A
     assert proxy.call().value() == balance_A
+
+    token.transact({'from': A}).transfer(proxy.address, 0)
+
+    assert token.call().balanceOf(A) == 0
 
 
 def test_token_variables(
