@@ -45,8 +45,7 @@ contract Token {
     event Transfer(
         address indexed _from,
         address indexed _to,
-        uint256 _value,
-        bytes indexed _data);
+        uint256 _value);
     event Approval(
         address indexed _owner,
         address indexed _spender,
@@ -82,8 +81,7 @@ contract StandardToken is Token {
         balances[msg.sender] -= _value;
         balances[_to] += _value;
 
-        bytes memory empty;
-        Transfer(msg.sender, _to, _value, empty);
+        Transfer(msg.sender, _to, _value);
 
         return true;
     }
@@ -119,7 +117,7 @@ contract StandardToken is Token {
             ERC223ReceivingContract receiver = ERC223ReceivingContract(_to);
             receiver.tokenFallback(msg.sender, _value, _data);
         }
-        Transfer(msg.sender, _to, _value, _data);
+        Transfer(msg.sender, _to, _value);
         return true;
     }
 
@@ -143,9 +141,8 @@ contract StandardToken is Token {
         balances[_from] -= _value;
         allowed[_from][_to] -= _value;
 
-        bytes memory empty;
-        Transfer(_from, _to, _value, empty);
-        
+        Transfer(_from, _to, _value);
+
         return true;
     }
 
@@ -251,8 +248,6 @@ contract CustomToken is StandardToken {
         // Total supply of Tei at deployment
         totalSupply = initial_supply;
 
-        bytes memory empty;
-
         // Preallocate tokens to beneficiaries
         uint prealloc_tokens;
         for (uint i=0; i<owners.length; i++) {
@@ -264,11 +259,11 @@ contract CustomToken is StandardToken {
 
             balances[owners[i]] += tokens[i];
             prealloc_tokens += tokens[i];
-            Transfer(0, owners[i], tokens[i], empty);
+            Transfer(0, owners[i], tokens[i]);
         }
 
         balances[auction_address] = totalSupply - prealloc_tokens;
-        Transfer(0, auction_address, balances[auction], empty);
+        Transfer(0, auction_address, balances[auction]);
 
         Deployed(auction_address, totalSupply, balances[auction]);
 
