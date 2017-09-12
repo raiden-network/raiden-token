@@ -25,9 +25,10 @@ from auction_fixtures import (
     auction_ended,
     auction_bid_tested,
     auction_end_tests,
+    auction_claimed_tests,
 )
 
-# TODO: missingFundsToEndAuction, transferFundsToToken,
+# TODO: missingFundsToEndAuction,
 # TODO: review edge cases for claimTokens, bid
 
 
@@ -376,6 +377,7 @@ def test_auction_simulation(
     get_token_contract,
     auction_bid_tested,
     auction_end_tests,
+    auction_claimed_tests,
     txnCost
 ):
     eth = web3.eth
@@ -417,8 +419,6 @@ def test_auction_simulation(
 
     auction.transact().startAuction()
     assert auction.call().stage() == 2  # AuctionStarted
-
-    owner_balance_initial = web3.eth.getBalance(auction.call().owner())
 
     # Cannot changeSettings after auction starts
     with pytest.raises(tester.TransactionFailed):
@@ -521,10 +521,14 @@ def test_auction_simulation(
         # Number of Tei assigned to the bidder
         bidder_balance = token.call().balanceOf(bidder)
 
+        # Get owner & auction balance before claiming all the tokens
+        owner_pre_balance = web3.eth.getBalance(auction.call().owner())
+        auction_pre_balance = web3.eth.getBalance(auction.address)
+
         # Claim tokens -> tokens will be assigned to bidder
         auction.transact({'from': bidder}).claimTokens()
 
-        # If auction funds not transfered to token (last claimTokens)
+        # If auction funds not transferred to owner (last claimTokens)
         # we test for a correct claimed tokens calculation
         balance_auction = eth.getBalance(auction.address)
         if balance_auction > 0:
@@ -555,6 +559,7 @@ def test_auction_simulation(
         with pytest.raises(tester.TransactionFailed):
             auction.transact({'from': bidder}).claimTokens()
 
+
     # Check if all the auction tokens have been claimed
     total_tokens = auction.call().tokens_auctioned() + reduce((lambda x, y: x + y), prealloc)
     assert token.call().totalSupply() == total_tokens
@@ -563,14 +568,7 @@ def test_auction_simulation(
     assert token.call().balanceOf(auction.address) == rounding_error_tokens
     print('FINAL UNCLAIMED TOKENS', rounding_error_tokens)
 
-    # Test if Auction funds have been transfered to Token
-    funds_claimed = auction.call().funds_claimed()
-    assert eth.getBalance(auction.address) == 0
-    # TODO: make this more accurate (owner_balance_initial)
-    assert eth.getBalance(auction.call().owner()) >= funds_claimed
-
-    # Check if auction stage has been changed
-    assert auction.call().stage() == 5  # TradingStarted
+    auction_claimed_tests(auction, owner_pre_balance, auction_pre_balance)
 
 
 def test_waitfor_last_events_timeout():

@@ -22,6 +22,7 @@ from auction_fixtures import (
     auction_ended,
     auction_bid_tested,
     auction_end_tests,
+    auction_claimed_tests,
 )
 
 
@@ -70,7 +71,7 @@ def auction_post_claim_tokens_tests(token, auction, bidder, value, bidder_pre_ba
         auction.transact({'from': bidder}).claimTokens()
 
 
-def test_distributor_distribute(web3, token_contract, distributor_contract, auction_ended):
+def test_distributor_distribute(web3, token_contract, distributor_contract, auction_ended, auction_claimed_tests):
     distributor = distributor_contract
     token = token_contract
     auction = auction_ended
@@ -98,11 +99,16 @@ def test_distributor_distribute(web3, token_contract, distributor_contract, auct
     safe_distribution_no = 5
     steps = math.ceil(len(addresses) / safe_distribution_no)
 
+    owner_pre_balance = web3.eth.getBalance(auction.call().owner())
+    auction_pre_balance = web3.eth.getBalance(auction.address)
+
     # Call the distributor contract with batches of bidder addresses
     for i in range(0, steps):
         start = i * safe_distribution_no
         end = (i + 1) * safe_distribution_no
         distributor.transact({}).distribute(addresses[start : end])
+
+    auction_claimed_tests(auction, owner_pre_balance, auction_pre_balance)
 
     # Verify that a single "ClaimedTokens" event has been issued by the auction contract
     # for each address
@@ -125,6 +131,8 @@ def test_distributor_distribute(web3, token_contract, distributor_contract, auct
                 'filter': {'_recipient': address}
             },
             callback=verify_claim)
+
+
 
 
 def test_waitfor_last_events_timeout():

@@ -137,3 +137,17 @@ def auction_end_tests():
         with pytest.raises(tester.TransactionFailed):
             auction.transact({'from': bidder, "value": 0}).bid()
     return get
+
+
+# Tests that should run after the auction has ended
+@pytest.fixture()
+def auction_claimed_tests(web3):
+    def get(auction, owner_pre_balance, auction_pre_balance):
+        assert auction.call().stage() == 5  # TradingStarted
+
+        # Test if Auction funds have been transfered to the owner
+        assert web3.eth.getBalance(auction.address) == 0
+        assert auction.call().funds_claimed() == auction_pre_balance
+        # assert web3.eth.getBalance(auction.call().owner()) == owner_pre_balance + auction_pre_balance
+        assert web3.eth.getBalance(auction.call().owner()) >= owner_pre_balance + auction_pre_balance
+    return get
