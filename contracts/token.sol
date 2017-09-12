@@ -99,9 +99,7 @@ contract StandardToken is Token {
         public
         returns (bool)
     {
-        require(_to != 0x0);
-        require(balances[msg.sender] >= _value);
-        require(balances[_to] + _value >= balances[_to]);
+        assert(transfer(_to, _value));
 
         uint codeLength;
 
@@ -110,14 +108,11 @@ contract StandardToken is Token {
             codeLength := extcodesize(_to)
         }
 
-        balances[msg.sender] -= _value;
-        balances[_to] += _value;
-
         if(codeLength > 0) {
             ERC223ReceivingContract receiver = ERC223ReceivingContract(_to);
             receiver.tokenFallback(msg.sender, _value, _data);
         }
-        Transfer(msg.sender, _to, _value);
+
         return true;
     }
 
