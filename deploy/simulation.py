@@ -52,6 +52,22 @@ def print_auction(auction_contract):
     print_logs(auction_contract, 'TradingStarted', 'DutchAuction')
 
 
+def successful_bid(web3, auction, bidder, amount):
+    bid_successful = False
+
+    while not bid_successful and amount > 0:
+        try:
+            txhash = auction.transact({'from': bidder, "value": amount}).bid()
+            receipt = check_succesful_tx(web3, txhash)
+            print('BID successful')
+            bid_successful = amount
+        except:
+            missing = auction.call().missingFundsToEndAuction()
+            amount = missing // 7
+            print('Bid > missing funds, trying with {0} WEI'.format(amount))
+    return amount
+
+
 def auction_simulation(web3, token, auction, owner, bidders, bids=500, bid_interval=None, bid_start_price=None):
     bids = {}
     approx_payable_txn_cost = 30000
@@ -121,41 +137,40 @@ def auction_simulation(web3, token, auction, owner, bidders, bids=500, bid_inter
         bidder = bidders[bidder_number]
         bids[bidder] = 0
         missing_funds = auction.call().missingFundsToEndAuction()
+
+        # Avoid overbidding, otherwise the bid will fail
+        delta_overbid = missing_funds / 10
+
         bidder_balance = web3.eth.getBalance(bidder)
-        max_bid = int(missing_funds / (bidders_len - bidder_number))
+        max_bid = int((missing_funds - delta_overbid) / (bidders_len - bidder_number))
+
+        # Take the minimum between the bidder's balance and the max bid amount
         amount = int(min(bidder_balance - approx_bid_txn_cost, max_bid))
-        print('BID bidder, missing_funds, balance, amount', bidder, missing_funds, bidder_balance, amount_format(web3, amount))
-
-        # Check if last bidder - we want to close the auction
-        if bidder_number == bidders_len - 1 and missing_funds > amount:
-            # Calculate wanted price from the maximum amount of ETH that we can bid
-            wanted_price = multiplier * (amount + web3.eth.getBalance(auction.address)) / auction.call().tokens_auctioned()
-            # Calculate elapsed time needed to reach the wanted price (from auction start)
-            elapsed = elapsedAtPrice(wanted_price, price_factor, price_constant, multiplier)
-
-            # Calculate how much time we need to wait for the wanted price
-            price_now = auction.call().price()
-            elapsed_now = elapsedAtPrice(price_now, price_factor, price_constant, multiplier)
-            interval = elapsed - elapsed_now
-            print('elapsed, elapsed_now', elapsed, elapsed_now)
-            print('wanted_price, price_now', wanted_price, price_now)
-            print('Last bid delayed {0} seconds in order to wait for a smaller auction price.'.format(interval))
-            with Timeout() as timeout:
-                timeout.sleep(interval)  # seconds
 
         unlocked = web3.personal.unlockAccount(bidder, passphrase)
-        txhash = auction.transact({'from': bidder, "value": amount}).bid()
-        receipt = check_succesful_tx(web3, txhash)
 
-        with Timeout() as timeout:
-            timeout.sleep(10)
+        print('BID bidder, missing_funds, balance, amount', bidder, missing_funds, bidder_balance, amount_format(web3, amount))
+
+        if bidder_number == bidders_len - 1:
+            print('Bidding / Waiting until missing funds = 0')
+            with Timeout() as timeout:
+                while auction.call().missingFundsToEndAuction() > 0:
+                    print("Missing funds: ", auction.call().missingFundsToEndAuction())
+
+                    if web3.eth.getBalance(bidder) > amount:
+                        amount = successful_bid(web3, auction, bidder, amount)
+                    timeout.sleep(5)
 
         bids[bidder] += amount
-        # TODO - fix this assert + last bid after process is determined
-        if bidder_number < bidders_len - 1:
-            assert auction.call().bids(bidder) == bids[bidder]
+        # TODO assert bid amout?
         bidder_number += 1
 
-    print('missing funds', auction.call().missingFundsToEndAuction())
+    assert auction.call({'from': owner}).missingFundsToEndAuction() == 0
+    print('missing funds', auction.call({'from': owner}).missingFundsToEndAuction())
+
+    # Owner calls finalizeAuction
+    txhash = auction.transact({'from': owner}).finalizeAuction()
+    receipt = check_succesful_tx(web3, txhash)
+
     print('stage', auction.call().stage())
     assert auction.call().stage() == 3  # AuctionEnded
