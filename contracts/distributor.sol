@@ -31,7 +31,8 @@ contract Distributor {
      /*
       *  Public functions
       */
-
+    /// @dev Contract constructor function, sets the auction contract address.
+    /// @param _auction Address of auction contract.
     function Distributor(address _auction) {
         require(_auction != 0x0);
 
@@ -41,6 +42,9 @@ contract Distributor {
         Deployed();
     }
 
+    /// @notice Claim tokens in behalf of the following token owners: `addresses`.
+    /// @dev Function that is called with an array of addresses for claiming tokens in their behalf.
+    /// @param addresses Addresses of auction bidders that will be assigned tokens.
     function distribute(address[] addresses)
         public
         isOwner
