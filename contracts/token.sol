@@ -45,8 +45,7 @@ contract Token {
     event Transfer(
         address indexed _from,
         address indexed _to,
-        uint256 _value,
-        bytes indexed _data);
+        uint256 _value);
     event Approval(
         address indexed _owner,
         address indexed _spender,
@@ -76,15 +75,14 @@ contract StandardToken is Token {
         returns (bool)
     {
         require(_to != 0x0);
-        require(_value > 0);
         require(balances[msg.sender] >= _value);
-        require(balances[_to] + _value > balances[_to]);
+        require(balances[_to] + _value >= balances[_to]);
 
         balances[msg.sender] -= _value;
         balances[_to] += _value;
 
-        bytes memory empty;
-        Transfer(msg.sender, _to, _value, empty);
+        Transfer(msg.sender, _to, _value);
+
         return true;
     }
 
@@ -101,10 +99,7 @@ contract StandardToken is Token {
         public
         returns (bool)
     {
-        require(_to != 0x0);
-        require(_value > 0);
-        require(balances[msg.sender] >= _value);
-        require(balances[_to] + _value > balances[_to]);
+        assert(transfer(_to, _value));
 
         uint codeLength;
 
@@ -113,14 +108,11 @@ contract StandardToken is Token {
             codeLength := extcodesize(_to)
         }
 
-        balances[msg.sender] -= _value;
-        balances[_to] += _value;
-
         if(codeLength > 0) {
             ERC223ReceivingContract receiver = ERC223ReceivingContract(_to);
             receiver.tokenFallback(msg.sender, _value, _data);
         }
-        Transfer(msg.sender, _to, _value, _data);
+
         return true;
     }
 
@@ -136,17 +128,16 @@ contract StandardToken is Token {
     {
         require(_from != 0x0);
         require(_to != 0x0);
-        require(_value > 0);
         require(balances[_from] >= _value);
         require(allowed[_from][_to] >= _value);
-        require(balances[_to] + _value > balances[_to]);
+        require(balances[_to] + _value >= balances[_to]);
 
         balances[_to] += _value;
         balances[_from] -= _value;
         allowed[_from][_to] -= _value;
 
-        bytes memory empty;
-        Transfer(_from, _to, _value, empty);
+        Transfer(_from, _to, _value);
+
         return true;
     }
 
@@ -252,8 +243,6 @@ contract CustomToken is StandardToken {
         // Total supply of Tei at deployment
         totalSupply = initial_supply;
 
-        bytes memory empty;
-
         // Preallocate tokens to beneficiaries
         uint prealloc_tokens;
         for (uint i=0; i<owners.length; i++) {
@@ -265,11 +254,11 @@ contract CustomToken is StandardToken {
 
             balances[owners[i]] += tokens[i];
             prealloc_tokens += tokens[i];
-            Transfer(0, owners[i], tokens[i], empty);
+            Transfer(0, owners[i], tokens[i]);
         }
 
         balances[auction_address] = totalSupply - prealloc_tokens;
-        Transfer(0, auction_address, balances[auction], empty);
+        Transfer(0, auction_address, balances[auction]);
 
         Deployed(auction_address, totalSupply, balances[auction]);
 

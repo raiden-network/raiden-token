@@ -280,7 +280,7 @@ contract DutchAuction {
         // Set receiver bid to 0 before assigning tokens
         bids[receiver] = 0;
 
-        token.transfer(receiver, num);
+        assert(token.transfer(receiver, num));
 
         ClaimedTokens(receiver, num);
 
