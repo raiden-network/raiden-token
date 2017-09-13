@@ -2,15 +2,13 @@ import pytest
 from ethereum import tester
 from eth_utils import decode_hex
 from fixtures import (
+    owner,
+    contract_params,
     get_token_contract,
     token_contract,
     create_contract,
     print_logs,
-    multiplier,
-    initial_supply,
-    auction_supply,
-    prealloc,
-    auction_args,
+    prepare_preallocs,
     txnCost
 )
 
@@ -29,21 +27,25 @@ def test_token_init(
     chain,
     web3,
     get_token_contract,
-    proxy_contract):
+    proxy_contract,
+    contract_params):
     (A, B, C, D) = web3.eth.accounts[:4]
     auction = proxy_contract
+    multiplier = 10**(contract_params['decimals'])
+    initial_supply = contract_params['supply'] * multiplier
+
     preallocs = [
         500 * multiplier,
         800 * multiplier,
-        1100 * multiplier,
-        770 * multiplier
+        1000 * multiplier,
+        700 * multiplier
     ]
 
     # Transaction fails if different length arrays for owners & preallocation values
     with pytest.raises(tester.TransactionFailed):
         token = get_token_contract([
             auction.address,
-            initial_supply,
+            1000000 * multiplier,
             [A, B, C, D],
             [4000, 3000, 5000]
         ])
@@ -68,8 +70,11 @@ def test_token_transfer(
     chain,
     web3,
     get_token_contract,
-    proxy_contract):
+    proxy_contract,
+    contract_params):
     (A, B, C) = web3.eth.accounts[:3]
+    multiplier = 10**(contract_params['decimals'])
+    initial_supply = contract_params['supply'] * multiplier
     preallocs = [
         500,
         800,
@@ -104,8 +109,11 @@ def test_token_transfer_from(
     chain,
     web3,
     get_token_contract,
-    proxy_contract):
+    proxy_contract,
+    contract_params):
     (A, B, C) = web3.eth.accounts[:3]
+    multiplier = 10**(contract_params['decimals'])
+    initial_supply = contract_params['supply'] * multiplier
     preallocs = [
         500,
         800,
@@ -199,8 +207,11 @@ def test_token_variables(
     chain,
     web3,
     get_token_contract,
-    proxy_contract):
+    proxy_contract,
+    contract_params):
     (A, B, C) = web3.eth.accounts[:3]
+    multiplier = 10**(contract_params['decimals'])
+    initial_supply = contract_params['supply'] * multiplier
     preallocs = [
         500,
         800,
@@ -226,9 +237,12 @@ def test_burn(
     web3,
     get_token_contract,
     proxy_contract,
+    contract_params,
     txnCost):
     eth = web3.eth
     (A, B, C) = web3.eth.accounts[:3]
+    multiplier = 10**(contract_params['decimals'])
+    initial_supply = contract_params['supply'] * multiplier
     preallocs = [
         500 * multiplier,
         800 * multiplier,
