@@ -1,4 +1,5 @@
 import pytest
+from eth_utils import decode_hex, keccak
 from functools import (
     reduce
 )
@@ -8,8 +9,12 @@ from utils import (
 )
 
 
+MAX_UINT = 2**256
+fake_address = 0x03432
 print_the_logs = False
 passphrase = '0'
+fixture_decimals = [18, 1]
+
 
 contract_args = [
     {
@@ -28,8 +33,15 @@ contract_args = [
     }
 ]
 
-'''
+
 contract_args += [
+    {
+        'token': 'CustomToken2',
+        'decimals': 1,
+        'supply': 10000000,
+        'preallocations': [200000, 800000],
+        'args': [5982, 59]
+    },
     {
         'token': 'CustomToken2',
         'decimals': 1,
@@ -38,9 +50,13 @@ contract_args += [
         'args': [10000, 7500]
     }
 ]
-'''
+
 
 # auction_supply = initial_supply - reduce((lambda x, y: x + y), prealloc)
+
+def test_bytes(value=10, size=256):
+    hex_value = decode_hex('{:x}'.format(value).zfill(size // 4))
+    return keccak(hex_value)
 
 
 def prepare_preallocs(multiplier, preallocs):
@@ -55,15 +71,17 @@ def owner(web3):
 @pytest.fixture()
 def team(web3, contract_params):
     index_end = len(contract_params['preallocations']) + 1
-    return web3.eth.accounts[1:index_end]
-
+    return web3.eth.accounts[2:(index_end + 1)]
 
 @pytest.fixture()
 def get_bidders(web3, contract_params, create_accounts):
     def get_these_bidders(number):
-        index_start = 2+ len(contract_params['preallocations'])
-        bidders = web3.eth.accounts[index_start:]
-        bidders += create_accounts(number - len(bidders))
+        index_start = 2 + len(contract_params['preallocations'])
+        accounts_len = len(web3.eth.accounts)
+        index_end = min(number + index_start, accounts_len)
+        bidders = web3.eth.accounts[index_start:index_end]
+        if number > len(bidders):
+            bidders += create_accounts(number - len(bidders))
         return bidders
     return get_these_bidders
 
@@ -116,11 +134,15 @@ def auction_contract(
 @pytest.fixture()
 def get_token_contract(chain, create_contract, owner):
     # contract can be auction contract or proxy contract
-    def get(arguments, transaction=None, token_type='CustomToken'):
+    def get(arguments, transaction=None, token_type='CustomToken', decimals=18):
+        if not decimals == 18:
+            token_type = 'CustomToken2'
+            arguments.insert(0, decimals)
+
         CustomToken = chain.provider.get_contract_factory(token_type)
         if not transaction:
             transaction = {'from': owner}
-
+        # print('get_token_contract token_type', token_type, decimals, arguments)
         token_contract = create_contract(CustomToken, arguments, transaction)
 
         if print_the_logs:
@@ -138,6 +160,7 @@ def token_contract(
     chain,
     web3,
     owner,
+    team,
     contract_params,
     get_token_contract):
     decimals = contract_params['decimals']
@@ -146,23 +169,15 @@ def token_contract(
     supply = contract_params['supply'] * multiplier
     token_type = contract_params['token']
 
-    owners = web3.eth.accounts[2:(len(preallocations) + 2)]
-
     def get(auction_address, transaction=None):
-        args = []
-
-        if token_type == 'CustomToken2':
-            args.append(decimals)
-
-        args += [
+        args = [
             auction_address,
             supply,
-            owners,
+            team,
             prepare_preallocs(multiplier, preallocations)
         ]
-        if not transaction:
-            transaction = {'from': owner}
-        token_contract = get_token_contract(args, transaction, token_type)
+
+        token_contract = get_token_contract(args, transaction, token_type, decimals)
 
         return token_contract
     return get
