@@ -105,6 +105,11 @@ def wait(transfer_filter):
             timeout.sleep(2)
 
 
+def elapsed_at_price(price, price_factor, price_constant, multiplier):
+    elapsed = (multiplier * price_factor) / (price - 1) - price_constant
+    return int(elapsed)
+
+
 # Almost equal
 def xassert(a, b, threshold=0.0001):
     if min(a, b) > 0:

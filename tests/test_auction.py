@@ -6,6 +6,9 @@ from functools import (
 from web3.utils.compat import (
     Timeout,
 )
+from utils import (
+    elapsed_at_price,
+)
 from fixtures import (
     owner,
     team,
@@ -18,6 +21,7 @@ from fixtures import (
     create_accounts,
     prepare_preallocs,
     txnCost,
+    event_handler,
 )
 
 from auction_fixtures import (
@@ -59,7 +63,8 @@ def test_auction_setup(
     web3,
     owner,
     auction_contract,
-    token_contract):
+    token_contract,
+    contract_params):
     auction = auction_contract
     A = web3.eth.accounts[2]
 
@@ -71,7 +76,7 @@ def test_auction_setup(
         auction.transact({'from': owner}).setup(token.address)
 
     web3.testing.mine(5)
-    token = token_contract(auction.address, {'from': owner})
+    token = token_contract(auction.address)
     auction.transact({'from': owner}).setup(token.address)
     assert auction.call().tokens_auctioned() == token.call().balanceOf(auction.address)
     assert auction.call().multiplier() == 10**token.call().decimals()
@@ -219,8 +224,14 @@ def test_price(
     auction.transact({'from': owner}).startAuction()
     web3.testing.mine(5)
 
-    # TODO can fail if the price factors do not decrease auction price fast enough
-    assert auction.call().price() < initial_price
+    # Can fail if the price factors do not decrease auction price fast enough
+    elapsed = elapsed_at_price(initial_price - 1, price_factor, price_const, multiplier)
+    if elapsed < 5:
+        with Timeout() as timeout:
+            timeout.sleep(elapsed)
+        assert auction.call().price() < initial_price
+    else:
+        print('--- elapsed_at_price: {0} for price_factor = {1} ; price_const = {2} ; multiplier = {3}'.format(elapsed, price_factor, price_const, multiplier))
 
     missing_funds = auction.call().missingFundsToEndAuction()
     auction_bid_tested(auction, A, missing_funds)
@@ -290,8 +301,9 @@ def test_auction_payable(
     })
     assert web3.eth.getBalance(auction.address) == 100
 
-    auction.transact({'from': A, "value": missing_funds - 100}).bid()
-    assert web3.eth.getBalance(auction.address) == missing_funds
+    missing_funds = auction.call().missingFundsToEndAuction()
+    auction.transact({'from': A, "value": missing_funds}).bid()
+    assert web3.eth.getBalance(auction.address) == missing_funds + 100
 
     auction.transact({'from': owner}).finalizeAuction()
     auction_end_tests(auction, B)
@@ -374,7 +386,12 @@ def test_auction_final_bid_1(
     missing_funds = auction.call().missingFundsToEndAuction()
     amount = missing_funds - 1
     auction_bid_tested(auction, bidder, amount)
-    auction_bid_tested(auction, bidder, 1)
+
+    # Some parameters decrease the price very fast
+    missing_funds = auction.call().missingFundsToEndAuction()
+    if missing_funds > 0:
+        auction_bid_tested(auction, bidder, 1)
+
     auction.transact({'from': owner}).finalizeAuction()
     auction_end_tests(auction, late_bidder)
 
@@ -400,7 +417,10 @@ def test_auction_final_bid_2(
     with pytest.raises(tester.TransactionFailed):
         auction_bid_tested(auction, B, 3)
 
-    auction_bid_tested(auction, B, 2)
+    # Some parameters decrease the price very fast
+    missing_funds = auction.call().missingFundsToEndAuction()
+    if missing_funds > 0:
+        auction_bid_tested(auction, B, missing_funds)
 
     auction.transact({'from': owner}).finalizeAuction()
     auction_end_tests(auction, late_bidder)
@@ -430,7 +450,10 @@ def test_auction_final_bid_5(
 
     auction_pre_balance = web3.eth.getBalance(auction.address)
     for bidder in bidders:
-        auction_bid_tested(auction, bidder, 1)
+        # Some parameters decrease the price very fast
+        missing_funds = auction.call().missingFundsToEndAuction()
+        if missing_funds > 0:
+            auction_bid_tested(auction, bidder, missing_funds)
 
     assert web3.eth.getBalance(auction.address) == auction_pre_balance + 5
 
@@ -531,7 +554,10 @@ def test_auction_simulation(
 
     while auction.call().missingFundsToEndAuction() > 0:
         if bidders_len < index:
-            print('!! Not enough accounts to simulate bidders')
+            new_account = create_accounts(1)[0]
+            bidders.append(new_account)
+            bidders_len += 1
+            print('Creating 1 additional bidder account', new_account)
 
         bidder = bidders[index]
 
