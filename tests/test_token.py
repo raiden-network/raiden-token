@@ -6,6 +6,7 @@ from functools import (
 from fixtures import (
     MAX_UINT,
     fake_address,
+    token_events,
     owner,
     team,
     get_bidders,
@@ -18,8 +19,10 @@ from fixtures import (
     prepare_preallocs,
     create_accounts,
     txnCost,
-    test_bytes
+    test_bytes,
+    event_handler,
 )
+from utils_logs import LogFilter
 
 
 @pytest.fixture()
@@ -108,10 +111,18 @@ def test_token_init(
             [500 * multiplier, -2]
         ], decimals=decimals)
 
+    # Test max uint as supply
+    token = get_token_contract([
+        proxy_contract.address,
+        MAX_UINT,
+        [A, B, C, D],
+        preallocs
+    ], decimals=decimals)
+
     with pytest.raises(TypeError):
         token = get_token_contract([
             proxy_contract.address,
-            MAX_UINT,
+            MAX_UINT + 1,
             [A, B, C, D],
             preallocs
         ], decimals=decimals)
@@ -227,8 +238,10 @@ def transfer_tests(
     bidders,
     multiplier,
     preallocs,
-    token):
+    token,
+    event_handler):
     (A, B, C) = bidders
+    ev_handler = event_handler(token)
 
     with pytest.raises(TypeError):
         token.transact({'from': A}).transfer(0, 10)
@@ -237,7 +250,7 @@ def transfer_tests(
         token.transact({'from': A}).transfer(fake_address, 10)
 
     with pytest.raises(TypeError):
-        token.transact({'from': A}).transfer(B, MAX_UINT)
+        token.transact({'from': A}).transfer(B, MAX_UINT + 1)
 
     with pytest.raises(TypeError):
         token.transact({'from': A}).transfer(B, -5)
@@ -250,17 +263,22 @@ def transfer_tests(
         balance_B = token.call().balanceOf(B)
         token.transact({'from': A}).transfer(B, MAX_UINT + 1 - balance_B)
 
-    token.transact({'from': A}).transfer(B, 0)
+    txn_hash = token.transact({'from': A}).transfer(B, 0)
+    ev_handler.add(txn_hash, token_events['transfer'])
     assert token.call().balanceOf(A) == preallocs[0]
     assert token.call().balanceOf(B) == preallocs[1]
 
-    token.transact({'from': A}).transfer(B, 120)
+    txn_hash = token.transact({'from': A}).transfer(B, 120)
+    ev_handler.add(txn_hash, token_events['transfer'])
     assert token.call().balanceOf(A) == preallocs[0] - 120
     assert token.call().balanceOf(B) == preallocs[1] + 120
 
-    token.transact({'from': B}).transfer(C, 66)
+    txn_hash = token.transact({'from': B}).transfer(C, 66)
+    ev_handler.add(txn_hash, token_events['transfer'])
     assert token.call().balanceOf(B) == preallocs[1] + 120 - 66
     assert token.call().balanceOf(C) == preallocs[2] + 66
+
+    ev_handler.check()
 
 
 def transfer_erc223_tests(
@@ -270,8 +288,10 @@ def transfer_erc223_tests(
     token,
     proxy,
     token_erc223,
-    proxy_erc223):
+    proxy_erc223,
+    event_handler):
     (A, B, C) = bidders
+    ev_handler = event_handler(token_erc223)
     test_data = test_bytes()  # 32 bytes
     test_data2 = test_bytes(value=20)
     assert not test_data == test_data2
@@ -294,7 +314,9 @@ def transfer_erc223_tests(
     with pytest.raises(tester.TransactionFailed):
         token.transact({'from': A}).transfer(proxy.address, balance_A, test_data)
 
-    token.transact({'from': A}).transfer(proxy_erc223.address, balance_A, test_data)
+    # TODO FIXME erc223 transfer event not handled correctly
+    txn_hash = token.transact({'from': A}).transfer(proxy_erc223.address, balance_A, test_data)
+    # ev_handler.add(txn_hash, token_events['transfer'])
     assert token.call().balanceOf(A) == 0
     assert token.call().balanceOf(proxy_erc223.address) == balance_proxy_erc223 + balance_A
 
@@ -304,14 +326,20 @@ def transfer_erc223_tests(
 
     balance_B = token.call().balanceOf(B)
     balance_proxy_erc223 = token.call().balanceOf(proxy_erc223.address)
-    token.transact({'from': B}).transfer(proxy_erc223.address, 0, test_data2)
+    txn_hash = token.transact({'from': B}).transfer(proxy_erc223.address, 0, test_data2)
+    # ev_handler.add(txn_hash, token_events['transfer'])
     assert token.call().balanceOf(B) == balance_B
     assert token.call().balanceOf(proxy_erc223.address) == balance_proxy_erc223
     assert proxy_erc223.call().sender() == B
     assert proxy_erc223.call().value() == 0
 
-    token.transact({'from': A}).transfer(proxy_erc223.address, 0)
-    token.transact({'from': A}).transfer(proxy.address, 0)
+    txn_hash = token.transact({'from': A}).transfer(proxy_erc223.address, 0)
+    #ev_handler.add(txn_hash, token_events['transfer'])
+
+    txn_hash = token.transact({'from': A}).transfer(proxy.address, 0)
+    #ev_handler.add(txn_hash, token_events['transfer'])
+
+    ev_handler.check()
 
 
 @pytest.mark.parametrize('decimals', fixture_decimals)
@@ -322,7 +350,8 @@ def test_token_transfer(
     token_contract,
     proxy_contract,
     proxy_erc223_contract,
-    decimals):
+    decimals,
+    event_handler):
     (A, B, C) = web3.eth.accounts[1:4]
     multiplier = 10**(decimals)
     preallocs = [
@@ -342,7 +371,8 @@ def test_token_transfer(
         (A, B, C),
         multiplier,
         preallocs,
-        token)
+        token,
+        event_handler)
 
     token = token_contract(proxy_contract.address)
     token_erc223 = token_contract(proxy_erc223_contract.address)
@@ -354,7 +384,8 @@ def test_token_transfer(
         token,
         proxy_contract,
         token_erc223,
-        proxy_erc223_contract)
+        proxy_erc223_contract,
+        event_handler)
 
 
 @pytest.mark.parametrize('decimals', fixture_decimals)
@@ -362,7 +393,8 @@ def test_token_approve(
     web3,
     get_token_contract,
     proxy_contract,
-    decimals):
+    decimals,
+    event_handler):
     (A, B, C) = web3.eth.accounts[1:4]
     multiplier = 10**(decimals)
     preallocs = [
@@ -378,6 +410,7 @@ def test_token_approve(
         preallocs
     ], decimals=decimals)
     assert token.call().decimals() == decimals
+    ev_handler = event_handler(token)
 
     with pytest.raises(TypeError):
         token.transact({'from': A}).approve(0, B)
@@ -393,16 +426,23 @@ def test_token_approve(
 
     # We can approve more than we have
     # with pytest.raises(tester.TransactionFailed):
-    token.transact({'from': A}).approve(B, preallocs[0] + 1)
+    txn_hash = token.transact({'from': A}).approve(B, preallocs[0] + 1)
+    ev_handler.add(txn_hash, token_events['approve'])
 
-    token.transact({'from': A}).approve(A, 300)
+    txn_hash = token.transact({'from': A}).approve(A, 300)
+    ev_handler.add(txn_hash, token_events['approve'])
     assert token.call().allowance(A, A) == 300
 
-    token.transact({'from': A}).approve(B, 300)
-    token.transact({'from': B}).approve(C, 650)
+    txn_hash = token.transact({'from': A}).approve(B, 300)
+    ev_handler.add(txn_hash, token_events['approve'])
+
+    txn_hash = token.transact({'from': B}).approve(C, 650)
+    ev_handler.add(txn_hash, token_events['approve'])
 
     assert token.call().allowance(A, B) == 300
     assert token.call().allowance(B, C) == 650
+
+    ev_handler.check()
 
 
 @pytest.mark.parametrize('decimals', fixture_decimals)
@@ -451,7 +491,8 @@ def test_token_transfer_from(
     web3,
     get_token_contract,
     proxy_contract,
-    decimals):
+    decimals,
+    event_handler):
     (A, B, C) = web3.eth.accounts[1:4]
     multiplier = 10**(decimals)
     preallocs = [
@@ -466,8 +507,10 @@ def test_token_transfer_from(
         preallocs
     ], decimals=decimals)
     assert token.call().decimals() == decimals
+    ev_handler = event_handler(token)
 
-    token.transact({'from': B}).approve(A, 300)
+    txn_hash = token.transact({'from': B}).approve(A, 300)
+    ev_handler.add(txn_hash, token_events['approve'])
     assert token.call().allowance(B, A) == 300
 
     with pytest.raises(TypeError):
@@ -483,7 +526,7 @@ def test_token_transfer_from(
         token.transact({'from': A}).transferFrom(B, fake_address, 10)
 
     with pytest.raises(TypeError):
-        token.transact({'from': A}).transferFrom(B, C, MAX_UINT)
+        token.transact({'from': A}).transferFrom(B, C, MAX_UINT + 1)
 
     with pytest.raises(TypeError):
         token.transact({'from': A}).transferFrom(B, C, -5)
@@ -501,26 +544,31 @@ def test_token_transfer_from(
     # Test for overflow
     with pytest.raises(tester.TransactionFailed):
         balance_B = token.call().balanceOf(B)
-        overflow = MAX_UINT - balance_B
+        overflow = MAX_UINT + 1 - balance_B
         token.transact({'from': B}).approve(A, overflow)
         token.transact({'from': A}).transferFrom(B, C, overflow)
 
-    token.transact({'from': B}).approve(A, 300)
+    txn_hash = token.transact({'from': B}).approve(A, 300)
+    ev_handler.add(txn_hash, token_events['approve'])
     assert token.call().allowance(B, A) == 300
 
     balance_A = token.call().balanceOf(A)
     balance_B = token.call().balanceOf(B)
     balance_C = token.call().balanceOf(C)
 
-    token.transact({'from': A}).transferFrom(B, C, 0)
+    txn_hash = token.transact({'from': A}).transferFrom(B, C, 0)
+    ev_handler.add(txn_hash, token_events['transfer'])
     assert token.call().balanceOf(A) == balance_A
     assert token.call().balanceOf(B) == balance_B
     assert token.call().balanceOf(C) == balance_C
 
-    token.transact({'from': A}).transferFrom(B, C, 150)
+    txn_hash = token.transact({'from': A}).transferFrom(B, C, 150)
+    ev_handler.add(txn_hash, token_events['transfer'])
     assert token.call().balanceOf(A) == balance_A
     assert token.call().balanceOf(B) == balance_B - 150
     assert token.call().balanceOf(C) == balance_C + 150
+
+    ev_handler.check()
 
 
 @pytest.mark.parametrize('decimals', fixture_decimals)
@@ -530,7 +578,9 @@ def test_burn(
     get_token_contract,
     proxy_contract,
     decimals,
-    txnCost):
+    txnCost,
+    event_handler):
+    decimals = 18
     eth = web3.eth
     (A, B, C) = eth.accounts[1:4]
     multiplier = 10**(decimals)
@@ -548,11 +598,13 @@ def test_burn(
     ], decimals=decimals)
     assert token.call().decimals() == decimals
 
+    ev_handler = event_handler(token)
+
     with pytest.raises(TypeError):
         token.transact({'from': B}).burn(-3)
 
     with pytest.raises(TypeError):
-        token.transact({'from': B}).burn(MAX_UINT)
+        token.transact({'from': B}).burn(MAX_UINT + 1)
 
     with pytest.raises(tester.TransactionFailed):
         token.transact({'from': B}).burn(0)
@@ -564,7 +616,10 @@ def test_burn(
     tokens_B = token.call().balanceOf(B)
     balance_B = eth.getBalance(B)
     burnt = 250 * multiplier
-    txn_cost = txnCost(token.transact({'from': B}).burn(burnt))
+    txn_hash = token.transact({'from': B}).burn(burnt)
+    txn_cost = txnCost(txn_hash)
+    ev_handler.add(txn_hash, token_events['burn'])
+
 
     assert token.call().totalSupply() == initial_supply - burnt
     assert token.call().balanceOf(B) == tokens_B - burnt
@@ -574,8 +629,29 @@ def test_burn(
     balance_B = eth.getBalance(B)
     total_supply = token.call().totalSupply()
 
-    txn_cost = txnCost(token.transact({'from': B}).burn(tokens_B))
+    txn_hash = token.transact({'from': B}).burn(tokens_B)
+    txn_cost = txnCost(txn_hash)
 
     assert token.call().totalSupply() == total_supply - tokens_B
     assert token.call().balanceOf(B) == 0
     assert balance_B == eth.getBalance(B) + txn_cost
+
+    ev_handler.check()
+
+
+def test_event_handler(token_contract, proxy_contract, event_handler):
+    token = token_contract(proxy_contract.address)
+    ev_handler = event_handler(token)
+
+    fake_txn = 0x0343
+
+    # Add fake events with no transactions
+    ev_handler.add(fake_txn, token_events['deploy'])
+    ev_handler.add(fake_txn, token_events['setup'])
+    ev_handler.add(fake_txn, token_events['transfer'])
+    ev_handler.add(fake_txn, token_events['approve'])
+    ev_handler.add(fake_txn, token_events['burn'])
+
+    # This should fail
+    with pytest.raises(Exception):
+        ev_handler.check(1)

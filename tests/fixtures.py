@@ -8,10 +8,15 @@ from utils import (
     print_logs,
 )
 
+from utils_logs import (
+    LogHandler
+)
 
-MAX_UINT = 2**256
-fake_address = 0x03432
+
 print_the_logs = False
+
+MAX_UINT = 2**256 - 1
+fake_address = 0x03432
 passphrase = '0'
 fixture_decimals = [18, 1]
 
@@ -50,6 +55,14 @@ contract_args += [
         'args': [10000, 7500]
     }
 ]
+
+token_events = {
+    'deploy': 'Deployed',
+    'setup': 'Setup',
+    'transfer': 'Transfer',
+    'approve': 'Approval',
+    'burn': 'Burnt'
+}
 
 
 # auction_supply = initial_supply - reduce((lambda x, y: x + y), prealloc)
@@ -156,6 +169,25 @@ def get_token_contract(chain, create_contract, owner):
 
 
 @pytest.fixture()
+def event_handler(chain, web3):
+    def get_event_handler(contract=None, address=None, abi=None):
+        if contract:
+            # Get contract factory name from contract instance
+            # TODO is there an actual API for this??
+            comp_target = contract.metadata['settings']['compilationTarget']
+            name = comp_target[list(comp_target.keys())[0]]
+
+            abi = chain.provider.get_base_contract_factory(name).abi
+            address = contract.address
+
+        if address and abi:
+            return LogHandler(web3, address, abi)
+        else:
+            raise Exception('event_handler called without a contract instance')
+    return get_event_handler
+
+
+@pytest.fixture()
 def token_contract(
     chain,
     web3,
@@ -208,10 +240,18 @@ def txnCost(chain, web3):
 
 
 @pytest.fixture
-def create_contract(chain):
+def create_contract(chain, event_handler):
     def get(contract_type, arguments, transaction=None):
         deploy_txn_hash = contract_type.deploy(transaction=transaction, args=arguments)
         contract_address = chain.wait.for_contract_address(deploy_txn_hash)
         contract = contract_type(address=contract_address)
+
+        # Check deploy event if not proxy contract
+        if len(arguments) > 0:
+            ev_handler = event_handler(contract)
+            if ev_handler:
+                ev_handler.add(deploy_txn_hash, token_events['deploy'])
+                ev_handler.check()
+
         return contract
     return get
