@@ -5,28 +5,28 @@ import './ERC223ReceivingContract.sol';
 /// @title Base Token contract - Functions to be implemented by token contracts.
 contract Token {
     /*
-        Implements ERC 20 standard.
-        https://github.com/ethereum/EIPs/blob/f90864a3d2b2b45c4decf95efd26b3f0c276051a/EIPS/eip-20-token-standard.md
-        https://github.com/ethereum/EIPs/issues/20
-
-        Added support for the ERC 223 "tokenFallback" method in a "transfer" function with a payload.
-        https://github.com/ethereum/EIPs/issues/223
+     * Implements ERC 20 standard.
+     * https://github.com/ethereum/EIPs/blob/f90864a3d2b2b45c4decf95efd26b3f0c276051a/EIPS/eip-20-token-standard.md
+     * https://github.com/ethereum/EIPs/issues/20
+     *
+     *  Added support for the ERC 223 "tokenFallback" method in a "transfer" function with a payload.
+     *  https://github.com/ethereum/EIPs/issues/223
      */
 
     /*
-        This is a slight change to the ERC20 base standard.
-        function totalSupply() constant returns (uint256 supply);
-        is replaced with:
-        uint256 public totalSupply;
-        This automatically creates a getter function for the totalSupply.
-        This is moved to the base contract since public getter functions are not
-        currently recognised as an implementation of the matching abstract
-        function by the compiler.
-    */
+     * This is a slight change to the ERC20 base standard.
+     * function totalSupply() constant returns (uint256 supply);
+     * is replaced with:
+     * uint256 public totalSupply;
+     * This automatically creates a getter function for the totalSupply.
+     * This is moved to the base contract since public getter functions are not
+     * currently recognised as an implementation of the matching abstract
+     * function by the compiler.
+     */
     uint256 public totalSupply;
 
     /*
-     *  ERC 20
+     * ERC 20
      */
     function balanceOf(address _owner) constant returns (uint256 balance);
     function transfer(address _to, uint256 _value) returns (bool success);
@@ -35,21 +35,15 @@ contract Token {
     function allowance(address _owner, address _spender) constant returns (uint256 remaining);
 
     /*
-     *  ERC 223
+     * ERC 223
      */
     function transfer(address _to, uint256 _value, bytes _data) returns (bool success);
 
     /*
-     *  Events
+     * Events
      */
-    event Transfer(
-        address indexed _from,
-        address indexed _to,
-        uint256 _value);
-    event Approval(
-        address indexed _owner,
-        address indexed _spender,
-        uint256 _value);
+    event Transfer(address indexed _from, address indexed _to, uint256 _value);
+    event Approval(address indexed _owner, address indexed _spender, uint256 _value);
 }
 
 
@@ -57,23 +51,20 @@ contract Token {
 contract StandardToken is Token {
 
     /*
-     *  Data structures
+     * Data structures
      */
     mapping (address => uint256) balances;
     mapping (address => mapping (address => uint256)) allowed;
 
     /*
-     *  Public functions
+     * Public functions
      */
     /// @notice Send `_value` tokens to `_to` from `msg.sender`.
     /// @dev Transfers sender's tokens to a given address. Returns success.
     /// @param _to Address of token receiver.
     /// @param _value Number of tokens to transfer.
     /// @return Returns success of function call.
-    function transfer(address _to, uint256 _value)
-        public
-        returns (bool)
-    {
+    function transfer(address _to, uint256 _value) public returns (bool) {
         require(_to != 0x0);
         require(balances[msg.sender] >= _value);
         require(balances[_to] + _value >= balances[_to]);
@@ -86,7 +77,8 @@ contract StandardToken is Token {
         return true;
     }
 
-    /// @notice Send `_value` tokens to `_to` from `msg.sender` and trigger tokenFallback if sender is a contract.
+    /// @notice Send `_value` tokens to `_to` from `msg.sender` and trigger
+    /// tokenFallback if sender is a contract.
     /// @dev Function that is called when a user or another contract wants to transfer funds.
     /// @param _to Address of token receiver.
     /// @param _value Number of tokens to transfer.
@@ -104,7 +96,7 @@ contract StandardToken is Token {
         uint codeLength;
 
         assembly {
-            // Retrieve the size of the code on target address, this needs assembly .
+            // Retrieve the size of the code on target address, this needs assembly.
             codeLength := extcodesize(_to)
         }
 
@@ -117,7 +109,8 @@ contract StandardToken is Token {
     }
 
     /// @notice Transfer `_value` tokens from `_from` to `_to` if `msg.sender` is allowed.
-    /// @dev Allows allowed third party to transfer tokens from one address to another. Returns success.
+    /// @dev Allows for an approved third party to transfer tokens from one
+    /// address to another. Returns success.
     /// @param _from Address from where tokens are withdrawn.
     /// @param _to Address to where tokens are sent.
     /// @param _value Number of tokens to transfer.
@@ -146,10 +139,7 @@ contract StandardToken is Token {
     /// @param _spender Address of allowed account.
     /// @param _value Number of approved tokens.
     /// @return Returns success of function call.
-    function approve(address _spender, uint256 _value)
-        public
-        returns (bool)
-    {
+    function approve(address _spender, uint256 _value) public returns (bool) {
         require(_spender != 0x0);
         require(_value > 0);
 
@@ -161,7 +151,8 @@ contract StandardToken is Token {
     /*
      * Read functions
      */
-    /// @dev Returns number of allowed tokens that a spender can transfer in behalf of a token owner.
+    /// @dev Returns number of allowed tokens that a spender can transfer in
+    /// behalf of a token owner.
     /// @param _owner Address of token owner.
     /// @param _spender Address of token spender.
     /// @return Returns remaining allowance for spender.
@@ -176,11 +167,7 @@ contract StandardToken is Token {
     /// @dev Returns number of tokens owned by the given address.
     /// @param _owner Address of token owner.
     /// @return Returns balance of owner.
-    function balanceOf(address _owner)
-        constant
-        public
-        returns (uint256)
-    {
+    function balanceOf(address _owner) constant public returns (uint256) {
         return balances[_owner];
     }
 }
@@ -210,16 +197,19 @@ contract CustomToken is StandardToken {
     event Deployed(
         address indexed _auction,
         uint indexed _total_supply,
-        uint indexed _auction_supply);
+        uint indexed _auction_supply
+    );
     event Burnt(
         address indexed _receiver,
         uint indexed _num,
-        uint indexed _total_supply);
+        uint indexed _total_supply
+    );
 
     /*
      *  Public functions
      */
-    /// @dev Contract constructor function sets dutch auction contract address and assigns all tokens to dutch auction.
+    /// @dev Contract constructor function sets dutch auction contract address
+    /// and assigns all tokens to dutch auction.
     /// @param auction Address of dutch auction contract.
     /// @param initial_supply Number of initially provided token units (Tei).
     /// @param owners Array of addresses receiving preassigned tokens.
@@ -265,12 +255,13 @@ contract CustomToken is StandardToken {
         assert(totalSupply == balances[auction_address] + prealloc_tokens);
     }
 
-    /// @notice Allows `msg.sender` to simply destroy `num` token units (Tei), without receiving the corresponding amount of ether. This means the total token supply will decrease.
-    /// @dev Allows to destroy token units (Tei) without receiving the corresponding amount of ether.
+    /// @notice Allows `msg.sender` to simply destroy `num` token units (Tei),
+    /// without receiving the corresponding amount of ether. This means the total
+    /// token supply will decrease.
+    /// @dev Allows to destroy token units (Tei) without receiving the
+    /// corresponding amount of ether.
     /// @param num Number of token units (Tei) to burn.
-    function burn(uint num)
-        public
-    {
+    function burn(uint num) public {
         require(num > 0);
         require(balances[msg.sender] >= num);
         require(totalSupply >= num);
