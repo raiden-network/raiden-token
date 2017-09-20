@@ -24,6 +24,10 @@ populus compile
 pytest -p no:warnings -s
 pytest tests/test_auction.py -p no:warnings -s
 
+# Recommended:
+pip install pytest-xdist
+pytest -p no:warnings -s -n NUM_OF_CPUs
+
 ```
 
 #### Deployment

@@ -8,13 +8,20 @@ from utils import (
     handle_logs,
 )
 from fixtures import (
-    auction_args,
+    owner,
+    team,
+    get_bidders,
+    contract_params,
     create_contract,
     auction_contract,
     get_token_contract,
     token_contract,
+    distributor_contract,
+    create_accounts,
     print_logs,
     txnCost,
+    event_handler,
+    fake_address
 )
 
 from auction_fixtures import (
@@ -25,35 +32,39 @@ from auction_fixtures import (
     auction_claimed_tests,
 )
 
+from populus.utils.wait import wait_for_transaction_receipt
 
-@pytest.fixture()
-def distributor_contract(
+
+def test_distributor_init(
     chain,
+    web3,
+    owner,
+    get_bidders,
     create_contract,
-    auction_contract):
-    Distributor = chain.provider.get_contract_factory('Distributor')
-    distributor_contract = create_contract(Distributor, [auction_contract.address])
-
-    print_logs(distributor_contract, 'Distributed', 'Distributor')
-    print_logs(distributor_contract, 'ClaimTokensCalled', 'Distributor')
-
-    return distributor_contract
-
-
-def test_distributor_init(chain, web3, create_contract):
-    A = web3.eth.accounts[2]
+    contract_params):
+    A = get_bidders(1)[0]
     Distributor = chain.provider.get_contract_factory('Distributor')
     Auction = chain.provider.get_contract_factory('DutchAuction')
-    auction = create_contract(Auction, auction_args[0])
-    other_owner_auction = create_contract(Auction, auction_args[0], {'from': A})
+    auction = create_contract(Auction, contract_params['args'], {'from': owner})
 
-    # Fail if no auction address provided
+    other_owner_auction = create_contract(Auction, contract_params['args'], {'from': A})
+    other_contract_type = create_contract(Distributor, [auction.address])
+
+    assert owner != A
+
+    # Fail if no auction address is provided
     with pytest.raises(TypeError):
-        distributor_contract = create_contract(Distributor, [])
+        create_contract(Distributor, [])
+
+    # Fail if non address-type auction address is provided
+    with pytest.raises(TypeError):
+        create_contract(Distributor, [fake_address])
+    with pytest.raises(TypeError):
+        create_contract(Distributor, [0x0])
 
     # Fail if auction has another owner
     with pytest.raises(tester.TransactionFailed):
-        distributor_contract = create_contract(Distributor, [other_owner_auction.address])
+        create_contract(Distributor, [other_owner_auction.address])
 
     distributor_contract = create_contract(Distributor, [auction.address])
 
@@ -78,6 +89,7 @@ def auction_post_claim_tokens_tests(
 
 def test_distributor_distribute(
     web3,
+    owner,
     token_contract,
     distributor_contract,
     auction_ended,
@@ -116,7 +128,7 @@ def test_distributor_distribute(
     for i in range(0, steps):
         start = i * safe_distribution_no
         end = (i + 1) * safe_distribution_no
-        distributor.transact({}).distribute(addresses[start:end])
+        distributor.transact({'from': owner}).distribute(addresses[start:end])
 
     auction_claimed_tests(auction, owner_pre_balance, auction_pre_balance)
 

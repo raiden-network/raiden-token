@@ -2,15 +2,12 @@ import pytest
 from ethereum import tester
 
 from fixtures import (
+    owner,
+    get_bidders,
     create_contract,
     auction_contract,
     get_token_contract,
     token_contract,
-    auction_args,
-    initial_supply,
-    auction_supply,
-    prealloc,
-    multiplier,
     txnCost,
 )
 
@@ -18,19 +15,14 @@ from fixtures import (
 @pytest.fixture()
 def auction_setup_contract(
     web3,
+    owner,
     auction_contract,
-    get_token_contract):
+    token_contract):
     auction = auction_contract
-    owners = web3.eth.accounts[:2]
 
     # Initialize token
-    token = get_token_contract([
-        auction.address,
-        initial_supply,
-        owners,
-        prealloc
-    ])
-    auction.transact().setup(token.address)
+    token = token_contract(auction.address, {'from': owner})
+    auction.transact({'from': owner}).setup(token.address)
     return auction
 
 
@@ -53,26 +45,35 @@ def auction_bid_tested(web3, txnCost):
 
 
 @pytest.fixture()
-def auction_started_fast_decline(web3, auction_setup_contract):
+def auction_started_fast_decline(
+    web3,
+    owner,
+    auction_setup_contract):
     auction = auction_setup_contract
+    multiplier = auction.call().multiplier()
+
     # Higher price decline
-    auction.transact().changeSettings(2, multiplier)
-    auction.transact().startAuction()
+    auction.transact({'from': owner}).changeSettings(2, multiplier)
+    auction.transact({'from': owner}).startAuction()
     return auction
 
 
 @pytest.fixture()
 def auction_ended(
     web3,
+    owner,
+    get_bidders,
     auction_setup_contract,
     auction_bid_tested,
     auction_end_tests):
     eth = web3.eth
     auction = auction_setup_contract
-    bidders = eth.accounts[2:]
+    bidders = get_bidders(10)
+    multiplier = auction.call().multiplier()
+
     # Higher price decline
-    auction.transact().changeSettings(2, multiplier)
-    auction.transact().startAuction()
+    auction.transact({'from': owner}).changeSettings(2, multiplier)
+    auction.transact({'from': owner}).startAuction()
 
     # Set maximum amount for a bid - we don't want 1 account draining the auction
     missing_funds = auction.call().missingFundsToEndAuction()
@@ -119,7 +120,7 @@ def auction_ended(
     print('NO OF BIDDERS', index)
 
     assert eth.getBalance(auction.address) == bidded
-    auction.transact().finalizeAuction()
+    auction.transact({'from': owner}).finalizeAuction()
     auction_end_tests(auction, bidders[index])
 
     return auction
