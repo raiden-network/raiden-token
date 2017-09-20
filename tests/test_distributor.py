@@ -9,6 +9,7 @@ from utils import (
 )
 from fixtures import (
     owner,
+    team,
     get_bidders,
     contract_params,
     create_contract,
@@ -19,6 +20,8 @@ from fixtures import (
     create_accounts,
     print_logs,
     txnCost,
+    event_handler,
+    fake_address
 )
 
 from auction_fixtures import (
@@ -35,21 +38,33 @@ from populus.utils.wait import wait_for_transaction_receipt
 def test_distributor_init(
     chain,
     web3,
+    owner,
+    get_bidders,
     create_contract,
     contract_params):
-    A = web3.eth.accounts[2]
+    A = get_bidders(1)[0]
     Distributor = chain.provider.get_contract_factory('Distributor')
     Auction = chain.provider.get_contract_factory('DutchAuction')
-    auction = create_contract(Auction, contract_params['args'])
-    other_owner_auction = create_contract(Auction, contract_params['args'], {'from': A})
+    auction = create_contract(Auction, contract_params['args'], {'from': owner})
 
-    # Fail if no auction address provided
+    other_owner_auction = create_contract(Auction, contract_params['args'], {'from': A})
+    other_contract_type = create_contract(Distributor, [auction.address])
+
+    assert owner != A
+
+    # Fail if no auction address is provided
     with pytest.raises(TypeError):
-        distributor_contract = create_contract(Distributor, [])
+        create_contract(Distributor, [])
+
+    # Fail if non address-type auction address is provided
+    with pytest.raises(TypeError):
+        create_contract(Distributor, [fake_address])
+    with pytest.raises(TypeError):
+        create_contract(Distributor, [0x0])
 
     # Fail if auction has another owner
     with pytest.raises(tester.TransactionFailed):
-        distributor_contract = create_contract(Distributor, [other_owner_auction.address])
+        create_contract(Distributor, [other_owner_auction.address])
 
     distributor_contract = create_contract(Distributor, [auction.address])
 
