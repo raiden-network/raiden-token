@@ -305,7 +305,7 @@ contract DutchAuction {
             transferFundsToOwner();
         }
 
-        assert(num == token.balanceOf(receiver));
+        assert(token.balanceOf(receiver) >= num);
         assert(bids[receiver] == 0);
     }
 
