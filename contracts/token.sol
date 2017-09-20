@@ -262,6 +262,8 @@ contract CustomToken is StandardToken {
 
         Deployed(auction_address, totalSupply, balances[auction]);
 
+        assert(balances[auction_address] > 0);
+        assert(balances[auction_address] < totalSupply);
         assert(totalSupply == balances[auction_address] + prealloc_tokens);
     }
 
