@@ -100,7 +100,7 @@ contract StandardToken is Token {
             codeLength := extcodesize(_to)
         }
 
-        if(codeLength > 0) {
+        if (codeLength > 0) {
             ERC223ReceivingContract receiver = ERC223ReceivingContract(_to);
             receiver.tokenFallback(msg.sender, _value, _data);
         }
@@ -235,7 +235,7 @@ contract CustomToken is StandardToken {
 
         // Preallocate tokens to beneficiaries
         uint prealloc_tokens;
-        for (uint i=0; i<owners.length; i++) {
+        for (uint i = 0; i < owners.length; i++) {
             // Address should not be null.
             require(owners[i] != 0x0);
             require(tokens[i] > 0);

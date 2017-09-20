@@ -258,7 +258,7 @@ contract DutchAuction {
         uint unclaimed_tokens = (this.balance - funds_claimed) * multiplier / final_price;
         unclaimed_tokens += rounding_error_tokens;
 
-        if(auction_unclaimed_tokens != unclaimed_tokens) {
+        if (auction_unclaimed_tokens != unclaimed_tokens) {
             rounding_error_tokens += 1;
             unclaimed_tokens += 1;
         }
