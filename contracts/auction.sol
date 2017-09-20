@@ -5,16 +5,16 @@ import './token.sol';
 /// @title Dutch auction contract - distribution of tokens using an auction.
 contract DutchAuction {
     /*
-     *  Auction for the TKN Token.
-
-     *  Terminology:
-     *  1 token unit = Tei
-     *  1 token = TKN = Tei * multiplier
-     *  multiplier set from token's number of decimals (i.e. 10**decimals)
-    */
+     * Auction for the TKN Token.
+     *
+     * Terminology:
+     * 1 token unit = Tei
+     * 1 token = TKN = Tei * multiplier
+     * multiplier set from token's number of decimals (i.e. 10**decimals)
+     */
 
     /*
-     *  Storage
+     * Storage
      */
 
     CustomToken public token;
@@ -47,7 +47,7 @@ contract DutchAuction {
     uint rounding_error_tokens;
 
     /*
-     *  Enums
+     * Enums
      */
     enum Stages {
         AuctionDeployed,
@@ -59,7 +59,7 @@ contract DutchAuction {
     }
 
     /*
-     *  Modifiers
+     * Modifiers
      */
     modifier atStage(Stages _stage) {
         require(stage == _stage);
@@ -77,44 +77,36 @@ contract DutchAuction {
     }
 
     /*
-     *  Events
+     * Events
      */
 
     event Deployed(
         address indexed _auction,
         uint indexed _price_factor,
-        uint indexed _price_const);
+        uint indexed _price_const
+    );
     event Setup();
-    event SettingsChanged(
-        uint indexed _price_factor,
-        uint indexed _price_const);
-    event AuctionStarted(
-        uint indexed _start_time,
-        uint indexed _block_number);
+    event SettingsChanged(uint indexed _price_factor, uint indexed _price_const);
+    event AuctionStarted(uint indexed _start_time, uint indexed _block_number);
     event BidSubmission(
         address indexed _sender,
         uint indexed _amount,
-        uint indexed _missing_funds);
-    event ClaimedTokens(
-        address indexed _recipient,
-        uint indexed _sent_amount);
-    event AuctionEnded(
-        uint indexed _final_price);
+        uint indexed _missing_funds
+    );
+    event ClaimedTokens(address indexed _recipient, uint indexed _sent_amount);
+    event AuctionEnded(uint indexed _final_price);
     event TokensDistributed();
     event TradingStarted();
 
     /*
-     *  Public functions
+     * Public functions
      */
 
-    /// @dev Contract constructor function sets price factor and constant for calculating the Dutch Auction price.
+    /// @dev Contract constructor function sets price factor and constant for
+    /// calculating the Dutch Auction price.
     /// @param _price_factor Auction price factor.
     /// @param _price_const Auction price divisor constant.
-    function DutchAuction(
-        uint _price_factor,
-        uint _price_const)
-        public
-    {
+    function DutchAuction(uint _price_factor, uint _price_const) public {
         require(this.balance == 0);
 
         owner = msg.sender;
@@ -123,23 +115,15 @@ contract DutchAuction {
         changeSettings(_price_factor, _price_const);
     }
 
-    /// @dev  Fallback function for the contract, which calls bid() if the auction has started.
-    function ()
-        public
-        payable
-        atStage(Stages.AuctionStarted)
-    {
+    /// @dev Fallback function for the contract, which calls bid() if the auction has started.
+    function () public payable atStage(Stages.AuctionStarted) {
         bid(msg.sender);
     }
 
     /// @notice Set `_token` as the token address to be used in the auction.
     /// @dev Setup function sets external contracts addresses.
     /// @param _token Token address.
-    function setup(address _token)
-        public
-        isOwner
-        atStage(Stages.AuctionDeployed)
-    {
+    function setup(address _token) public isOwner atStage(Stages.AuctionDeployed) {
         require(_token != 0x0);
         token = CustomToken(_token);
         require(token.owner() == owner);
@@ -158,16 +142,12 @@ contract DutchAuction {
         assert(tokens_auctioned > multiplier);
     }
 
-    /// @notice Set `_price_factor` and `_price_const` as the new price factor and price divisor constant.
+    /// @notice Set `_price_factor` and `_price_const` as the new price factor
+    /// and price divisor constant.
     /// @dev Changes auction start price factor before auction is started.
     /// @param _price_factor Updated price factor.
     /// @param _price_const Updated price divisor constant.
-    function changeSettings(
-        uint _price_factor,
-        uint _price_const)
-        public
-        isOwner
-    {
+    function changeSettings(uint _price_factor, uint _price_const) public isOwner {
         require(stage == Stages.AuctionDeployed || stage == Stages.AuctionSetUp);
         require(_price_factor > 0);
         require(_price_const > 0);
@@ -179,22 +159,17 @@ contract DutchAuction {
 
     /// @notice Start the auction.
     /// @dev Starts auction and sets start_time.
-    function startAuction()
-        public
-        isOwner
-        atStage(Stages.AuctionSetUp)
-    {
+    function startAuction() public isOwner atStage(Stages.AuctionSetUp) {
         stage = Stages.AuctionStarted;
         start_time = now;
         start_block = block.number;
         AuctionStarted(start_time, start_block);
     }
 
-    /// @notice Finalize the auction - sets the final price and changes the auction stage after no bids are allowed anymore.
+    /// @notice Finalize the auction - sets the final price and changes the auction
+    /// stage after no bids are allowed anymore.
     /// @dev Finalize auction and set the final token price.
-    function finalizeAuction()
-        public
-        atStage(Stages.AuctionStarted)
+    function finalizeAuction() public atStage(Stages.AuctionStarted)
     {
         // Missing funds should be 0 at this point
         uint missing_funds = missingFundsToEndAuction();
@@ -210,15 +185,11 @@ contract DutchAuction {
         assert(final_price > 0);
     }
 
-    /// --------------------------------- Auction Functions -------------------------------------------
+    /// --------------------------------- Auction Functions ------------------
 
     /// @notice Send `msg.value` WEI to the auction from the `msg.sender` account.
     /// @dev Allows to send a bid to the auction.
-    function bid()
-        public
-        payable
-        atStage(Stages.AuctionStarted)
-    {
+    function bid() public payable atStage(Stages.AuctionStarted) {
         bid(msg.sender);
     }
 
@@ -251,10 +222,7 @@ contract DutchAuction {
 
     /// @notice Claim auction tokens for `msg.sender` after the auction has ended.
     /// @dev Claims tokens for bidder after auction. To be used if tokens can be claimed by bidders, individually.
-    function claimTokens()
-        public
-        atStage(Stages.AuctionEnded)
-    {
+    function claimTokens() public atStage(Stages.AuctionEnded) {
         claimTokens(msg.sender);
     }
 
@@ -329,62 +297,50 @@ contract DutchAuction {
         assert(owner.balance >= pre_balance);
     }
 
-    /// @dev Calculates the token price (WEI / TKN) at the current timestamp during the auction; elapsed time = 0 before auction starts.
+    /// @dev Calculates the token price (WEI / TKN) at the current timestamp
+    /// during the auction; elapsed time = 0 before auction starts.
     /// @dev At AuctionDeployed the price is 1, because multiplier is 0
     /// @return Returns the token price - Wei per TKN.
-    function calcTokenPrice()
-        constant
-        private
-        returns (uint)
-    {
+    function calcTokenPrice() constant private returns (uint) {
         uint elapsed;
-        if(stage == Stages.AuctionStarted) {
+        if (stage == Stages.AuctionStarted) {
             elapsed = now - start_time;
         }
         return multiplier * price_factor / (elapsed + price_const) + 1;
     }
 
-    /// --------------------------------- Price Functions -------------------------------------------
+    /// --------------------------------- Price Functions ----------------------
 
-    /// @notice Get the TKN price in WEI during the auction, at the moment of calling this method. Returns `0` if auction has ended.
+    /// @notice Get the TKN price in WEI during the auction, at the moment of
+    /// calling this method. Returns `0` if auction has ended.
     /// @dev Calculates current token price.
     /// @return Returns num Wei per TKN (multiplier * Tei).
-    function price()
-        public
-        constant
-        returns (uint)
-    {
+    function price() public constant returns (uint) {
         if (stage == Stages.AuctionEnded ||
             stage == Stages.TokensDistributed ||
-            stage == Stages.TradingStarted)
-        {
+            stage == Stages.TradingStarted) {
             return 0;
         }
         return calcTokenPrice();
     }
 
-    /// @notice Get the missing funds needed to end the auction, calculated at the current TKN price.
+    /// @notice Get the missing funds needed to end the auction,
+    /// calculated at the current TKN price.
     /// @dev The missing funds amount necessary to end the auction at the current price.
     /// @return Returns the missing funds amount.
-    function missingFundsToEndAuction()
-        constant
-        public
-        returns (uint)
-    {
+    function missingFundsToEndAuction() constant public returns (uint) {
         return missingFundsToEndAuction(this.balance);
     }
 
-    /// @notice Get the missing funds needed to end the auction, calculated at the current TKN price.
-    /// @dev The missing funds amount in WEI, necessary to end the auction at the current price (WEI/TKN), for a provided balance.
+    /// @notice Get the missing funds needed to end the auction, calculated
+    /// at the current TKN price.
+    /// @dev The missing funds amount in WEI, necessary to end the auction at
+    /// the current price (WEI/TKN), for a provided balance.
     /// @param funds Current balance or current balance without current bid value for bid().
     /// @return Returns the missing funds amount.
-    function missingFundsToEndAuction(uint funds)
-        constant
-        public
-        returns (uint)
-    {
+    function missingFundsToEndAuction(uint funds) constant public returns (uint) {
         uint funds_at_price = tokens_auctioned * price() / multiplier;
-        if(funds_at_price < funds) {
+        if (funds_at_price < funds) {
             return 0;
         }
         return funds_at_price - funds;
