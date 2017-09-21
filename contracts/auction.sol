@@ -139,7 +139,7 @@ contract DutchAuction {
         Setup();
 
         // Tei auctioned
-        assert(tokens_auctioned > multiplier);
+        require(tokens_auctioned > multiplier);
     }
 
     /// @notice Set `_price_factor` and `_price_const` as the new price factor
@@ -247,7 +247,7 @@ contract DutchAuction {
         // Set receiver bid to 0 before assigning tokens
         bids[receiver] = 0;
 
-        assert(token.transfer(receiver, num));
+        require(token.transfer(receiver, num));
 
         ClaimedTokens(receiver, num);
 

@@ -91,7 +91,7 @@ contract StandardToken is Token {
         public
         returns (bool)
     {
-        assert(transfer(_to, _value));
+        require(transfer(_to, _value));
 
         uint codeLength;
 
