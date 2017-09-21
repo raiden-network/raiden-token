@@ -1,6 +1,10 @@
 import pytest
 from ethereum import tester
 
+from functools import (
+    reduce
+)
+
 from fixtures import (
     owner,
     get_bidders,
@@ -10,6 +14,11 @@ from fixtures import (
     token_contract,
     txnCost,
 )
+
+
+'''
+    Various auction contracts in different stages.
+'''
 
 
 @pytest.fixture()
@@ -24,24 +33,6 @@ def auction_setup_contract(
     token = token_contract(auction.address, {'from': owner})
     auction.transact({'from': owner}).setup(token.address)
     return auction
-
-
-# Bid + tests that should run when bidding
-@pytest.fixture()
-def auction_bid_tested(web3, txnCost):
-    def get(auction, bidder, amount):
-        bidder_pre_balance = web3.eth.getBalance(bidder)
-        bidder_pre_a_balance = auction.call().bids(bidder)
-        auction_pre_balance = web3.eth.getBalance(auction.address)
-        missing_funds = auction.call().missingFundsToEndAuction()
-        accepted_amount = min(missing_funds, amount)
-
-        txn_cost = txnCost(auction.transact({'from': bidder, 'value': amount}).bid())
-
-        assert auction.call().bids(bidder) == bidder_pre_a_balance + accepted_amount
-        assert web3.eth.getBalance(auction.address) == auction_pre_balance + accepted_amount
-        assert web3.eth.getBalance(bidder) == bidder_pre_balance - accepted_amount - txn_cost
-    return get
 
 
 @pytest.fixture()
@@ -126,6 +117,89 @@ def auction_ended(
     return auction
 
 
+'''
+    Auction tests that should always run after important actions.
+    To be called from the integration tests.
+'''
+
+
+# Bid + tests that should run when bidding
+@pytest.fixture()
+def auction_bid_tested(web3, txnCost):
+    def get(auction, bidder, amount):
+        bidder_pre_balance = web3.eth.getBalance(bidder)
+        bidder_pre_a_balance = auction.call().bids(bidder)
+        auction_pre_balance = web3.eth.getBalance(auction.address)
+        missing_funds = auction.call().missingFundsToEndAuction()
+        accepted_amount = min(missing_funds, amount)
+
+        txn_cost = txnCost(auction.transact({'from': bidder, 'value': amount}).bid())
+
+        assert auction.call().bids(bidder) == bidder_pre_a_balance + accepted_amount
+        assert web3.eth.getBalance(auction.address) == auction_pre_balance + accepted_amount
+        assert web3.eth.getBalance(bidder) == bidder_pre_balance - accepted_amount - txn_cost
+    return get
+
+
+# Claim tokens + tests that should run when claiming tokens
+@pytest.fixture()
+def auction_claim_tokens_tested(web3, owner):
+    def get(token, auction, bidders, distributor=None):
+        if type(bidders) == str:
+            bidders = [bidders]
+
+        values = []
+        pre_balances = []
+        expected_tokens = []
+
+        multiplier = auction.call().multiplier()
+        final_price = auction.call().final_price()
+        auction_pre_balance = token.call().balanceOf(auction.address)
+        pre_funds_claimed = auction.call().funds_claimed()
+
+        assert auction.call().stage() == 3  # AuctionEnded
+        assert final_price > 0
+
+        for i, bidder in enumerate(bidders):
+            values.append(auction.call().bids(bidder))
+            tokens_expected = multiplier * values[i] // final_price
+            expected_tokens.append(tokens_expected)
+            pre_balances.append(token.call().balanceOf(bidder))
+
+            if tokens_expected == 0:
+                print('-- just claimed 0 tokens for a bid value of ', values[i])
+
+            assert values[i] > 0
+
+        if len(bidders) == 1:
+            auction.transact({'from': bidders[0]}).claimTokens()
+        else:
+            distributor.transact({'from': owner}).distribute(bidders)
+
+        for i, bidder in enumerate(bidders):
+            print('auction_claim_tokens_tested balanceOf(bidder)', token.call().balanceOf(bidder))
+            print('auction_claim_tokens_tested pre_balances', pre_balances[i])
+            print('auction_claim_tokens_tested expected_tokens', expected_tokens[i])
+            assert token.call().balanceOf(bidder) == pre_balances[i] + expected_tokens[i]
+            assert auction.call().bids(bidder) == 0
+
+            # Bidder cannot claim tokens again
+            with pytest.raises(tester.TransactionFailed):
+                auction.transact({'from': bidder}).claimTokens()
+
+        print('--- funds_claimed', auction.call().funds_claimed())
+        print('--- funds_claimed should', pre_funds_claimed + reduce((lambda x, y: x + y), values))
+
+
+        print('--- token.call().balanceOf(auction.address)', token.call().balanceOf(auction.address))
+        print('--- token.call().balanceOf(auction.address) should ', auction_pre_balance - reduce((lambda x, y: x + y), expected_tokens))
+
+        assert auction.call().funds_claimed() == pre_funds_claimed + reduce((lambda x, y: x + y), values)
+        assert token.call().balanceOf(auction.address) == auction_pre_balance - reduce((lambda x, y: x + y), expected_tokens)
+
+    return get
+
+
 # Tests that should run after the auction has ended
 @pytest.fixture()
 def auction_end_tests():
@@ -146,7 +220,7 @@ def auction_end_tests():
 
 # Tests that should run after the auction has ended
 @pytest.fixture()
-def auction_claimed_tests(web3):
+def auction_post_distributed_tests(web3):
     def get(auction, owner_pre_balance, auction_pre_balance):
         owner = auction.call().owner()
         assert auction.call().stage() == 5  # TradingStarted
@@ -154,6 +228,6 @@ def auction_claimed_tests(web3):
         # Test if Auction funds have been transfered to the owner
         assert web3.eth.getBalance(auction.address) == 0
         assert auction.call().funds_claimed() == auction_pre_balance
-        # assert web3.eth.getBalance(owner) == owner_pre_balance + auction_pre_balance
+        assert web3.eth.getBalance(owner) == owner_pre_balance + auction_pre_balance
         assert web3.eth.getBalance(owner) >= owner_pre_balance + auction_pre_balance
     return get

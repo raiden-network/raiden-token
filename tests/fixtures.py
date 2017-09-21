@@ -88,7 +88,7 @@ def team(web3, contract_params):
 
 @pytest.fixture()
 def get_bidders(web3, contract_params, create_accounts):
-    def get_these_bidders(number):
+    def get(number):
         index_start = 2 + len(contract_params['preallocations'])
         accounts_len = len(web3.eth.accounts)
         index_end = min(number + index_start, accounts_len)
@@ -96,7 +96,7 @@ def get_bidders(web3, contract_params, create_accounts):
         if number > len(bidders):
             bidders += create_accounts(number - len(bidders))
         return bidders
-    return get_these_bidders
+    return get
 
 
 @pytest.fixture(params=contract_args)
@@ -106,7 +106,7 @@ def contract_params(request):
 
 @pytest.fixture()
 def create_accounts(web3):
-    def create_more_accounts(number):
+    def get(number):
         new_accounts = []
         for i in range(0, number):
             new_account = web3.personal.newAccount(passphrase)
@@ -119,7 +119,7 @@ def create_accounts(web3):
             web3.personal.unlockAccount(new_account, passphrase)
             new_accounts.append(new_account)
         return new_accounts
-    return create_more_accounts
+    return get
 
 
 @pytest.fixture()
@@ -170,7 +170,7 @@ def get_token_contract(chain, create_contract, owner):
 
 @pytest.fixture()
 def event_handler(chain, web3):
-    def get_event_handler(contract=None, address=None, abi=None):
+    def get(contract=None, address=None, abi=None):
         if contract:
             # Get contract factory name from contract instance
             # TODO is there an actual API for this??
@@ -184,7 +184,7 @@ def event_handler(chain, web3):
             return LogHandler(web3, address, abi)
         else:
             raise Exception('event_handler called without a contract instance')
-    return get_event_handler
+    return get
 
 
 @pytest.fixture()

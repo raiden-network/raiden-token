@@ -30,7 +30,8 @@ from auction_fixtures import (
     auction_ended,
     auction_bid_tested,
     auction_end_tests,
-    auction_claimed_tests,
+    auction_post_distributed_tests,
+    auction_claim_tokens_tested,
 )
 
 # TODO: missingFundsToEndAuction,
@@ -261,11 +262,11 @@ def test_auction_payable(
     token_contract,
     contract_params,
     txnCost,
-    auction_end_tests):
+    auction_end_tests,
+    auction_claim_tokens_tested):
     eth = web3.eth
     auction = auction_contract
 
-    # Owner + preallocated accounts cannot claim their tokens
     bidders_index = 2 + len(contract_params['preallocations'])
     (A, B) = web3.eth.accounts[bidders_index:(bidders_index + 2)]
 
@@ -318,8 +319,8 @@ def test_auction_payable(
             'value': 1
         })
 
-    auction.transact({'from': A}).claimTokens()
-    assert token.call().balanceOf(A)
+    auction_claim_tokens_tested(token, auction, A)
+
     assert auction.call().stage() == 5
 
     # Any payable transactions should fail now
@@ -472,7 +473,8 @@ def test_auction_simulation(
     contract_params,
     auction_bid_tested,
     auction_end_tests,
-    auction_claimed_tests,
+    auction_post_distributed_tests,
+    auction_claim_tokens_tested,
     create_accounts,
     txnCost
 ):
@@ -610,23 +612,16 @@ def test_auction_simulation(
     print('TOTAL TOKENS CLAIMABLE', int(total_tokens_claimable))
     assert int(total_tokens_claimable) == auction.call().tokens_auctioned()
 
+    # Get owner & auction balance before claiming all the tokens
+    auction_pre_balance = web3.eth.getBalance(auction.address)
+    owner_pre_balance = web3.eth.getBalance(auction.call().owner())
+
     rounding_error_tokens = 0
 
     for i in range(0, index):
         bidder = bidders[i]
 
-        # Calculate number of Tei issued for this bid
-        claimable = auction.call().bids(bidder) * multiplier // final_price
-
-        # Number of Tei assigned to the bidder
-        bidder_balance = token.call().balanceOf(bidder)
-
-        # Get owner & auction balance before claiming all the tokens
-        owner_pre_balance = web3.eth.getBalance(auction.call().owner())
-        auction_pre_balance = web3.eth.getBalance(auction.address)
-
-        # Claim tokens -> tokens will be assigned to bidder
-        auction.transact({'from': bidder}).claimTokens()
+        auction_claim_tokens_tested(token, auction, bidder)
 
         # If auction funds not transferred to owner (last claimTokens)
         # we test for a correct claimed tokens calculation
@@ -651,13 +646,6 @@ def test_auction_simulation(
                 unclaimed_tokens += 1
             assert unclaimed_token_supply == unclaimed_tokens
 
-        # Check if bidder has the correct number of tokens
-        bidder_balance += claimable
-        assert token.call().balanceOf(bidder) == bidder_balance
-
-        # Bidder cannot claim tokens again
-        with pytest.raises(tester.TransactionFailed):
-            auction.transact({'from': bidder}).claimTokens()
 
     # Check if all the auction tokens have been claimed
     total_tokens = auction.call().tokens_auctioned() + reduce((lambda x, y: x + y), prealloc)
@@ -667,7 +655,7 @@ def test_auction_simulation(
     assert token.call().balanceOf(auction.address) == rounding_error_tokens
     print('FINAL UNCLAIMED TOKENS', rounding_error_tokens)
 
-    auction_claimed_tests(auction, owner_pre_balance, auction_pre_balance)
+    auction_post_distributed_tests(auction, owner_pre_balance, auction_pre_balance)
 
 
 def test_waitfor_last_events_timeout():

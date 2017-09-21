@@ -29,7 +29,8 @@ from auction_fixtures import (
     auction_ended,
     auction_bid_tested,
     auction_end_tests,
-    auction_claimed_tests,
+    auction_claim_tokens_tested,
+    auction_post_distributed_tests,
 )
 
 from populus.utils.wait import wait_for_transaction_receipt
@@ -69,34 +70,17 @@ def test_distributor_init(
     distributor_contract = create_contract(Distributor, [auction.address])
 
 
-def auction_post_claim_tokens_tests(
-    token,
-    auction,
-    bidder,
-    value,
-    bidder_pre_balance,
-    auction_pre_balance):
-    # Check if bidder has the correct number of tokens
-    bidder_balance = bidder_pre_balance + value
-    auction_balance = auction_pre_balance + value
-    assert token.call().balanceOf(bidder) == bidder_balance
-    assert token.call().balanceOf(auction.address) == auction_balance
-
-    # Bidder cannot claim tokens again
-    with pytest.raises(tester.TransactionFailed):
-        auction.transact({'from': bidder}).claimTokens()
-
-
 def test_distributor_distribute(
     web3,
     owner,
     token_contract,
     distributor_contract,
     auction_ended,
-    auction_claimed_tests):
+    auction_claim_tokens_tested,
+    auction_post_distributed_tests):
     distributor = distributor_contract
-    token = token_contract
     auction = auction_ended
+    token = token_contract(auction.address)
     addresses = []
     values = []
     claimed = []
@@ -128,9 +112,10 @@ def test_distributor_distribute(
     for i in range(0, steps):
         start = i * safe_distribution_no
         end = (i + 1) * safe_distribution_no
-        distributor.transact({'from': owner}).distribute(addresses[start:end])
+        auction_claim_tokens_tested(token, auction, addresses[start:end], distributor)
+        # distributor.transact({'from': owner}).distribute(addresses[start:end])
 
-    auction_claimed_tests(auction, owner_pre_balance, auction_pre_balance)
+    auction_post_distributed_tests(auction, owner_pre_balance, auction_pre_balance)
 
     # Verify that a single "ClaimedTokens" event has been issued by the auction contract
     # for each address
@@ -139,6 +124,7 @@ def test_distributor_distribute(
         assert auction.call().bids(address) == 0
 
         def verify_claim(event):
+            print('verify_claim event', event)
             # Check for double claiming
             assert address not in verified_claim
             # sent_amount = event['args']['_sent_amount']
