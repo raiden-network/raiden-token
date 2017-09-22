@@ -141,9 +141,6 @@ contract DutchAuction {
 
         stage = Stages.AuctionSetUp;
         Setup();
-
-        // Tei auctioned
-        require(tokens_auctioned > multiplier);
     }
 
     /// @notice Set `_price_factor` and `_price_const` as the new price factor
