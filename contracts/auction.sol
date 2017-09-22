@@ -177,7 +177,7 @@ contract DutchAuction {
     {
         // Missing funds should be 0 at this point
         uint missing_funds = missingFundsToEndAuction();
-        assert(missing_funds == 0);
+        require(missing_funds == 0);
 
         // Calculate the final price WEI / TKN = WEI / (Tei / multiplier)
         final_price = multiplier * received_ether / tokens_auctioned;
