@@ -179,8 +179,8 @@ contract DutchAuction {
         uint missing_funds = missingFundsToEndAuction();
         assert(missing_funds == 0);
 
-        // Calculate the final price WEI / TKN
-        final_price = received_ether / (tokens_auctioned / multiplier);
+        // Calculate the final price WEI / TKN = WEI / (Tei / multiplier)
+        final_price = multiplier * received_ether / tokens_auctioned;
 
         end_time = now;
         stage = Stages.AuctionEnded;
