@@ -8,7 +8,9 @@ from utils import (
     handle_logs,
 )
 from fixtures import (
+    owner_index,
     owner,
+    wallet,
     team,
     get_bidders,
     contract_params,
@@ -39,6 +41,7 @@ from populus.utils.wait import wait_for_transaction_receipt
 def test_distributor_init(
     chain,
     web3,
+    wallet,
     owner,
     get_bidders,
     create_contract,
@@ -46,9 +49,9 @@ def test_distributor_init(
     A = get_bidders(1)[0]
     Distributor = chain.provider.get_contract_factory('Distributor')
     Auction = chain.provider.get_contract_factory('DutchAuction')
-    auction = create_contract(Auction, contract_params['args'], {'from': owner})
+    auction = create_contract(Auction, [wallet] + contract_params['args'], {'from': owner})
 
-    other_owner_auction = create_contract(Auction, contract_params['args'], {'from': A})
+    other_owner_auction = create_contract(Auction, [wallet] + contract_params['args'], {'from': A})
     other_contract_type = create_contract(Distributor, [auction.address])
 
     assert owner != A
@@ -105,9 +108,6 @@ def test_distributor_distribute(
     safe_distribution_no = 5
     steps = math.ceil(len(addresses) / safe_distribution_no)
 
-    owner_pre_balance = web3.eth.getBalance(auction.call().owner())
-    auction_pre_balance = web3.eth.getBalance(auction.address)
-
     # Call the distributor contract with batches of bidder addresses
     for i in range(0, steps):
         start = i * safe_distribution_no
@@ -115,7 +115,7 @@ def test_distributor_distribute(
         auction_claim_tokens_tested(token, auction, addresses[start:end], distributor)
         # distributor.transact({'from': owner}).distribute(addresses[start:end])
 
-    auction_post_distributed_tests(auction, owner_pre_balance, auction_pre_balance)
+    auction_post_distributed_tests(auction)
 
     # Verify that a single "ClaimedTokens" event has been issued by the auction contract
     # for each address

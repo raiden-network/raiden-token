@@ -3,11 +3,11 @@ from web3.utils.compat import (
     Timeout,
 )
 from utils import (
+    passphrase,
     check_succesful_tx,
     print_logs,
 )
 
-passphrase = '0'
 tx_timeout = 180
 
 # TODO
@@ -40,7 +40,8 @@ def amount_format(web3, wei):
     return "{0} WEI = {1} ETH".format(wei, web3.fromWei(wei, 'ether'))
 
 
-def print_auction(auction_contract):
+def print_logs(token_contract, auction_contract):
+    print_logs(token_contract, 'Transfer', 'CustomToken')
     print_logs(auction_contract, 'Deployed', 'DutchAuction')
     print_logs(auction_contract, 'Setup', 'DutchAuction')
     print_logs(auction_contract, 'SettingsChanged', 'DutchAuction')
@@ -68,12 +69,12 @@ def successful_bid(web3, auction, bidder, amount):
     return amount
 
 
-def auction_simulation(web3, token, auction, owner, bidders, bids=500, bid_interval=None, bid_start_price=None):
+def auction_simulation(web3, wallet, token, auction, owner, bidders, bids=500, bid_interval=None, bid_start_price=None):
     bids = {}
     approx_payable_txn_cost = 30000
     approx_bid_txn_cost = 40000
     bidders_len = len(bidders)
-    print_auction(auction)
+    print_logs(token, auction)
 
     print('Owner balance:', owner, amount_format(web3, web3.eth.getBalance(owner)))
 

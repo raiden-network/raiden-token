@@ -76,20 +76,32 @@ def prepare_preallocs(multiplier, preallocs):
     return list(map(lambda x: x * multiplier, preallocs))
 
 
+
 @pytest.fixture()
-def owner(web3):
-    return web3.eth.accounts[0]
+def owner_index():
+    return 2
 
 
 @pytest.fixture()
-def team(web3, contract_params):
-    index_end = len(contract_params['preallocations']) + 1
-    return web3.eth.accounts[2:(index_end + 1)]
+def wallet(web3):
+    return web3.eth.accounts[1]
+
 
 @pytest.fixture()
-def get_bidders(web3, contract_params, create_accounts):
+def owner(web3, owner_index):
+    return web3.eth.accounts[owner_index]
+
+
+@pytest.fixture()
+def team(web3, owner_index, contract_params):
+    index_start = owner_index + 1
+    index_end = len(contract_params['preallocations']) + index_start
+    return web3.eth.accounts[index_start:index_end]
+
+@pytest.fixture()
+def get_bidders(web3, owner_index, contract_params, create_accounts):
     def get(number):
-        index_start = 2 + len(contract_params['preallocations'])
+        index_start = owner_index + 1 + len(contract_params['preallocations'])
         accounts_len = len(web3.eth.accounts)
         index_end = min(number + index_start, accounts_len)
         bidders = web3.eth.accounts[index_start:index_end]
@@ -126,9 +138,11 @@ def create_accounts(web3):
 def auction_contract(
     contract_params,
     chain,
+    wallet,
     create_contract):
     Auction = chain.provider.get_contract_factory('DutchAuction')
-    auction_contract = create_contract(Auction, contract_params['args'])
+
+    auction_contract = create_contract(Auction, [wallet] + contract_params['args'])
 
     if print_the_logs:
         print_logs(auction_contract, 'Deployed', 'DutchAuction')
@@ -139,7 +153,6 @@ def auction_contract(
         print_logs(auction_contract, 'AuctionEnded', 'DutchAuction')
         print_logs(auction_contract, 'ClaimedTokens', 'DutchAuction')
         print_logs(auction_contract, 'TokensDistributed', 'DutchAuction')
-        print_logs(auction_contract, 'TradingStarted', 'DutchAuction')
 
     return auction_contract
 
@@ -153,13 +166,15 @@ def get_token_contract(chain, create_contract, owner):
             arguments.insert(0, decimals)
 
         CustomToken = chain.provider.get_contract_factory(token_type)
-        if not transaction:
-            transaction = {'from': owner}
+
         # print('get_token_contract token_type', token_type, decimals, arguments)
+
         token_contract = create_contract(CustomToken, arguments, transaction)
 
         if print_the_logs:
             print_logs(token_contract, 'Transfer', token_type)
+            print_logs(token_contract, 'Transfer2', token_type)
+            print_logs(token_contract, 'Transfer3', token_type)
             print_logs(token_contract, 'Approval', token_type)
             print_logs(token_contract, 'Deployed', token_type)
             print_logs(token_contract, 'Burnt', token_type)
@@ -240,8 +255,13 @@ def txnCost(chain, web3):
 
 
 @pytest.fixture
-def create_contract(chain, event_handler):
+def create_contract(chain, event_handler, owner):
     def get(contract_type, arguments, transaction=None):
+        if not transaction:
+            transaction = {}
+        if 'from' not in transaction:
+            transaction['from'] = owner
+
         deploy_txn_hash = contract_type.deploy(transaction=transaction, args=arguments)
         contract_address = chain.wait.for_contract_address(deploy_txn_hash)
         contract = contract_type(address=contract_address)

@@ -7,6 +7,7 @@ from fixtures import (
     MAX_UINT,
     fake_address,
     token_events,
+    owner_index,
     owner,
     team,
     get_bidders,
@@ -50,7 +51,7 @@ def test_token_init(
     get_token_contract,
     proxy_contract,
     decimals):
-    (A, B, C, D) = web3.eth.accounts[:4]
+    (A, B, C, D, E) = web3.eth.accounts[:5]
     auction = proxy_contract
     multiplier = 10**(decimals)
     initial_supply = 5000 * multiplier
@@ -69,14 +70,14 @@ def test_token_init(
             initial_supply,
             [A, B, C, D],
             preallocs
-        ], decimals=decimals)
+        ], {'from': E}, decimals=decimals)
     with pytest.raises(TypeError):
         token = get_token_contract([
             0x00343,
             initial_supply,
             [A, B, C, D],
             preallocs
-        ], decimals=decimals)
+        ], {'from': E}, decimals=decimals)
 
     # Transaction fails when team addresses are invalid
     with pytest.raises(TypeError):
@@ -85,14 +86,14 @@ def test_token_init(
             initial_supply,
             [A, 0, C, D],
             preallocs
-        ], decimals=decimals)
+        ], {'from': E}, decimals=decimals)
     with pytest.raises(TypeError):
         token = get_token_contract([
             proxy_contract.address,
             initial_supply,
             [A, 0x00343, C, D],
             preallocs
-        ], decimals=decimals)
+        ], {'from': E}, decimals=decimals)
 
     # Transaction fails when supply or preallocations are not uint
     with pytest.raises(TypeError):
@@ -101,7 +102,7 @@ def test_token_init(
             -2,
             [A, B, C, D],
             preallocs
-        ], decimals=decimals)
+        ], {'from': E}, decimals=decimals)
 
     with pytest.raises(TypeError):
         token = get_token_contract([
@@ -109,7 +110,7 @@ def test_token_init(
             initial_supply,
             [A, B, C, D],
             [500 * multiplier, -2]
-        ], decimals=decimals)
+        ], {'from': E}, decimals=decimals)
 
     # Test max uint as supply
     token = get_token_contract([
@@ -117,7 +118,7 @@ def test_token_init(
         MAX_UINT,
         [A, B, C, D],
         preallocs
-    ], decimals=decimals)
+    ], {'from': E}, decimals=decimals)
 
     with pytest.raises(TypeError):
         token = get_token_contract([
@@ -125,7 +126,7 @@ def test_token_init(
             MAX_UINT + 1,
             [A, B, C, D],
             preallocs
-        ], decimals=decimals)
+        ], {'from': E}, decimals=decimals)
 
     # Transaction fails if different length arrays for owners & preallocation values
     with pytest.raises(tester.TransactionFailed):
@@ -134,7 +135,7 @@ def test_token_init(
             1000000 * multiplier,
             [A, B, C, D],
             [4000, 3000, 5000]
-        ], decimals=decimals)
+        ], {'from': E}, decimals=decimals)
 
     # Transaction fails if initial_supply == 0
     with pytest.raises(tester.TransactionFailed):
@@ -143,7 +144,7 @@ def test_token_init(
             0,
             [A, B, C, D],
             [0, 0, 0, 0]
-        ], decimals=decimals)
+        ], {'from': E}, decimals=decimals)
 
     # Transaction fails of there are no preallocations
     with pytest.raises(tester.TransactionFailed):
@@ -152,7 +153,7 @@ def test_token_init(
             initial_supply,
             [],
             []
-        ], decimals=decimals)
+        ], {'from': E}, decimals=decimals)
 
     # Fails when initial_supply < preallocations
     with pytest.raises(tester.TransactionFailed):
@@ -161,7 +162,7 @@ def test_token_init(
             multiplier - 2,
             [A, B, C, D],
             preallocs
-        ], decimals=decimals)
+        ], {'from': E}, decimals=decimals)
 
     # Fails when auctioned tokens <= 0
     with pytest.raises(tester.TransactionFailed):
@@ -170,25 +171,25 @@ def test_token_init(
             reduce((lambda x, y: x + y), preallocs),
             [A, B, C, D],
             preallocs
-        ], decimals=decimals)
+        ], {'from': E}, decimals=decimals)
 
     token = get_token_contract([
         proxy_contract.address,
         initial_supply,
         [A, B, C, D],
         preallocs
-    ], decimals=decimals)
+    ], {'from': E}, decimals=decimals)
     assert token.call().decimals() == decimals
 
 
 @pytest.mark.parametrize('decimals', fixture_decimals)
 def test_token_variable_access(
     chain,
-    owner,
     web3,
     get_token_contract,
     proxy_contract,
     decimals):
+    owner = web3.eth.coinbase
     (A, B, C) = web3.eth.accounts[1:4]
     multiplier = 10**(decimals)
     initial_supply = 3000 * multiplier
@@ -202,12 +203,12 @@ def test_token_variable_access(
         initial_supply,
         [A, B, C],
         preallocs
-    ], decimals=decimals)
+    ], {'from': owner}, decimals=decimals)
 
     assert token.call().name() == 'The Token'
     assert token.call().symbol() == 'TKN'
     assert token.call().decimals() == decimals
-    assert token.call().owner() == web3.eth.coinbase
+    assert token.call().owner() == owner
     assert token.call().auction_address() == proxy_contract.address
     assert token.call().totalSupply() == initial_supply
 

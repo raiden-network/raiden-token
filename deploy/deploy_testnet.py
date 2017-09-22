@@ -5,6 +5,7 @@ import click
 from populus import Project
 from web3 import Web3
 from utils import (
+    passphrase,
     createWallet,
     check_succesful_tx,
     assignFundsToBidders
@@ -176,20 +177,33 @@ def main(**kwargs):
         Token = chain.provider.get_contract_factory('CustomToken')
         Distributor = chain.provider.get_contract_factory('Distributor')
 
+        wallet = web3.personal.newAccount(passphrase)
+
         # Deploy Auction
-        auction_txhash = Auction.deploy(transaction={"from": owner}, args=[price_factor, price_constant])
+        auction_txhash = Auction.deploy(transaction={"from": owner}, args=[wallet, price_factor, price_constant])
         print("Deploying auction, tx hash is", auction_txhash)
         receipt = check_succesful_tx(web3, auction_txhash)
         auction_address = receipt["contractAddress"]
         print("Auction contract address is", auction_address)
 
         # Deploy token
-        token_txhash = Token.deploy(transaction={"from": owner}, args=[
-            auction_address,
-            supply,
-            prealloc_addresses,
-            prealloc_amounts
-        ])
+        if decimals == 18:
+            token_txhash = Token.deploy(transaction={"from": owner}, args=[
+                auction_address,
+                supply,
+                prealloc_addresses,
+                prealloc_amounts
+            ])
+        else:
+            Token = chain.provider.get_contract_factory('CustomToken2')
+            token_txhash = Token.deploy(transaction={"from": owner}, args=[
+                decimals,
+                auction_address,
+                supply,
+                prealloc_addresses,
+                prealloc_amounts
+            ])
+
         print("Deploying token, tx hash is", token_txhash)
         receipt = check_succesful_tx(web3, token_txhash)
         token_address = receipt["contractAddress"]
@@ -226,7 +240,7 @@ def main(**kwargs):
             bidder_addresses = web3.eth.accounts[3:(bidders + 3)]
             print('Creating more bidder accounts:', bidders -  len(bidder_addresses), 'accounts')
             for i in range(len(bidder_addresses), bidders):
-                address = web3.personal.newAccount('0')
+                address = web3.personal.newAccount(passphrase)
                 bidder_addresses.append(address)
 
             print('Simulating', len(bidder_addresses), 'bidders', bidder_addresses)
@@ -236,11 +250,11 @@ def main(**kwargs):
                     web3.fromWei(bid_start_price, 'ether')))
 
             if fund_bidders:
-                print('Funding bidders accounts with random ETH from the owner account.')
-                assignFundsToBidders(web3, owner, bidders)
+                print('Funding bidders accounts with random ETH from the owner account.', owner, bidder_addresses)
+                assignFundsToBidders(web3, owner, bidder_addresses)
 
-            auction_simulation(web3, token, auction, owner, bidder_addresses, bids_number, bid_interval, bid_start_price)
-
+            auction_simulation(web3, wallet, token, auction, owner, bidder_addresses, bids_number, bid_interval, bid_start_price)
+        
 
 if __name__ == "__main__":
     main()

@@ -65,7 +65,7 @@ contract CustomToken2 is StandardToken {
 
         // Preallocate tokens to beneficiaries
         uint prealloc_tokens;
-        for (uint i=0; i<owners.length; i++) {
+        for (uint i = 0; i < owners.length; i++) {
             // Address should not be null.
             require(owners[i] != 0x0);
             require(tokens[i] > 0);
@@ -87,12 +87,13 @@ contract CustomToken2 is StandardToken {
         assert(totalSupply == balances[auction_address] + prealloc_tokens);
     }
 
-    /// @notice Allows `msg.sender` to simply destroy `num` token units (Tei), without receiving the corresponding amount of ether. This means the total token supply will decrease.
-    /// @dev Allows to destroy token units (Tei) without receiving the corresponding amount of ether.
+    /// @notice Allows `msg.sender` to simply destroy `num` token units (Tei),
+    /// without receiving the corresponding amount of ether. This means the total
+    /// token supply will decrease.
+    /// @dev Allows to destroy token units (Tei) without receiving the
+    /// corresponding amount of ether.
     /// @param num Number of token units (Tei) to burn.
-    function burn(uint num)
-        public
-    {
+    function burn(uint num) public {
         require(num > 0);
         require(balances[msg.sender] >= num);
         require(totalSupply >= num);
@@ -105,5 +106,4 @@ contract CustomToken2 is StandardToken {
 
         assert(balances[msg.sender] == pre_balance - num);
     }
-
 }

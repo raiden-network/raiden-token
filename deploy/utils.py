@@ -7,6 +7,8 @@ from web3.formatters import input_filter_params_formatter, log_array_formatter
 from web3.utils.events import get_event_data
 from web3.utils.filters import construct_event_filter_params
 
+passphrase = '0'
+
 
 def createWallet():
     keccak = sha3.keccak_256()
@@ -106,7 +108,7 @@ def returnFundsToOwner(web3, owner, bidders):
         # We have to unlock the account first
         unlocked = web3.personal.unlockAccount(bidder, passphrase)
         txhash = web3.eth.sendTransaction({'from': bidder, 'to': owner, 'value': value})
-        receipt = check_succesful_tx(web3, txhash, tx_timeout)
+        receipt = check_succesful_tx(web3, txhash)
 
 
 def assignFundsToBidders(web3, owner, bidders):
@@ -116,13 +118,13 @@ def assignFundsToBidders(web3, owner, bidders):
 
     # Make sure we have some 1 ETH bids
     txhash = web3.eth.sendTransaction({'from': owner, 'to': bidders[0], 'value': 1 + approx_bid_txn_cost})
-    receipt = check_succesful_tx(web3, txhash, tx_timeout)
+    receipt = check_succesful_tx(web3, txhash)
 
     txhash = web3.eth.sendTransaction({'from': owner, 'to': bidders[1], 'value': 1 + approx_bid_txn_cost})
-    receipt = check_succesful_tx(web3, txhash, tx_timeout)
+    receipt = check_succesful_tx(web3, txhash)
 
     txhash = web3.eth.sendTransaction({'from': owner, 'to': bidders[2], 'value': 2 + approx_bid_txn_cost})
-    receipt = check_succesful_tx(web3, txhash, tx_timeout)
+    receipt = check_succesful_tx(web3, txhash)
 
     # Make sure bidders have random ETH
     for i in range(3, bidders_len - 1):
@@ -134,7 +136,7 @@ def assignFundsToBidders(web3, owner, bidders):
         print('i', i, bidder, amount_format(web3, value))
 
         txhash = web3.eth.sendTransaction({'from': owner, 'to': bidder, 'value': value})
-        receipt = check_succesful_tx(web3, txhash, tx_timeout)
+        receipt = check_succesful_tx(web3, txhash)
 
     owner_balance = web3.eth.getBalance(owner)
     if owner_balance > 0:
@@ -143,4 +145,4 @@ def assignFundsToBidders(web3, owner, bidders):
         print('i', bidders_len - 1, bidder, amount_format(web3, value))
 
         txhash = web3.eth.sendTransaction({'from': owner, 'to': bidders[bidders_len - 1], 'value': value})
-        receipt = check_succesful_tx(web3, txhash, tx_timeout)
+        receipt = check_succesful_tx(web3, txhash)
