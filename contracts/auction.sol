@@ -106,7 +106,7 @@ contract DutchAuction {
 
     /// @dev Contract constructor function sets price factor and constant for
     /// calculating the Dutch Auction price.
-    /// @param _wallet Wallet address for contributed ETH.
+    /// @param _wallet Wallet address to which all contributed ETH will be forwarded.
     /// @param _price_factor Auction price factor.
     /// @param _price_const Auction price divisor constant.
     function DutchAuction(address _wallet, uint _price_factor, uint _price_const) public {
