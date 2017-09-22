@@ -19,6 +19,7 @@ contract DutchAuction {
 
     CustomToken public token;
     address public owner;
+    address public wallet;
 
     // Price function parameters
     uint public price_factor;
@@ -28,6 +29,9 @@ contract DutchAuction {
     uint public start_time;
     uint public end_time;
     uint public start_block;
+
+    // Keep track of all ETH received in the bids
+    uint public received_ether;
 
     // Keep track of funds claimed after auction has ended
     uint public funds_claimed;
@@ -54,8 +58,7 @@ contract DutchAuction {
         AuctionSetUp,
         AuctionStarted,
         AuctionEnded,
-        TokensDistributed,
-        TradingStarted
+        TokensDistributed
     }
 
     /*
@@ -96,7 +99,6 @@ contract DutchAuction {
     event ClaimedTokens(address indexed _recipient, uint indexed _sent_amount);
     event AuctionEnded(uint indexed _final_price);
     event TokensDistributed();
-    event TradingStarted();
 
     /*
      * Public functions
@@ -104,10 +106,12 @@ contract DutchAuction {
 
     /// @dev Contract constructor function sets price factor and constant for
     /// calculating the Dutch Auction price.
+    /// @param _wallet Wallet address to which all contributed ETH will be forwarded.
     /// @param _price_factor Auction price factor.
     /// @param _price_const Auction price divisor constant.
-    function DutchAuction(uint _price_factor, uint _price_const) public {
-        require(this.balance == 0);
+    function DutchAuction(address _wallet, uint _price_factor, uint _price_const) public {
+        require(_wallet != 0x0);
+        wallet = _wallet;
 
         owner = msg.sender;
         stage = Stages.AuctionDeployed;
@@ -176,7 +180,7 @@ contract DutchAuction {
         assert(missing_funds == 0);
 
         // Calculate the final price WEI / TKN
-        final_price = this.balance / (tokens_auctioned / multiplier);
+        final_price = received_ether / (tokens_auctioned / multiplier);
 
         end_time = now;
         stage = Stages.AuctionEnded;
@@ -209,15 +213,21 @@ contract DutchAuction {
         uint pre_receiver_funds = bids[receiver];
 
         // Missing funds without the current bid value
-        uint missing_funds = missingFundsToEndAuction(this.balance - msg.value);
+        uint missing_funds = missingFundsToEndAuction();
 
         // We only allow bid values less than the missing funds to end the auction value.
         require(msg.value <= missing_funds);
 
         bids[receiver] += msg.value;
+        received_ether += msg.value;
+
+        // Send bid amount to wallet
+        wallet.transfer(msg.value);
+
         BidSubmission(receiver, msg.value, missing_funds);
 
         assert(bids[receiver] == pre_receiver_funds + msg.value);
+        assert(received_ether >= msg.value);
     }
 
     /// @notice Claim auction tokens for `msg.sender` after the auction has ended.
@@ -255,7 +265,7 @@ contract DutchAuction {
         /* TODO remove this after testing */
         uint auction_unclaimed_tokens = token.balanceOf(this);
 
-        uint unclaimed_tokens = (this.balance - funds_claimed) * multiplier / final_price;
+        uint unclaimed_tokens = (received_ether - funds_claimed) * multiplier / final_price;
         unclaimed_tokens += rounding_error_tokens;
 
         if (auction_unclaimed_tokens != unclaimed_tokens) {
@@ -267,10 +277,9 @@ contract DutchAuction {
 
         // After the last tokens are claimed, we send the auction balance to the owner
         // and change the auction stage
-        if (funds_claimed == this.balance) {
+        if (funds_claimed == received_ether) {
             stage = Stages.TokensDistributed;
             TokensDistributed();
-            transferFundsToOwner();
         }
 
         assert(token.balanceOf(receiver) >= num);
@@ -280,22 +289,6 @@ contract DutchAuction {
     /*
      *  Private functions
      */
-
-    /// @dev Transfer auction balance to the token.
-    function transferFundsToOwner()
-        private
-        atStage(Stages.TokensDistributed)
-    {
-        uint pre_balance = this.balance;
-
-        owner.transfer(this.balance);
-
-        stage = Stages.TradingStarted;
-        TradingStarted();
-
-        assert(this.balance == 0);
-        assert(owner.balance >= pre_balance);
-    }
 
     /// @dev Calculates the token price (WEI / TKN) at the current timestamp
     /// during the auction; elapsed time = 0 before auction starts.
@@ -317,8 +310,7 @@ contract DutchAuction {
     /// @return Returns num Wei per TKN (multiplier * Tei).
     function price() public constant returns (uint) {
         if (stage == Stages.AuctionEnded ||
-            stage == Stages.TokensDistributed ||
-            stage == Stages.TradingStarted) {
+            stage == Stages.TokensDistributed) {
             return 0;
         }
         return calcTokenPrice();
@@ -329,20 +321,10 @@ contract DutchAuction {
     /// @dev The missing funds amount necessary to end the auction at the current price.
     /// @return Returns the missing funds amount.
     function missingFundsToEndAuction() constant public returns (uint) {
-        return missingFundsToEndAuction(this.balance);
-    }
-
-    /// @notice Get the missing funds needed to end the auction, calculated
-    /// at the current TKN price.
-    /// @dev The missing funds amount in WEI, necessary to end the auction at
-    /// the current price (WEI/TKN), for a provided balance.
-    /// @param funds Current balance or current balance without current bid value for bid().
-    /// @return Returns the missing funds amount.
-    function missingFundsToEndAuction(uint funds) constant public returns (uint) {
         uint funds_at_price = tokens_auctioned * price() / multiplier;
-        if (funds_at_price < funds) {
+        if (funds_at_price < received_ether) {
             return 0;
         }
-        return funds_at_price - funds;
+        return funds_at_price - received_ether;
     }
 }
