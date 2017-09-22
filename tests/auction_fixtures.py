@@ -126,16 +126,25 @@ def auction_ended(
 
 
 # Bid + tests that should run when bidding
-@pytest.fixture()
-def auction_bid_tested(web3, wallet, txnCost):
+@pytest.fixture(params=[True, False])
+def auction_bid_tested(web3, request, wallet, txnCost):
     def get(auction, bidder, amount):
+        use_fallback = request.param
         bidder_pre_balance = web3.eth.getBalance(bidder)
         bidder_pre_a_balance = auction.call().bids(bidder)
         wallet_pre_balance = web3.eth.getBalance(wallet)
         missing_funds = auction.call().missingFundsToEndAuction()
         accepted_amount = min(missing_funds, amount)
+        if use_fallback:
+            txn_cost = txnCost(web3.eth.sendTransaction({
+                'from': bidder,
+                'to': auction.address,
+                'value': amount
+            }))
+        else:
+            txn_cost = txnCost(auction.transact({'from': bidder, 'value': amount}).bid())
 
-        txn_cost = txnCost(auction.transact({'from': bidder, 'value': amount}).bid())
+
 
         assert auction.call().bids(bidder) == bidder_pre_a_balance + accepted_amount
         assert web3.eth.getBalance(wallet) == wallet_pre_balance + accepted_amount

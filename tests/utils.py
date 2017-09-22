@@ -1,3 +1,4 @@
+from populus.utils.wait import wait_for_transaction_receipt
 from eth_utils import (
     keccak,
     is_0x_prefixed,
@@ -12,6 +13,16 @@ from web3.utils.compat import (
 
 def sol_sha3(*args) -> bytes:
     return keccak(pack(*args))
+
+
+def check_succesful_tx(web3, txid, timeout=180) -> dict:
+
+    receipt = wait_for_transaction_receipt(web3, txid, timeout=timeout)
+    txinfo = web3.eth.getTransaction(txid)
+
+    # EVM has only one error mode and it's consume all gas
+    assert txinfo["gas"] != receipt["gasUsed"]
+    return receipt
 
 
 def pack(*args) -> bytes:

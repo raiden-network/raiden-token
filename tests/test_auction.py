@@ -8,6 +8,7 @@ from web3.utils.compat import (
 )
 from utils import (
     elapsed_at_price,
+    check_succesful_tx
 )
 from fixtures import (
     owner_index,
@@ -261,7 +262,7 @@ def test_price(
 
 
 # Test sending ETH to the auction contract
-def test_auction_payable(
+def test_auction_bid(
     chain,
     web3,
     owner,
@@ -302,16 +303,26 @@ def test_auction_payable(
     missing_funds = auction.call().missingFundsToEndAuction()
 
     # Test fallback function
-    eth.sendTransaction({
+    # 76116 gas cost
+    txn_hash = eth.sendTransaction({
         'from': A,
         'to': auction.address,
         'value': 100
     })
+    receipt = check_succesful_tx(web3, txn_hash)
+    print('--- FALLBACK', receipt)
+
     assert auction.call().received_ether() == 100
+    assert auction.call().bids(A) == 100
 
     missing_funds = auction.call().missingFundsToEndAuction()
-    auction.transact({'from': A, "value": missing_funds}).bid()
+
+    # 46528 gas cost
+    txn_hash = auction.transact({'from': A, "value": missing_funds}).bid()
+    receipt = check_succesful_tx(web3, txn_hash)
+    print('--- BID', receipt)
     assert auction.call().received_ether() == missing_funds + 100
+    assert auction.call().bids(A) == missing_funds + 100
 
     auction.transact({'from': owner}).finalizeAuction()
     auction_end_tests(auction, B)
