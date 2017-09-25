@@ -275,6 +275,7 @@ contract CustomToken is StandardToken {
         balances[msg.sender] -= num;
         totalSupply -= num;
         Burnt(msg.sender, num, totalSupply);
+        Transfer(msg.sender, 0x0, num);
 
         assert(balances[msg.sender] == pre_balance - num);
     }
