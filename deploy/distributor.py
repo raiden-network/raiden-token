@@ -144,15 +144,6 @@ class Distributor:
             self.auction_block,
             'latest', {},
             callback)
-        '''
-        handle_past_logs(
-            self.web3,
-            self.auction_abi,
-            self.auction.address,
-            event_name,
-            self.auction_block,
-            'latest', {},
-            callback)'''
 
     def distribute(self):
         with Timeout() as timeout:

@@ -194,29 +194,15 @@ def auction_claim_tokens_tested(web3, owner, contract_params):
 
 
         for i, bidder in enumerate(bidders):
-            print('auction_claim_tokens_tested balanceOf(bidder)', bidder, token.call().balanceOf(bidder))
-            print('auction_claim_tokens_tested pre_balances', pre_balances[i])
-            print('auction_claim_tokens_tested expected_tokens', expected_tokens[i])
-            print('auction_claim_tokens_tested pre_balances[i] + expected_tokens[i]', pre_balances[i] + expected_tokens[i])
-
-            print('auction_pre_balance', auction_pre_balance, token.call().balanceOf(auction.address))
-
-            '''assert token.call().balanceOf(bidder) == pre_balances[i] + expected_tokens[i]
+            assert token.call().balanceOf(bidder) == pre_balances[i] + expected_tokens[i]
             assert auction.call().bids(bidder) == 0
 
             # Bidder cannot claim tokens again
             with pytest.raises(tester.TransactionFailed):
                 auction.transact({'from': bidder}).claimTokens()
 
-        print('--- funds_claimed', auction.call().funds_claimed())
-        print('--- funds_claimed should', pre_funds_claimed + reduce((lambda x, y: x + y), values))
-
-
-        print('--- token.call().balanceOf(auction.address)', token.call().balanceOf(auction.address))
-        print('--- token.call().balanceOf(auction.address) should ', auction_pre_balance - reduce((lambda x, y: x + y), expected_tokens))
-
         assert auction.call().funds_claimed() == pre_funds_claimed + reduce((lambda x, y: x + y), values)
-        assert token.call().balanceOf(auction.address) == auction_pre_balance - reduce((lambda x, y: x + y), expected_tokens)'''
+        assert token.call().balanceOf(auction.address) == auction_pre_balance - reduce((lambda x, y: x + y), expected_tokens)
 
     return get
 

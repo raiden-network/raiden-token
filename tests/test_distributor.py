@@ -102,6 +102,20 @@ def test_distributor_distribute(
 
         values[index] += event['args']['_amount']
 
+    def verify_claim(event):
+        print('verify_claim event', event)
+        # Check for double claiming
+        addr = event['args']['_recipient']
+        sent_amount = event['args']['_sent_amount']
+
+        assert addr not in verified_claim
+        verified_claim.append(address)
+
+        print('--- verify_claim', sent_amount, token.call().balanceOf(addr))
+        print('--- verify_claim auction balance', token.call().balanceOf(auction.address))
+        assert auction.call().bids(addr) == 0
+        assert sent_amount == token.call().balanceOf(addr)
+
     handle_logs(contract=auction, event='BidSubmission', callback=get_bidders_addresses)
 
     # Send 5 claiming transactions in a single batch to not run out of gas
@@ -122,15 +136,6 @@ def test_distributor_distribute(
     for j in range(0, len(addresses) - 1):
         address = addresses[j]
         assert auction.call().bids(address) == 0
-
-        def verify_claim(event):
-            print('verify_claim event', event)
-            # Check for double claiming
-            assert address not in verified_claim
-            # sent_amount = event['args']['_sent_amount']
-            verified_claim.append(address)
-
-            # TODO assert sent_amount == token balance
 
         # check if auction event was triggered for this user
         handle_logs(

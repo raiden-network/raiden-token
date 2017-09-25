@@ -40,7 +40,7 @@ def amount_format(web3, wei):
     return "{0} WEI = {1} ETH".format(wei, web3.fromWei(wei, 'ether'))
 
 
-def print_logs(token_contract, auction_contract):
+def print_all_logs(token_contract, auction_contract):
     print_logs(token_contract, 'Transfer', 'CustomToken')
     print_logs(auction_contract, 'Deployed', 'DutchAuction')
     print_logs(auction_contract, 'Setup', 'DutchAuction')
@@ -50,7 +50,6 @@ def print_logs(token_contract, auction_contract):
     print_logs(auction_contract, 'AuctionEnded', 'DutchAuction')
     print_logs(auction_contract, 'ClaimedTokens', 'DutchAuction')
     print_logs(auction_contract, 'TokensDistributed', 'DutchAuction')
-    print_logs(auction_contract, 'TradingStarted', 'DutchAuction')
 
 
 def successful_bid(web3, auction, bidder, amount):
@@ -74,7 +73,7 @@ def auction_simulation(web3, wallet, token, auction, owner, bidders, bids=500, b
     approx_payable_txn_cost = 30000
     approx_bid_txn_cost = 40000
     bidders_len = len(bidders)
-    print_logs(token, auction)
+    print_all_logs(token, auction)
 
     print('Owner balance:', owner, amount_format(web3, web3.eth.getBalance(owner)))
 
