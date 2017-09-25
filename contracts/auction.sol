@@ -272,8 +272,7 @@ contract DutchAuction {
         assert(auction_unclaimed_tokens == unclaimed_tokens);
         /* End of removable test */
 
-        // After the last tokens are claimed, we send the auction balance to the owner
-        // and change the auction stage
+        // After the last tokens are claimed, we change the auction stage
         if (funds_claimed == received_ether) {
             stage = Stages.TokensDistributed;
             TokensDistributed();
