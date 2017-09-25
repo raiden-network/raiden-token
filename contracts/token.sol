@@ -66,6 +66,7 @@ contract StandardToken is Token {
     /// @return Returns success of function call.
     function transfer(address _to, uint256 _value) public returns (bool) {
         require(_to != 0x0);
+        require(_to != address(this));
         require(balances[msg.sender] >= _value);
         require(balances[_to] + _value >= balances[_to]);
 
@@ -121,6 +122,7 @@ contract StandardToken is Token {
     {
         require(_from != 0x0);
         require(_to != 0x0);
+        require(_to != address(this));
         require(balances[_from] >= _value);
         require(allowed[_from][msg.sender] >= _value);
         require(balances[_to] + _value >= balances[_to]);
