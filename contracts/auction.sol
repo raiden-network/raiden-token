@@ -21,9 +21,15 @@ contract DutchAuction {
     address public owner;
     address public wallet;
 
-    // Price function parameters
+    // Price decay function parameters to be changed depending on the desired outcome
+
+    // Starting price in WEI; i.e. 2 * 10**18
     uint public price_start;
+
+    // Divisor constant; i.e. 524880000
     uint public price_constant;
+
+    // Divisor exponent; i.e. 3
     uint32 public price_exponent;
 
     // For calculating elapsed time for price
@@ -110,8 +116,8 @@ contract DutchAuction {
      * Public functions
      */
 
-    /// @dev Contract constructor function sets price factor and constant for
-    /// calculating the Dutch Auction price.
+    /// @dev Contract constructor function sets the starting price, divisor constant and
+    /// divisor exponent for calculating the Dutch Auction price.
     /// @param _wallet Wallet address to which all contributed ETH will be forwarded.
     /// @param _price_start High price in WEI at which the auction starts.
     /// @param _price_constant Auction price divisor constant.
@@ -157,8 +163,8 @@ contract DutchAuction {
     }
 
     /// @notice Set `_price_start`, `_price_constant` and `_price_exponent` as
-    /// the new price factor, price divisor constant and price divisor exponent.
-    /// @dev Changes auction start price factor before auction is started.
+    /// the new starting price, price divisor constant and price divisor exponent.
+    /// @dev Changes auction price function parameters before auction is started.
     /// @param _price_start Updated start price.
     /// @param _price_constant Updated price divisor constant.
     /// @param _price_exponent Updated price divisor exponent.
@@ -321,7 +327,7 @@ contract DutchAuction {
             elapsed = now - start_time;
         }
 
-        uint decay_rate = elapsed**(price_exponent) / price_constant;
+        uint decay_rate = elapsed**price_exponent / price_constant;
         return price_start * (1 + elapsed) / (1 + elapsed + decay_rate);
     }
 
