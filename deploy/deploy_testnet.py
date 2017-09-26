@@ -37,12 +37,17 @@ from simulation import (
     help='Token contract decimals.'
 )
 @click.option(
-    '--price-factor',
+    '--price-start',
     default=6,
     help='Price factor used in auction price calculation.'
 )
 @click.option(
     '--price-constant',
+    default=66,
+    help='Price constant used in auction price calculation.'
+)
+@click.option(
+    '--price-exponent',
     default=66,
     help='Price constant used in auction price calculation.'
 )
@@ -105,8 +110,9 @@ def main(**kwargs):
     owner = kwargs['owner']
     supply = kwargs['supply']
     decimals = kwargs['decimals']
-    price_factor = kwargs['price_factor']
+    price_start = kwargs['price_start']
     price_constant = kwargs['price_constant']
+    price_exponent = kwargs['price_exponent']
     simulation = kwargs['simulation']
     bidders = int(kwargs['bidders'])
     bid_start_price = int(kwargs['bid_price'] or 0)
@@ -169,8 +175,9 @@ def main(**kwargs):
         assert owner, "Make sure owner account is created"
         print('Owner', owner)
         print('Preallocation addresses & amounts in WEI', prealloc_addresses, prealloc_amounts)
-        print('Auction price factor:', price_factor)
+        print('Auction start price:', price_start)
         print('Auction price constant:', price_constant)
+        print('Auction price constant:', price_exponent)
 
         # Load Populus contract proxy classes
         Auction = chain.provider.get_contract_factory('DutchAuction')
@@ -180,7 +187,7 @@ def main(**kwargs):
         wallet = web3.personal.newAccount(passphrase)
 
         # Deploy Auction
-        auction_txhash = Auction.deploy(transaction={"from": owner}, args=[wallet, price_factor, price_constant])
+        auction_txhash = Auction.deploy(transaction={"from": owner}, args=[wallet, price_start, price_constant, price_exponent])
         print("Deploying auction, tx hash is", auction_txhash)
         receipt = check_succesful_tx(web3, auction_txhash)
         auction_address = receipt["contractAddress"]
@@ -254,7 +261,7 @@ def main(**kwargs):
                 assignFundsToBidders(web3, owner, bidder_addresses)
 
             auction_simulation(web3, wallet, token, auction, owner, bidder_addresses, bids_number, bid_interval, bid_start_price)
-        
+
 
 if __name__ == "__main__":
     main()
