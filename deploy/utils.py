@@ -1,3 +1,4 @@
+import random
 from populus.utils.wait import wait_for_transaction_receipt
 from ecdsa import SigningKey, SECP256k1
 import sha3
@@ -8,6 +9,10 @@ from web3.utils.events import get_event_data
 from web3.utils.filters import construct_event_filter_params
 
 passphrase = '0'
+
+
+def amount_format(web3, wei):
+    return "{0} WEI = {1} ETH".format(wei, web3.fromWei(wei, 'ether'))
 
 
 def createWallet():
@@ -113,6 +118,7 @@ def returnFundsToOwner(web3, owner, bidders):
 
 def assignFundsToBidders(web3, owner, bidders):
     approx_bid_txn_cost = 40000
+    bidders_len = len(bidders)
     # Transfer some testnet ether to the bidders
     print('Assign random ETH amounts to bidders')
 

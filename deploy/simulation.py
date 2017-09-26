@@ -6,6 +6,7 @@ from utils import (
     passphrase,
     check_succesful_tx,
     print_logs,
+    amount_format,
 )
 
 tx_timeout = 180
@@ -35,10 +36,6 @@ def getAuctionFactors(price1, elapsed1, price2, elapsed2, multiplier):
 def elapsedAtPrice(price, price_factor, price_constant, multiplier):
     elapsed = (multiplier * price_factor) / (price - 1) - price_constant
     return int(elapsed)
-
-
-def amount_format(web3, wei):
-    return "{0} WEI = {1} ETH".format(wei, web3.fromWei(wei, 'ether'))
 
 
 def print_all_logs(token_contract, auction_contract):
