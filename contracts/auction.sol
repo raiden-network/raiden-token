@@ -54,9 +54,6 @@ contract DutchAuction {
 
     Stages public stage;
 
-    // TODO - remove after testing
-    uint rounding_error_tokens;
-
     /*
      * Enums
      */
@@ -284,20 +281,6 @@ contract DutchAuction {
         require(token.transfer(receiver, num));
 
         ClaimedTokens(receiver, num);
-
-        // Test for a correct claimed tokens calculation
-        /* TODO remove this after testing */
-        uint auction_unclaimed_tokens = token.balanceOf(this);
-
-        uint unclaimed_tokens = (received_ether - funds_claimed) * multiplier / final_price;
-        unclaimed_tokens += rounding_error_tokens;
-
-        if (auction_unclaimed_tokens != unclaimed_tokens) {
-            rounding_error_tokens += 1;
-            unclaimed_tokens += 1;
-        }
-        assert(auction_unclaimed_tokens == unclaimed_tokens);
-        /* End of removable test */
 
         // After the last tokens are claimed, we change the auction stage
         if (funds_claimed == received_ether) {
