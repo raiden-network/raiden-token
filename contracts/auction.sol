@@ -10,7 +10,7 @@ contract DutchAuction {
      * Terminology:
      * 1 token unit = Tei
      * 1 token = TKN = Tei * multiplier
-     * multiplier set from token's number of decimals (i.e. 10**decimals)
+     * multiplier set from token's number of decimals (i.e. 10 ** decimals)
      */
 
     /*
@@ -23,7 +23,7 @@ contract DutchAuction {
 
     // Price decay function parameters to be changed depending on the desired outcome
 
-    // Starting price in WEI; i.e. 2 * 10**18
+    // Starting price in WEI; i.e. 2 * 10 ** 18
     uint public price_start;
 
     // Divisor constant; i.e. 524880000
@@ -156,7 +156,7 @@ contract DutchAuction {
         tokens_auctioned = token.balanceOf(this);
 
         // Set number of tokens multiplier from token decimals
-        multiplier = 10**uint(token.decimals());
+        multiplier = 10 ** uint(token.decimals());
 
         stage = Stages.AuctionSetUp;
         Setup();
@@ -327,7 +327,7 @@ contract DutchAuction {
             elapsed = now - start_time;
         }
 
-        uint decay_rate = elapsed**price_exponent / price_constant;
+        uint decay_rate = elapsed ** price_exponent / price_constant;
         return price_start * (1 + elapsed) / (1 + elapsed + decay_rate);
     }
 
