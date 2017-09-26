@@ -60,8 +60,9 @@ def successful_bid(web3, auction, bidder, amount):
             print('BID successful')
             bid_successful = amount
         except:
-            missing = auction.call().missingFundsToEndAuction()
-            amount = missing // 7
+            amount = auction.call().missingFundsToEndAuction()
+            if(amount > 10):
+                amount = amount // 7
             print('Bid > missing funds, trying with {0} WEI'.format(amount))
     return amount
 

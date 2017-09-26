@@ -147,7 +147,7 @@ def assignFundsToBidders(web3, owner, bidders):
     owner_balance = web3.eth.getBalance(owner)
     if owner_balance > 0:
         bidder = bidders[bidders_len - 1]
-        value = owner_balance - approx_payable_txn_cost
+        value = owner_balance - 22000
         print('i', bidders_len - 1, bidder, amount_format(web3, value))
 
         txhash = web3.eth.sendTransaction({'from': owner, 'to': bidders[bidders_len - 1], 'value': value})
