@@ -2,11 +2,15 @@ import random
 from populus.utils.wait import wait_for_transaction_receipt
 from ecdsa import SigningKey, SECP256k1
 import sha3
+import gevent
 from ethereum.utils import encode_hex
 
 from web3.formatters import input_filter_params_formatter, log_array_formatter
 from web3.utils.events import get_event_data
 from web3.utils.filters import construct_event_filter_params
+import logging
+
+log = logging.getLogger(__name__)
 
 passphrase = '0'
 
@@ -36,14 +40,14 @@ def check_succesful_tx(web3, txid, timeout=180) -> dict:
 
 class LogFilter:
     def __init__(self,
-        web3,
-        abi,
-        address,
-        event_name,
-        from_block=0,
-        to_block='latest',
-        filters=None,
-        callback=None):
+                 web3,
+                 abi,
+                 address,
+                 event_name,
+                 from_block=0,
+                 to_block='latest',
+                 filters=None,
+                 callback=None):
         self.web3 = web3
         filter_kwargs = {
             'fromBlock': from_block,
@@ -100,55 +104,38 @@ def print_logs(contract, event, name=''):
 
 # We don't need this anymore, as the auction funds go to the owner after all tokens are claimed
 # Return funds to owner, so we keep most of the ETH in the simulation
-def returnFundsToOwner(web3, owner, bidders):
-    for bidder in bidders:
-        # Return most ETH to owner
-        value = web3.eth.getBalance(bidder)
-        gas_estimate = web3.eth.estimateGas({'from': bidder, 'to': owner, 'value': value}) + 10000
-        value -= gas_estimate
+def returnFundsToOwner(web3, owner, bidder):
+    # Return most ETH to owner
+    value = web3.eth.getBalance(bidder)
+    gas_estimate = web3.eth.estimateGas({'from': bidder, 'to': owner, 'value': value}) + 10000
+    value -= gas_estimate
 
-        if value < 0:
-            continue
+    if value < 0:
+        return
 
-        # We have to unlock the account first
-        unlocked = web3.personal.unlockAccount(bidder, passphrase)
-        txhash = web3.eth.sendTransaction({'from': bidder, 'to': owner, 'value': value})
-        receipt = check_succesful_tx(web3, txhash)
+    # We have to unlock the account first
+    unlocked = web3.personal.unlockAccount(bidder, passphrase)
+    assert unlocked is True
+    txhash = web3.eth.sendTransaction({'from': bidder, 'to': owner, 'value': value})
+    receipt = check_succesful_tx(web3, txhash)
+    log.info("{bidder} > {owner} {0}"
+             .format(amount_format(web3, value), bidder=bidder, owner=owner))
+    assert receipt is not None
+
+
+def sendFunds(web3, owner, bidder, bidders_len):
+        owner_balance = web3.eth.getBalance(owner)
+        max_bid = int(owner_balance / bidders_len)
+        max_bid = max(max_bid, 10**18 * 5)
+        value = random.randint(max_bid / 2, max_bid)
+        log.info("{bidder} {0}".format(amount_format(web3, value), bidder=bidder))
+        txhash = web3.eth.sendTransaction({'from': owner, 'to': bidder, 'value': value})
+        check_succesful_tx(web3, txhash)
 
 
 def assignFundsToBidders(web3, owner, bidders):
-    approx_bid_txn_cost = 40000
-    bidders_len = len(bidders)
-    # Transfer some testnet ether to the bidders
-    print('Assign random ETH amounts to bidders')
-
-    # Make sure we have some 1 ETH bids
-    txhash = web3.eth.sendTransaction({'from': owner, 'to': bidders[0], 'value': 1 + approx_bid_txn_cost})
-    receipt = check_succesful_tx(web3, txhash)
-
-    txhash = web3.eth.sendTransaction({'from': owner, 'to': bidders[1], 'value': 1 + approx_bid_txn_cost})
-    receipt = check_succesful_tx(web3, txhash)
-
-    txhash = web3.eth.sendTransaction({'from': owner, 'to': bidders[2], 'value': 2 + approx_bid_txn_cost})
-    receipt = check_succesful_tx(web3, txhash)
-
     # Make sure bidders have random ETH
-    for i in range(3, bidders_len - 1):
-        bidder = bidders[i]
-        owner_balance = web3.eth.getBalance(owner)
-        max_bid = int(owner_balance / (bidders_len - i))
-        max_bid = max(max_bid, 10**18 * 5)
-        value = random.randint(max_bid / 2, max_bid)
-        print('i', i, bidder, amount_format(web3, value))
-
-        txhash = web3.eth.sendTransaction({'from': owner, 'to': bidder, 'value': value})
-        receipt = check_succesful_tx(web3, txhash)
-
-    owner_balance = web3.eth.getBalance(owner)
-    if owner_balance > 0:
-        bidder = bidders[bidders_len - 1]
-        value = owner_balance - 22000
-        print('i', bidders_len - 1, bidder, amount_format(web3, value))
-
-        txhash = web3.eth.sendTransaction({'from': owner, 'to': bidders[bidders_len - 1], 'value': value})
-        receipt = check_succesful_tx(web3, txhash)
+    gevents = []
+    for bidder in bidders:
+        gevents.append(gevent.spawn(sendFunds, web3, owner, bidder, len(bidders)))
+    gevent.joinall(gevents)

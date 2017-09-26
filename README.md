@@ -79,8 +79,8 @@ pytest -p no:warnings -s -n NUM_OF_CPUs
 # Fast deploy on kovan | ropsten | rinkeby | tester | privtest
 
 # Following two calls are quivalent
-python deploy/deploy_testnet.py
-python deploy/deploy_testnet.py \
+python -m deploy.deploy_testnet
+python -m deploy/deploy_testnet \
     --chain kovan \
     --owner 0x5601Ea8445A5d96EEeBF89A67C4199FbB7a43Fbb  \  # web3.eth.accounts[0]
     --supply 10000000 \
@@ -88,7 +88,7 @@ python deploy/deploy_testnet.py \
     --price-constant 7500 \
 
 # Custom preallocations
-python deploy/deploy_testnet.py \
+python -m deploy.deploy_testnet \
     --prealloc-addresses \ '0xe2e429949e97f2e31cd82facd0a7ae38f65e2f38,0xd1bf222ef7289ae043b723939d86c8a91f3aac3f' \
     --prealloc-amounts '300,600'
 
