@@ -422,9 +422,6 @@ def test_token_approve(
     with pytest.raises(TypeError):
         token.transact({'from': A}).approve(B, -3)
 
-    with pytest.raises(tester.TransactionFailed):
-        token.transact({'from': A}).approve(B, 0)
-
     # We can approve more than we have
     # with pytest.raises(tester.TransactionFailed):
     txn_hash = token.transact({'from': A}).approve(B, preallocs[0] + 1)
@@ -434,6 +431,10 @@ def test_token_approve(
     ev_handler.add(txn_hash, token_events['approve'])
     assert token.call().allowance(A, A) == 300
 
+    with pytest.raises(tester.TransactionFailed):
+        txn_hash = token.transact({'from': A}).approve(B, 300)
+
+    txn_hash = token.transact({'from': A}).approve(B, 0)
     txn_hash = token.transact({'from': A}).approve(B, 300)
     ev_handler.add(txn_hash, token_events['approve'])
 
@@ -549,6 +550,10 @@ def test_token_transfer_from(
         token.transact({'from': B}).approve(A, overflow)
         token.transact({'from': A}).transferFrom(B, C, overflow)
 
+    with pytest.raises(tester.TransactionFailed):
+        txn_hash = token.transact({'from': B}).approve(A, 300)
+
+    txn_hash = token.transact({'from': B}).approve(A, 0)
     txn_hash = token.transact({'from': B}).approve(A, 300)
     ev_handler.add(txn_hash, token_events['approve'])
     assert token.call().allowance(B, A) == 300
