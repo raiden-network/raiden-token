@@ -22,8 +22,9 @@ contract DutchAuction {
     address public wallet;
 
     // Price function parameters
-    uint public price_factor;
-    uint public price_const;
+    uint public price_start;
+    uint public price_constant;
+    uint32 public price_exponent;
 
     // For calculating elapsed time for price
     uint public start_time;
@@ -85,11 +86,16 @@ contract DutchAuction {
 
     event Deployed(
         address indexed _auction,
-        uint indexed _price_factor,
-        uint indexed _price_const
+        uint indexed _price_start,
+        uint indexed _price_constant,
+        uint32 _price_exponent
     );
     event Setup();
-    event SettingsChanged(uint indexed _price_factor, uint indexed _price_const);
+    event SettingsChanged(
+        uint indexed _price_start,
+        uint indexed _price_constant,
+        uint32 indexed _price_exponent
+    );
     event AuctionStarted(uint indexed _start_time, uint indexed _block_number);
     event BidSubmission(
         address indexed _sender,
@@ -107,16 +113,23 @@ contract DutchAuction {
     /// @dev Contract constructor function sets price factor and constant for
     /// calculating the Dutch Auction price.
     /// @param _wallet Wallet address to which all contributed ETH will be forwarded.
-    /// @param _price_factor Auction price factor.
-    /// @param _price_const Auction price divisor constant.
-    function DutchAuction(address _wallet, uint _price_factor, uint _price_const) public {
+    /// @param _price_start High price in WEI at which the auction starts.
+    /// @param _price_constant Auction price divisor constant.
+    /// @param _price_exponent Auction price divisor exponent.
+    function DutchAuction(
+        address _wallet,
+        uint _price_start,
+        uint _price_constant,
+        uint32 _price_exponent)
+        public
+    {
         require(_wallet != 0x0);
         wallet = _wallet;
 
         owner = msg.sender;
         stage = Stages.AuctionDeployed;
-        Deployed(this, price_factor, price_const);
-        changeSettings(_price_factor, _price_const);
+        Deployed(this, _price_start, _price_constant, _price_exponent);
+        changeSettings(_price_start, _price_constant, _price_exponent);
     }
 
     /// @dev Fallback function for the contract, which calls bid() if the auction has started.
@@ -143,19 +156,27 @@ contract DutchAuction {
         Setup();
     }
 
-    /// @notice Set `_price_factor` and `_price_const` as the new price factor
-    /// and price divisor constant.
+    /// @notice Set `_price_start`, `_price_constant` and `_price_exponent` as
+    /// the new price factor, price divisor constant and price divisor exponent.
     /// @dev Changes auction start price factor before auction is started.
-    /// @param _price_factor Updated price factor.
-    /// @param _price_const Updated price divisor constant.
-    function changeSettings(uint _price_factor, uint _price_const) public isOwner {
+    /// @param _price_start Updated start price.
+    /// @param _price_constant Updated price divisor constant.
+    /// @param _price_exponent Updated price divisor exponent.
+    function changeSettings(
+        uint _price_start,
+        uint _price_constant,
+        uint32 _price_exponent)
+        public
+        isOwner
+    {
         require(stage == Stages.AuctionDeployed || stage == Stages.AuctionSetUp);
-        require(_price_factor > 0);
-        require(_price_const > 0);
+        require(_price_start > 0);
+        require(_price_constant > 0);
 
-        price_factor = _price_factor;
-        price_const = _price_const;
-        SettingsChanged(price_factor, price_const);
+        price_start = _price_start;
+        price_constant = _price_constant;
+        price_exponent = _price_exponent;
+        SettingsChanged(price_start, price_constant, price_exponent);
     }
 
     /// @notice Start the auction.
@@ -288,14 +309,20 @@ contract DutchAuction {
 
     /// @dev Calculates the token price (WEI / TKN) at the current timestamp
     /// during the auction; elapsed time = 0 before auction starts.
-    /// @dev At AuctionDeployed the price is 1, because multiplier is 0
+    /// Based on the provided parameters, the price does not change in the first
+    /// `price_constant^(1/price_exponent)` seconds due to rounding.
+    /// Rounding in `decay_rate` also produces values that increase instead of decrease
+    /// in the beginning; these spikes decrease over time and are noticeable
+    /// only in first hours. This should be calculated before usage.
     /// @return Returns the token price - Wei per TKN.
     function calcTokenPrice() constant private returns (uint) {
         uint elapsed;
         if (stage == Stages.AuctionStarted) {
             elapsed = now - start_time;
         }
-        return multiplier * price_factor / (elapsed + price_const) + 1;
+
+        uint decay_rate = elapsed**(price_exponent) / price_constant;
+        return price_start * (1 + elapsed) / (1 + elapsed + decay_rate);
     }
 
     /// --------------------------------- Price Functions ----------------------
