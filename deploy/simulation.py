@@ -15,6 +15,7 @@ tx_timeout = 180
 # If bidders have remaining balances, we should send them back to the owner
 
 
+# TODO fix for new price function, otherwise OUTDATED
 # Calculate auction factors given 2 price points (price, elapsed_time)
 def getAuctionFactors(price1, elapsed1, price2, elapsed2, multiplier):
     price_constant = (elapsed2 * (price2 - 1) - elapsed1 * (price1 - 1)) / (price1 - price2)
@@ -87,17 +88,20 @@ def auction_simulation(web3, wallet, token, auction, owner, bidders, bids=500, b
     # Make the bids
 
     # Timeout until price is = bid_start_price
-    price_factor = auction.call().price_factor()
-    price_constant = auction.call().price_const()
+    price_start = auction.call().price_start()
+    price_constant = auction.call().price_constant()
+    price_exponent = auction.call().price_exponent()
     decimals = token.call().decimals()
     multiplier = 10**decimals
     initial_bid_delay = 0
 
+    '''
     # Delay in seconds if we want to start the first bid at a certain price
     if bid_start_price:
         initial_bid_delay = elapsedAtPrice(bid_start_price, price_factor, price_constant, multiplier)
         assert initial_bid_delay >= 0, 'Price for first bid was set too high'
-        print('Elapsed time until the first bid is made', initial_bid_delay)
+        print('Elapsed time until the first bid is made', initial_bid_delay
+    '''
 
     print('Timeout between bids', bid_interval or ' is random.')
 
