@@ -18,7 +18,9 @@ print_the_logs = False
 MAX_UINT = 2**256 - 1
 fake_address = 0x03432
 passphrase = '0'
-fixture_decimals = [18, 1]
+fixture_decimals = [18]
+
+auction_fast_decline_args = [10000, 4, 2]
 
 
 contract_args = [
@@ -27,18 +29,25 @@ contract_args = [
         'decimals': 18,
         'supply': 10000000,
         'preallocations': [200000, 800000],
-        'args': [2, 7500]
+        'args': [10000, 4, 2]
     },
     {
         'token': 'CustomToken',
         'decimals': 18,
         'supply': 10000000,
         'preallocations': [200400, 150000, 400001, 200010],
-        'args': [3, 7500]
+        'args': [1000000, 20, 3]
+    },
+    {
+        'token': 'CustomToken',
+        'decimals': 18,
+        'supply': 10000000,
+        'preallocations': [200400, 150000, 400001, 200010],
+        'args': [200000000, 524880000, 3]
     }
 ]
 
-
+'''
 contract_args += [
     {
         'token': 'CustomToken2',
@@ -55,6 +64,7 @@ contract_args += [
         'args': [10000, 7500]
     }
 ]
+'''
 
 token_events = {
     'deploy': 'Deployed',
@@ -74,7 +84,6 @@ def test_bytes(value=10, size=256):
 
 def prepare_preallocs(multiplier, preallocs):
     return list(map(lambda x: x * multiplier, preallocs))
-
 
 
 @pytest.fixture()

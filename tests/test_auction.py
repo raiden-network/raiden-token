@@ -25,6 +25,7 @@ from fixtures import (
     prepare_preallocs,
     txnCost,
     event_handler,
+    auction_fast_decline_args
 )
 
 from auction_fixtures import (
@@ -35,6 +36,8 @@ from auction_fixtures import (
     auction_end_tests,
     auction_post_distributed_tests,
     auction_claim_tokens_tested,
+    auction_price,
+    price
 )
 
 # TODO: missingFundsToEndAuction,
@@ -53,13 +56,15 @@ def test_auction_init(
     with pytest.raises(TypeError):
         auction_contract = create_contract(Auction, [wallet])
     with pytest.raises(TypeError):
-        auction_contract = create_contract(Auction, [wallet, -3, 2])
+        auction_contract = create_contract(Auction, [wallet, 10000, -3, 2])
     with pytest.raises(TypeError):
-        auction_contract = create_contract(Auction, [wallet, 3, -2])
+        auction_contract = create_contract(Auction, [wallet, 10000, 3, -2])
+    with pytest.raises(TypeError):
+        auction_contract = create_contract(Auction, [wallet, -1, 3, 2])
     with pytest.raises(tester.TransactionFailed):
-        auction_contract = create_contract(Auction, [wallet, 0, 2])
+        auction_contract = create_contract(Auction, [wallet, 10000, 0, 2])
     with pytest.raises(tester.TransactionFailed):
-        auction_contract = create_contract(Auction, [wallet, 2, 0])
+        auction_contract = create_contract(Auction, [wallet, 0, 3, 2])
 
     create_contract(Auction, [wallet] + contract_params['args'], {'from': owner})
 
@@ -102,28 +107,35 @@ def test_auction_change_settings(
     auction = auction_contract
     token = token_contract(auction.address)
     A = get_bidders(2)[0]
+    price_start = 2 * 10^18
 
     with pytest.raises(tester.TransactionFailed):
-        auction.transact({'from': A}).changeSettings(2, 10)
+        auction.transact({'from': A}).changeSettings(price_start, 524880000, 3)
     with pytest.raises(tester.TransactionFailed):
-        auction.transact({'from': owner}).changeSettings(0, 10)
+        auction.transact({'from': owner}).changeSettings(0, 524880000, 2)
     with pytest.raises(tester.TransactionFailed):
-        auction.transact({'from': owner}).changeSettings(2, 0)
+        auction.transact({'from': owner}).changeSettings(price_start, 0, 3)
     with pytest.raises(TypeError):
-        auction.transact({'from': owner}).changeSettings(2, -5)
+        auction.transact({'from': owner}).changeSettings(price_start, 524880000, -3)
     with pytest.raises(TypeError):
-        auction.transact({'from': owner}).changeSettings(-2, 5)
+        auction.transact({'from': owner}).changeSettings(price_start, -4, 3)
+    with pytest.raises(TypeError):
+        auction.transact({'from': owner}).changeSettings(-1, 524880000, 3)
 
-    auction.transact({'from': owner}).changeSettings(2, 10)
-    assert auction.call().price_factor() == 2
-    assert auction.call().price_const() == 10
+    auction.transact({'from': owner}).changeSettings(price_start, 524880000, 3)
+    assert auction.call().price_start() == price_start
+    assert auction.call().price_constant() == 524880000
+    assert auction.call().price_exponent() == 3
 
     auction.transact({'from': owner}).setup(token.address)
-    auction.transact({'from': owner}).changeSettings(1, 1)
+    auction.transact({'from': owner}).changeSettings(5000, 1, 1)
+    assert auction.call().price_start() == 5000
+    assert auction.call().price_constant() == 1
+    assert auction.call().price_exponent() == 1
 
     auction.transact({'from': owner}).startAuction()
     with pytest.raises(tester.TransactionFailed):
-        auction.transact({'from': owner}).changeSettings(5, 102)
+        auction.transact({'from': owner}).changeSettings(5000, 1, 1)
 
 
 def test_auction_access(
@@ -136,8 +148,9 @@ def test_auction_access(
     auction_args = contract_params['args']
 
     assert auction.call().owner() == owner
-    assert auction.call().price_factor() == auction_args[0]
-    assert auction.call().price_const() == auction_args[1]
+    assert auction.call().price_start() == auction_args[0]
+    assert auction.call().price_constant() == auction_args[1]
+    assert auction.call().price_exponent() == auction_args[2]
     assert auction.call().start_time() == 0
     assert auction.call().end_time() == 0
     assert auction.call().start_block() == 0
@@ -170,7 +183,7 @@ def test_auction_start(
     assert auction.call().stage() == 1
     multiplier = auction.call().multiplier()
 
-    auction.transact({'from': owner}).changeSettings(2, multiplier)  # fast price decline
+    auction.transact({'from': owner}).changeSettings(*auction_fast_decline_args)
 
     # Should not be able to start auction if not owner
     with pytest.raises(tester.TransactionFailed):
@@ -194,6 +207,7 @@ def test_auction_start(
         with pytest.raises(tester.TransactionFailed):
             auction_bid_tested(auction, A, amount)
 
+    missing_funds = auction.call().missingFundsToEndAuction()
     auction_bid_tested(auction, A, missing_funds)
 
     # Finalize auction
@@ -213,34 +227,30 @@ def test_price(
     auction_contract,
     token_contract,
     auction_bid_tested,
-    auction_end_tests):
+    auction_end_tests,
+    price):
     auction = auction_contract
     token = token_contract(auction.address)
     (A, B) = web3.eth.accounts[2:4]
 
     # Auction price after deployment; multiplier is 0 at this point
-    assert auction.call().price() == 1
+    assert auction.call().price() == auction.call().price_start()
 
     auction.transact({'from': owner}).setup(token.address)
     multiplier = auction.call().multiplier()
 
     # Auction price before auction start
-    price_factor = auction.call().price_factor()
-    price_const = auction.call().price_const()
-    initial_price = multiplier * price_factor // price_const + 1
-    assert auction.call().price() == initial_price
+    price_start = auction.call().price_start()
+    price_constant = auction.call().price_constant()
+    assert auction.call().price() == price_start
 
     auction.transact({'from': owner}).startAuction()
-    web3.testing.mine(5)
+    start_time = auction.call().start_time()
 
-    # Can fail if the price factors do not decrease auction price fast enough
-    elapsed = elapsed_at_price(initial_price - 1, price_factor, price_const, multiplier)
-    if elapsed < 5:
-        with Timeout() as timeout:
-            timeout.sleep(elapsed)
-        assert auction.call().price() < initial_price
-    else:
-        print('--- elapsed_at_price: {0} for price_factor = {1} ; price_const = {2} ; multiplier = {3}'.format(elapsed, price_factor, price_const, multiplier))
+    elapsed = 33
+    web3.testing.timeTravel(start_time + elapsed)
+    new_price = price(elapsed)
+    assert new_price == auction.call().price()
 
     missing_funds = auction.call().missingFundsToEndAuction()
     auction_bid_tested(auction, A, missing_funds)
@@ -252,10 +262,6 @@ def test_price(
     received_ether = auction.call().received_ether()
     tokens_auctioned = auction.call().tokens_auctioned()
     final_price = received_ether // (tokens_auctioned // multiplier)
-
-    # Old final price calculation, left just for comparison
-    elapsed = auction.call().end_time() - auction.call().start_time()
-    price = multiplier * price_factor // (elapsed + price_const) + 1
 
     assert auction.call().price() == 0
     assert auction.call().final_price() == final_price
@@ -296,7 +302,7 @@ def test_auction_bid(
     multiplier = auction.call().multiplier()
 
     # Higher price decline
-    auction.transact({'from': owner}).changeSettings(2, multiplier)
+    auction.transact({'from': owner}).changeSettings(*auction_fast_decline_args)
     auction.transact({'from': owner}).startAuction()
 
     # End auction by bidding the needed amount
@@ -386,6 +392,12 @@ def test_auction_final_bid_more(
     missing_funds = auction.call().missingFundsToEndAuction()
     amount = missing_funds + 1
     with pytest.raises(tester.TransactionFailed):
+        web3.eth.sendTransaction({
+            'from': bidder,
+            'to': auction.address,
+            'value': amount
+        })
+    with pytest.raises(tester.TransactionFailed):
         auction_bid_tested(auction, bidder, amount)
 
 
@@ -468,13 +480,17 @@ def test_auction_final_bid_5(
     auction_bid_tested(auction, A, amount)
 
     pre_received_ether = auction.call().received_ether()
+    bidded = 0
     for bidder in bidders:
         # Some parameters decrease the price very fast
         missing_funds = auction.call().missingFundsToEndAuction()
         if missing_funds > 0:
-            auction_bid_tested(auction, bidder, missing_funds)
+            auction_bid_tested(auction, bidder, 1)
+            bidded += 1
+        else:
+            break
 
-    assert auction.call().received_ether() == pre_received_ether + 5
+    assert auction.call().received_ether() == pre_received_ether + bidded
 
     auction.transact({'from': owner}).finalizeAuction()
     auction_end_tests(auction, late_bidder)
@@ -520,16 +536,17 @@ def test_auction_simulation(
 
     # We want to revert to these, because we set them in the fixtures
     initial_args = [
-        auction.call().price_factor(),
-        auction.call().price_const()
+        auction.call().price_start(),
+        auction.call().price_constant(),
+        auction.call().price_exponent()
     ]
 
     # Make sure we can change auction settings now
-    auction.transact({'from': owner}).changeSettings(556, 3224)
+    auction.transact({'from': owner}).changeSettings(1000, 556, 322)
 
     # changeSettings without being the owner should fail
     with pytest.raises(tester.TransactionFailed):
-        auction.transact({'from': bidders[1]}).changeSettings(2423, 327724)
+        auction.transact({'from': bidders[1]}).changeSettings(1000, 556, 322)
 
     # Change settings back to the fixtures settings
     auction.transact({'from': owner}).changeSettings(*initial_args)
@@ -543,7 +560,7 @@ def test_auction_simulation(
 
     # Cannot changeSettings after auction starts
     with pytest.raises(tester.TransactionFailed):
-        auction.transact({'from': owner}).changeSettings(556, 3224)
+        auction.transact({'from': owner}).changeSettings(1000, 556, 322)
 
     # transferFundsToToken should fail (private)
     with pytest.raises(ValueError):
@@ -624,6 +641,10 @@ def test_auction_simulation(
     # Claim all tokens
     # Final price per TKN (Tei * multiplier)
     final_price = auction.call().final_price()
+
+    funds_at_price = auction.call().tokens_auctioned() * final_price // multiplier
+    received_ether = auction.call().received_ether()
+    assert received_ether == funds_at_price
 
     # Total Tei claimable
     total_tokens_claimable = auction.call().received_ether() * multiplier // final_price

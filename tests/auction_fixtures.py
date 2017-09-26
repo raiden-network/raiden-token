@@ -15,7 +15,25 @@ from fixtures import (
     get_token_contract,
     token_contract,
     txnCost,
+    auction_fast_decline_args,
 )
+
+
+'''
+    Auction price decay function
+'''
+
+
+def auction_price(price_start, price_constant, price_exponent, elapsed):
+    price_decay = elapsed**(price_exponent) // price_constant
+    return price_start * (1 + elapsed) // (1 + elapsed + price_decay)
+
+
+@pytest.fixture()
+def price(contract_params):
+    def get(elapsed):
+        return auction_price(*contract_params['args'], elapsed)
+    return get
 
 
 '''
@@ -46,7 +64,7 @@ def auction_started_fast_decline(
     multiplier = auction.call().multiplier()
 
     # Higher price decline
-    auction.transact({'from': owner}).changeSettings(2, multiplier)
+    auction.transact({'from': owner}).changeSettings(*auction_fast_decline_args)
     auction.transact({'from': owner}).startAuction()
     return auction
 
@@ -65,7 +83,7 @@ def auction_ended(
     multiplier = auction.call().multiplier()
 
     # Higher price decline
-    auction.transact({'from': owner}).changeSettings(2, multiplier)
+    auction.transact({'from': owner}).changeSettings(*auction_fast_decline_args)
     auction.transact({'from': owner}).startAuction()
 
     # Set maximum amount for a bid - we don't want 1 account draining the auction
@@ -104,6 +122,7 @@ def auction_ended(
                 auction_bid_tested(auction, bidder, amount)
 
             # Bid exactly the amount needed in order to end the auction
+            missing_funds = auction.call().missingFundsToEndAuction()
             amount = missing_funds
             auction_bid_tested(auction, bidder, amount)
 
@@ -111,7 +130,7 @@ def auction_ended(
         index += 1
 
     print('NO OF BIDDERS', index)
-
+    print('received_ether / bidded', auction.call().received_ether(), bidded)
     assert auction.call().received_ether() == bidded
     auction.transact({'from': owner}).finalizeAuction()
     auction_end_tests(auction, bidders[index])
@@ -127,14 +146,13 @@ def auction_ended(
 
 # Bid + tests that should run when bidding
 @pytest.fixture(params=[True, False])
-def auction_bid_tested(web3, request, wallet, txnCost):
+def auction_bid_tested(web3, request, wallet, txnCost, contract_params):
     def get(auction, bidder, amount):
         use_fallback = request.param
         bidder_pre_balance = web3.eth.getBalance(bidder)
         bidder_pre_a_balance = auction.call().bids(bidder)
         wallet_pre_balance = web3.eth.getBalance(wallet)
-        missing_funds = auction.call().missingFundsToEndAuction()
-        accepted_amount = min(missing_funds, amount)
+
         if use_fallback:
             txn_cost = txnCost(web3.eth.sendTransaction({
                 'from': bidder,
@@ -143,13 +161,10 @@ def auction_bid_tested(web3, request, wallet, txnCost):
             }))
         else:
             txn_cost = txnCost(auction.transact({'from': bidder, 'value': amount}).bid())
-
-
-
-        assert auction.call().bids(bidder) == bidder_pre_a_balance + accepted_amount
-        assert web3.eth.getBalance(wallet) == wallet_pre_balance + accepted_amount
+        assert auction.call().bids(bidder) == bidder_pre_a_balance + amount
+        assert web3.eth.getBalance(wallet) == wallet_pre_balance + amount
         assert web3.eth.getBalance(auction.address) == 0
-        assert web3.eth.getBalance(bidder) == bidder_pre_balance - accepted_amount - txn_cost
+        assert web3.eth.getBalance(bidder) == bidder_pre_balance - amount - txn_cost
     return get
 
 
@@ -191,7 +206,6 @@ def auction_claim_tokens_tested(web3, owner, contract_params):
         else:
             print('auction_claim_tokens_tested distribute', bidders)
             distributor.transact({'from': owner}).distribute(bidders)
-
 
         for i, bidder in enumerate(bidders):
             assert token.call().balanceOf(bidder) == pre_balances[i] + expected_tokens[i]
