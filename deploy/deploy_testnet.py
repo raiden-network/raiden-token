@@ -3,6 +3,10 @@ monkey.patch_all()
 """
 Deploy CustomToken and DutchAuction on a testnet
 """
+import requests.adapters as adapter
+adapter.DEFAULT_POOLSIZE = 1000
+
+
 import click
 import gevent
 from populus import Project

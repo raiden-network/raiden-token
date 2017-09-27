@@ -99,7 +99,8 @@ def watch_logs(contract, event, callback, params={}):
 
 
 def print_logs(contract, event, name=''):
-    watch_logs(contract, event, lambda x: print('--(', name, ') event ', event, x['args']))
+    watch_logs(contract, event, lambda x: log.info('({0}) event {1} {2}'
+                                                   .format(name, event, x['args'])))
 
 
 # We don't need this anymore, as the auction funds go to the owner after all tokens are claimed

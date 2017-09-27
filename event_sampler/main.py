@@ -8,7 +8,7 @@ from flask import Flask
 from flask_restful import (
     Api,
 )
-from event_sampler.resources import LastBidSubmission
+from event_sampler.resources import LastBidSubmission, BidsHistogram
 from event_sampler.sampler import EventSampler
 
 
@@ -45,6 +45,8 @@ def main(sample_period, auction_address, chain_name, host, port):
     with project.get_chain(chain_name) as chain:
         sampler = EventSampler(auction_address, chain)
         api.add_resource(LastBidSubmission, "/last_bid",
+                         resource_class_kwargs={'sampler': sampler})
+        api.add_resource(BidsHistogram, "/histogram",
                          resource_class_kwargs={'sampler': sampler})
         rest_server = WSGIServer((host, port), app)
         server_greenlet = gevent.spawn(rest_server.serve_forever)
