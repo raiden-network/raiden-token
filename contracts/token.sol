@@ -44,6 +44,8 @@ contract Token {
      */
     event Transfer(address indexed _from, address indexed _to, uint256 _value);
     event Approval(address indexed _owner, address indexed _spender, uint256 _value);
+
+    // There is no ERC223 compatible Transfer event, with `_data` included.
 }
 
 
@@ -158,7 +160,7 @@ contract StandardToken is Token {
     /*
      * Read functions
      */
-    /// @dev Returns number of allowed tokens that a spender can transfer in
+    /// @dev Returns number of allowed tokens that a spender can transfer on
     /// behalf of a token owner.
     /// @param _owner Address of token owner.
     /// @param _spender Address of token spender.
@@ -180,32 +182,25 @@ contract StandardToken is Token {
 }
 
 
-/// @title Custom Token
-contract CustomToken is StandardToken {
+/// @title Raiden Token
+contract RaidenToken is StandardToken {
 
     /*
      *  Terminology:
-     *  1 token unit = Tei
-     *  1 token = TKN = Tei * multiplier
-     *  multiplier set from token's number of decimals (i.e. 10**decimals)
+     *  1 token unit = Rei
+     *  1 token = RDN = Rei * multiplier
+     *  multiplier set from token's number of decimals (i.e. 10 ** decimals)
      */
 
     /*
      *  Token metadata
      */
-    string constant public name = "The Token";
-    string constant public symbol = "TKN";
+    string constant public name = "Raiden Token";
+    string constant public symbol = "RDN";
     uint8 constant public decimals = 18;
-    uint constant multiplier = 10**uint(decimals);
+    uint constant multiplier = 10 ** uint(decimals);
 
-    address public owner;
-    address public auction_address;
-
-    event Deployed(
-        address indexed _auction,
-        uint indexed _total_supply,
-        uint indexed _auction_supply
-    );
+    event Deployed(uint indexed _total_supply);
     event Burnt(
         address indexed _receiver,
         uint indexed _num,
@@ -217,59 +212,40 @@ contract CustomToken is StandardToken {
      */
     /// @dev Contract constructor function sets dutch auction contract address
     /// and assigns all tokens to dutch auction.
-    /// @param auction Address of dutch auction contract.
-    /// @param initial_supply Number of initially provided token units (Tei).
-    /// @param owners Array of addresses receiving preassigned tokens.
-    /// @param tokens Array of preassigned token units (Tei).
-    function CustomToken(
-        address auction,
-        uint initial_supply,
-        address[] owners,
-        uint[] tokens)
+    /// @param auction_address Address of dutch auction contract.
+    /// @param wallet_address Address of wallet.
+    /// @param initial_supply Number of initially provided token units (Rei).
+    function RaidenToken(
+        address auction_address,
+        address wallet_address,
+        uint initial_supply)
         public
     {
         // Auction address should not be null.
-        require(auction != 0x0);
-        require(owners.length == tokens.length);
-        // Initial supply is in Tei
+        require(auction_address != 0x0);
+        require(wallet_address != 0x0);
+
+        // Initial supply is in Rei
         require(initial_supply > multiplier);
 
-        owner = msg.sender;
-        auction_address = auction;
-
-        // Total supply of Tei at deployment
+        // Total supply of Rei at deployment
         totalSupply = initial_supply;
 
-        // Preallocate tokens to beneficiaries
-        uint prealloc_tokens;
-        for (uint i = 0; i < owners.length; i++) {
-            // Address should not be null.
-            require(owners[i] != 0x0);
-            require(tokens[i] > 0);
-            require(balances[owners[i]] + tokens[i] > balances[owners[i]]);
-            require(prealloc_tokens + tokens[i] > prealloc_tokens);
+        balances[auction_address] = initial_supply / 2;
+        balances[wallet_address] = initial_supply / 2;
 
-            balances[owners[i]] += tokens[i];
-            prealloc_tokens += tokens[i];
-            Transfer(0, owners[i], tokens[i]);
-        }
+        Transfer(0x0, auction_address, balances[auction_address]);
+        Transfer(0x0, wallet_address, balances[wallet_address]);
 
-        balances[auction_address] = totalSupply - prealloc_tokens;
-        Transfer(0, auction_address, balances[auction]);
+        Deployed(totalSupply);
 
-        Deployed(auction_address, totalSupply, balances[auction]);
-
-        assert(balances[auction_address] > 0);
-        assert(balances[auction_address] < totalSupply);
-        assert(totalSupply == balances[auction_address] + prealloc_tokens);
+        assert(totalSupply == balances[auction_address] + balances[wallet_address]);
     }
 
-    /// @notice Allows `msg.sender` to simply destroy `num` token units (Tei),
-    /// without receiving the corresponding amount of ether. This means the total
+    /// @notice Allows `msg.sender` to simply destroy `num` token units (Rei). This means the total
     /// token supply will decrease.
-    /// @dev Allows to destroy token units (Tei) without receiving the
-    /// corresponding amount of ether.
-    /// @param num Number of token units (Tei) to burn.
+    /// @dev Allows to destroy token units (Rei).
+    /// @param num Number of token units (Rei) to burn.
     function burn(uint num) public {
         require(num > 0);
         require(balances[msg.sender] >= num);
