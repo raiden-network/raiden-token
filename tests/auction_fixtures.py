@@ -8,14 +8,14 @@ from functools import (
 from fixtures import (
     owner_index,
     owner,
-    wallet,
+    wallet_address,
     get_bidders,
     create_contract,
     auction_contract,
+    auction_contract_fast_decline,
     get_token_contract,
     token_contract,
     txnCost,
-    auction_fast_decline_args,
 )
 
 
@@ -56,34 +56,22 @@ def auction_setup_contract(
 
 
 @pytest.fixture()
-def auction_started_fast_decline(
-    web3,
-    owner,
-    auction_setup_contract):
-    auction = auction_setup_contract
-    multiplier = auction.call().multiplier()
-
-    # Higher price decline
-    auction.transact({'from': owner}).changeSettings(*auction_fast_decline_args)
-    auction.transact({'from': owner}).startAuction()
-    return auction
-
-
-@pytest.fixture()
 def auction_ended(
     web3,
     owner,
     get_bidders,
-    auction_setup_contract,
+    token_contract,
+    auction_contract_fast_decline,
     auction_bid_tested,
     auction_end_tests):
     eth = web3.eth
-    auction = auction_setup_contract
+    auction = auction_contract_fast_decline
     bidders = get_bidders(10)
-    multiplier = auction.call().multiplier()
 
-    # Higher price decline
-    auction.transact({'from': owner}).changeSettings(*auction_fast_decline_args)
+    # Initialize token
+    token = token_contract(auction.address, {'from': owner})
+    auction.transact({'from': owner}).setup(token.address)
+
     auction.transact({'from': owner}).startAuction()
 
     # Set maximum amount for a bid - we don't want 1 account draining the auction
@@ -130,12 +118,12 @@ def auction_ended(
         index += 1
 
     print('NO OF BIDDERS', index)
-    print('received_ether / bidded', auction.call().received_ether(), bidded)
-    assert auction.call().received_ether() == bidded
+    print('received_wei / bidded', auction.call().received_wei(), bidded)
+    assert auction.call().received_wei() == bidded
     auction.transact({'from': owner}).finalizeAuction()
     auction_end_tests(auction, bidders[index])
 
-    return auction
+    return (token, auction)
 
 
 '''
@@ -146,12 +134,12 @@ def auction_ended(
 
 # Bid + tests that should run when bidding
 @pytest.fixture(params=[True, False])
-def auction_bid_tested(web3, request, wallet, txnCost, contract_params):
+def auction_bid_tested(web3, request, wallet_address, txnCost, contract_params):
     def get(auction, bidder, amount):
         use_fallback = request.param
         bidder_pre_balance = web3.eth.getBalance(bidder)
         bidder_pre_a_balance = auction.call().bids(bidder)
-        wallet_pre_balance = web3.eth.getBalance(wallet)
+        wallet_pre_balance = web3.eth.getBalance(wallet_address)
 
         if use_fallback:
             txn_cost = txnCost(web3.eth.sendTransaction({
@@ -162,7 +150,7 @@ def auction_bid_tested(web3, request, wallet, txnCost, contract_params):
         else:
             txn_cost = txnCost(auction.transact({'from': bidder, 'value': amount}).bid())
         assert auction.call().bids(bidder) == bidder_pre_a_balance + amount
-        assert web3.eth.getBalance(wallet) == wallet_pre_balance + amount
+        assert web3.eth.getBalance(wallet_address) == wallet_pre_balance + amount
         assert web3.eth.getBalance(auction.address) == 0
         assert web3.eth.getBalance(bidder) == bidder_pre_balance - amount - txn_cost
     return get
@@ -174,12 +162,12 @@ def auction_claim_tokens_tested(web3, owner, contract_params):
     def get(token, auction, bidders, distributor=None):
         if type(bidders) == str:
             bidders = [bidders]
-        print('-- contract_params', contract_params)
+
         values = []
         pre_balances = []
         expected_tokens = []
 
-        multiplier = auction.call().multiplier()
+        token_multiplier = auction.call().token_multiplier()
         final_price = auction.call().final_price()
         auction_pre_balance = token.call().balanceOf(auction.address)
         pre_funds_claimed = auction.call().funds_claimed()
@@ -190,7 +178,7 @@ def auction_claim_tokens_tested(web3, owner, contract_params):
         for i, bidder in enumerate(bidders):
             print('auction_claim_tokens_tested bidder', bidder)
             values.append(auction.call().bids(bidder))
-            tokens_expected = multiplier * values[i] // final_price
+            tokens_expected = token_multiplier * values[i] // final_price
             expected_tokens.append(tokens_expected)
             pre_balances.append(token.call().balanceOf(bidder))
 
@@ -202,7 +190,7 @@ def auction_claim_tokens_tested(web3, owner, contract_params):
         if len(bidders) == 1:
             print('auction_claim_tokens_tested claimTokens', bidders[0])
             auction.transact({'from': bidders[0]}).claimTokens()
-            #auction.transact({'from': owner}).claimTokens(bidders[0])
+            # auction.transact({'from': owner}).claimTokens(bidders[0])
         else:
             print('auction_claim_tokens_tested distribute', bidders)
             distributor.transact({'from': owner}).distribute(bidders)
@@ -215,21 +203,27 @@ def auction_claim_tokens_tested(web3, owner, contract_params):
             with pytest.raises(tester.TransactionFailed):
                 auction.transact({'from': bidder}).claimTokens()
 
-        assert auction.call().funds_claimed() == pre_funds_claimed + reduce((lambda x, y: x + y), values)
-        assert token.call().balanceOf(auction.address) == auction_pre_balance - reduce((lambda x, y: x + y), expected_tokens)
+        funds_claimed = auction.call().funds_claimed()
+        funds_claimed_calculated = pre_funds_claimed + reduce((lambda x, y: x + y), values)
+        assert funds_claimed == funds_claimed_calculated
+
+        auction_balance = token.call().balanceOf(auction.address)
+        claimed_tokens = reduce((lambda x, y: x + y), expected_tokens)
+        auction_balance_calculated = auction_pre_balance - claimed_tokens
+        assert auction_balance == auction_balance_calculated
 
     return get
 
 
 # Tests that should run after the auction has ended
 @pytest.fixture()
-def auction_end_tests(web3, wallet):
+def auction_end_tests(web3, wallet_address):
     def get(auction, bidder):
         assert auction.call().stage() == 3  # AuctionEnded
         assert auction.call().missingFundsToEndAuction() == 0
         assert auction.call().price() == 0  # UI has to call final_price
         assert auction.call().final_price() > 0
-        assert web3.eth.getBalance(wallet) >= auction.call().received_ether()
+        assert web3.eth.getBalance(wallet_address) >= auction.call().received_wei()
 
         with pytest.raises(tester.TransactionFailed):
             auction.transact({'from': bidder, "value": 1000}).bid()
@@ -242,12 +236,12 @@ def auction_end_tests(web3, wallet):
 
 # Tests that should run after the auction has ended
 @pytest.fixture()
-def auction_post_distributed_tests(web3, wallet):
+def auction_post_distributed_tests(web3, wallet_address):
     def get(auction):
-        owner = auction.call().owner()
+        owner = auction.call().owner_address()
         assert auction.call().stage() == 4  # TokensDistributed
 
-        assert auction.call().funds_claimed() == auction.call().received_ether()
-        assert web3.eth.getBalance(wallet) >= auction.call().received_ether()
+        assert auction.call().funds_claimed() == auction.call().received_wei()
+        assert web3.eth.getBalance(wallet_address) >= auction.call().received_wei()
         assert web3.eth.getBalance(auction.address) == 0
     return get

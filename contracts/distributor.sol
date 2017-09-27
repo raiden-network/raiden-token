@@ -9,6 +9,9 @@ contract Distributor {
      */
 
     DutchAuction public auction;
+
+    // TODO The owner can be removed
+    // Anyone should be able to claim tokens
     address public owner;
 
     /*
@@ -26,19 +29,18 @@ contract Distributor {
 
     event Deployed();
     event Distributed(address[] indexed addresses);
-    event ClaimTokensCalled(address indexed bidder);
 
     /*
       * Public functions
       */
     /// @dev Contract constructor function, sets the auction contract address.
-    /// @param _auction Address of auction contract.
-    function Distributor(address _auction) {
-        require(_auction != 0x0);
+    /// @param _auction_address Address of auction contract.
+    function Distributor(address _auction_address) {
+        require(_auction_address != 0x0);
 
         owner = msg.sender;
-        auction = DutchAuction(_auction);
-        require(auction.owner() == owner);
+        auction = DutchAuction(_auction_address);
+        require(auction.owner_address() == owner);
         Deployed();
     }
 
@@ -48,7 +50,6 @@ contract Distributor {
     function distribute(address[] addresses) public isOwner {
         for (uint8 i = 0; i < addresses.length; i++) {
             if (auction.bids(addresses[i]) > 0) {
-                ClaimTokensCalled(addresses[i]);
                 auction.claimTokens(addresses[i]);
             }
         }

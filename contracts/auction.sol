@@ -2,34 +2,36 @@ pragma solidity ^0.4.11;
 
 import './token.sol';
 
-/// @title Dutch auction contract - distribution of tokens using an auction.
+/// @title Dutch auction contract - distribution of a fixed number of tokens using an auction.
+/// The contract code is inspired by the Gnosis auction contract. Main difference is that the
+/// auction ends if a fixed number of tokens was sold.
 contract DutchAuction {
     /*
-     * Auction for the TKN Token.
+     * Auction for the RDN Token.
      *
      * Terminology:
-     * 1 token unit = Tei
-     * 1 token = TKN = Tei * multiplier
-     * multiplier set from token's number of decimals (i.e. 10 ** decimals)
+     * 1 token unit = Rei
+     * 1 token = RDN = Rei * token_multiplier
+     * token_multiplier set from token's number of decimals (i.e. 10 ** decimals)
      */
 
     /*
      * Storage
      */
 
-    CustomToken public token;
-    address public owner;
-    address public wallet;
+    RaidenToken public token;
+    address public owner_address;
+    address public wallet_address;
 
     // Price decay function parameters to be changed depending on the desired outcome
 
-    // Starting price in WEI; i.e. 2 * 10 ** 18
+    // Starting price in WEI; e.g. 2 * 10 ** 18
     uint public price_start;
 
-    // Divisor constant; i.e. 524880000
+    // Divisor constant; e.g. 524880000
     uint public price_constant;
 
-    // Divisor exponent; i.e. 3
+    // Divisor exponent; e.g. 3
     uint32 public price_exponent;
 
     // For calculating elapsed time for price
@@ -38,16 +40,17 @@ contract DutchAuction {
     uint public start_block;
 
     // Keep track of all ETH received in the bids
-    uint public received_ether;
+    uint public received_wei;
 
-    // Keep track of funds claimed after auction has ended
+    // Keep track of cumulative ETH funds for which the tokens have been claimed
     uint public funds_claimed;
 
-    // Total number of Tei (TKN * multiplier) that will be auctioned
-    uint public multiplier;
-    uint public tokens_auctioned;
+    uint public token_multiplier;
 
-    // Wei per TKN (Tei * multiplier)
+    // Total number of Rei (RDN * token_multiplier) that will be auctioned
+    uint public num_tokens_auctioned;
+
+    // Wei per RDN (Rei * token_multiplier)
     uint public final_price;
 
     mapping (address => uint) public bids;
@@ -74,7 +77,7 @@ contract DutchAuction {
     }
 
     modifier isOwner() {
-        require(msg.sender == owner);
+        require(msg.sender == owner_address);
         _;
     }
 
@@ -88,10 +91,9 @@ contract DutchAuction {
      */
 
     event Deployed(
-        address indexed _auction,
         uint indexed _price_start,
         uint indexed _price_constant,
-        uint32 _price_exponent
+        uint32 indexed _price_exponent
     );
     event Setup();
     event SettingsChanged(
@@ -102,11 +104,11 @@ contract DutchAuction {
     event AuctionStarted(uint indexed _start_time, uint indexed _block_number);
     event BidSubmission(
         address indexed _sender,
-        uint indexed _amount,
-        uint indexed _missing_funds
+        uint _amount,
+        uint _missing_funds
     );
-    event ClaimedTokens(address indexed _recipient, uint indexed _sent_amount);
-    event AuctionEnded(uint indexed _final_price);
+    event ClaimedTokens(address indexed _recipient, uint _sent_amount);
+    event AuctionEnded(uint _final_price);
     event TokensDistributed();
 
     /*
@@ -115,45 +117,43 @@ contract DutchAuction {
 
     /// @dev Contract constructor function sets the starting price, divisor constant and
     /// divisor exponent for calculating the Dutch Auction price.
-    /// @param _wallet Wallet address to which all contributed ETH will be forwarded.
+    /// @param _wallet_address Wallet address to which all contributed ETH will be forwarded.
     /// @param _price_start High price in WEI at which the auction starts.
     /// @param _price_constant Auction price divisor constant.
     /// @param _price_exponent Auction price divisor exponent.
     function DutchAuction(
-        address _wallet,
+        address _wallet_address,
         uint _price_start,
         uint _price_constant,
         uint32 _price_exponent)
         public
     {
-        require(_wallet != 0x0);
-        wallet = _wallet;
+        require(_wallet_address != 0x0);
+        wallet_address = _wallet_address;
 
-        owner = msg.sender;
+        owner_address = msg.sender;
         stage = Stages.AuctionDeployed;
-        Deployed(this, _price_start, _price_constant, _price_exponent);
         changeSettings(_price_start, _price_constant, _price_exponent);
+        Deployed(_price_start, _price_constant, _price_exponent);
     }
 
     /// @dev Fallback function for the contract, which calls bid() if the auction has started.
     function () public payable atStage(Stages.AuctionStarted) {
-        bid(msg.sender);
+        bid();
     }
 
-    /// @notice Set `_token` as the token address to be used in the auction.
+    /// @notice Set `_token_address` as the token address to be used in the auction.
     /// @dev Setup function sets external contracts addresses.
-    /// @param _token Token address.
-    function setup(address _token) public isOwner atStage(Stages.AuctionDeployed) {
-        require(_token != 0x0);
-        token = CustomToken(_token);
-        require(token.owner() == owner);
-        require(token.auction_address() == address(this));
+    /// @param _token_address Token address.
+    function setup(address _token_address) public isOwner atStage(Stages.AuctionDeployed) {
+        require(_token_address != 0x0);
+        token = RaidenToken(_token_address);
 
-        // Get number of Tei (TKN * multiplier) to be auctioned from token auction balance
-        tokens_auctioned = token.balanceOf(this);
+        // Get number of Rei (RDN * token_multiplier) to be auctioned from token auction balance
+        num_tokens_auctioned = token.balanceOf(address(this));
 
-        // Set number of tokens multiplier from token decimals
-        multiplier = 10 ** uint(token.decimals());
+        // Set the number of the token multiplier for its decimals
+        token_multiplier = 10 ** uint(token.decimals());
 
         stage = Stages.AuctionSetUp;
         Setup();
@@ -169,7 +169,7 @@ contract DutchAuction {
         uint _price_start,
         uint _price_constant,
         uint32 _price_exponent)
-        public
+        internal
         isOwner
     {
         require(stage == Stages.AuctionDeployed || stage == Stages.AuctionSetUp);
@@ -191,17 +191,18 @@ contract DutchAuction {
         AuctionStarted(start_time, start_block);
     }
 
-    /// @notice Finalize the auction - sets the final price and changes the auction
+    /// @notice Finalize the auction - sets the final RDN token price and changes the auction
     /// stage after no bids are allowed anymore.
-    /// @dev Finalize auction and set the final token price.
+    /// @dev Finalize auction and set the final RDN token price.
     function finalizeAuction() public atStage(Stages.AuctionStarted)
     {
         // Missing funds should be 0 at this point
         uint missing_funds = missingFundsToEndAuction();
         require(missing_funds == 0);
 
-        // Calculate the final price WEI / TKN = WEI / (Tei / multiplier)
-        final_price = multiplier * received_ether / tokens_auctioned;
+        // Calculate the final price = WEI / RDN = WEI / (Rei / token_multiplier)
+        // Reminder: num_tokens_auctioned is the number of Rei (RDN * token_multiplier) that are auctioned
+        final_price = token_multiplier * received_wei / num_tokens_auctioned;
 
         end_time = now;
         stage = Stages.AuctionEnded;
@@ -218,108 +219,85 @@ contract DutchAuction {
         bid(msg.sender);
     }
 
-    /// @notice Send `msg.value` WEI to the auction from the `receiver` account.
+    /// @notice Send `msg.value` WEI to the auction from the `msg.sender` account
+    /// and the `receiver` account will receive the tokens if claimed.
     /// @dev Allows to send a bid to the auction.
-    /// @param receiver Bidder account address.
-    function bid(address receiver)
+    /// @param receiver_address Token receiver account address.
+    function bid(address receiver_address)
         public
         payable
         isValidPayload
         atStage(Stages.AuctionStarted)
     {
-        require(receiver != 0x0);
+        require(receiver_address != 0x0);
         require(msg.value > 0);
-        require(bids[receiver] + msg.value >= msg.value);
-
-        uint pre_receiver_funds = bids[receiver];
+        assert(bids[receiver_address] + msg.value >= msg.value);
 
         // Missing funds without the current bid value
         uint missing_funds = missingFundsToEndAuction();
 
-        // We only allow bid values less than the missing funds to end the auction value.
+        // We require bid values to be less than the funds missing to end the auction
+        // at the current price.
         require(msg.value <= missing_funds);
 
-        bids[receiver] += msg.value;
-        received_ether += msg.value;
+        bids[receiver_address] += msg.value;
+        received_wei += msg.value;
 
         // Send bid amount to wallet
-        wallet.transfer(msg.value);
+        wallet_address.transfer(msg.value);
 
-        BidSubmission(receiver, msg.value, missing_funds);
+        BidSubmission(receiver_address, msg.value, missing_funds);
 
-        assert(bids[receiver] == pre_receiver_funds + msg.value);
-        assert(received_ether >= msg.value);
+        assert(received_wei >= msg.value);
     }
 
     /// @notice Claim auction tokens for `msg.sender` after the auction has ended.
-    /// @dev Claims tokens for bidder after auction. To be used if tokens can be claimed by bidders, individually.
+    /// @dev Claims tokens for `msg.sender` after auction. To be used if tokens can
+    /// be claimed by beneficiaries, individually.
     function claimTokens() public atStage(Stages.AuctionEnded) {
         claimTokens(msg.sender);
     }
 
-    /// @notice Claim auction tokens for `receiver` after the auction has ended.
-    /// @dev Claims tokens for bidder after auction.
-    /// @param receiver Tokens will be assigned to this address if set.
-    function claimTokens(address receiver)
+    /// @notice Claim auction tokens for `receiver_address` after the auction has ended.
+    /// @dev Claims tokens for `receiver_address` after auction has ended.
+    /// @param receiver_address Tokens will be assigned to this address if eligible.
+    function claimTokens(address receiver_address)
         public
         isValidPayload
         atStage(Stages.AuctionEnded)
     {
-        require(receiver != 0x0);
-        require(bids[receiver] > 0);
+        require(receiver_address != 0x0);
+        require(bids[receiver_address] > 0);
 
-        // Number of Tei = bidded_wei / wei_per_TKN * multiplier
-        uint num = multiplier * bids[receiver] / final_price;
+        // Number of Rei = bid_wei / Rei = bid_wei / (wei_per_RDN * token_multiplier)
+        uint num = token_multiplier * bids[receiver_address] / final_price;
 
-        // Update funds claimed with full bidded amount
-        // rounding errors are included to not block the contract
-        funds_claimed += bids[receiver];
+        // Update the total amount of funds for which tokens have been claimed
+        funds_claimed += bids[receiver_address];
 
         // Set receiver bid to 0 before assigning tokens
-        bids[receiver] = 0;
+        bids[receiver_address] = 0;
 
-        require(token.transfer(receiver, num));
+        require(token.transfer(receiver_address, num));
 
-        ClaimedTokens(receiver, num);
+        ClaimedTokens(receiver_address, num);
 
         // After the last tokens are claimed, we change the auction stage
-        if (funds_claimed == received_ether) {
+        // Due to the above logic, rounding errors will not be an issue
+        if (funds_claimed == received_wei) {
             stage = Stages.TokensDistributed;
             TokensDistributed();
         }
 
-        assert(token.balanceOf(receiver) >= num);
-        assert(bids[receiver] == 0);
+        assert(token.balanceOf(receiver_address) >= num);
+        assert(bids[receiver_address] == 0);
     }
 
-    /*
-     *  Private functions
-     */
-
-    /// @dev Calculates the token price (WEI / TKN) at the current timestamp
-    /// during the auction; elapsed time = 0 before auction starts.
-    /// Based on the provided parameters, the price does not change in the first
-    /// `price_constant^(1/price_exponent)` seconds due to rounding.
-    /// Rounding in `decay_rate` also produces values that increase instead of decrease
-    /// in the beginning; these spikes decrease over time and are noticeable
-    /// only in first hours. This should be calculated before usage.
-    /// @return Returns the token price - Wei per TKN.
-    function calcTokenPrice() constant private returns (uint) {
-        uint elapsed;
-        if (stage == Stages.AuctionStarted) {
-            elapsed = now - start_time;
-        }
-
-        uint decay_rate = elapsed ** price_exponent / price_constant;
-        return price_start * (1 + elapsed) / (1 + elapsed + decay_rate);
-    }
-
-    /// --------------------------------- Price Functions ----------------------
-
-    /// @notice Get the TKN price in WEI during the auction, at the moment of
-    /// calling this method. Returns `0` if auction has ended.
-    /// @dev Calculates current token price.
-    /// @return Returns num Wei per TKN (multiplier * Tei).
+    /// @notice Get the RDN price in WEI during the auction, at the time of
+    /// calling this function. Returns `0` if auction has ended.
+    /// Returns `price_start` before auction has started.
+    /// @dev Calculates the current RDN token price in WEI.
+    /// @return Returns WEI per RDN (token_multiplier * Rei).
     function price() public constant returns (uint) {
         if (stage == Stages.AuctionEnded ||
             stage == Stages.TokensDistributed) {
@@ -329,14 +307,40 @@ contract DutchAuction {
     }
 
     /// @notice Get the missing funds needed to end the auction,
-    /// calculated at the current TKN price.
-    /// @dev The missing funds amount necessary to end the auction at the current price.
-    /// @return Returns the missing funds amount.
+    /// calculated at the current RDN price in WEI.
+    /// @dev The missing funds amount necessary to end the auction at the current RDN price in WEI.
+    /// @return Returns the missing funds amount in WEI.
     function missingFundsToEndAuction() constant public returns (uint) {
-        uint funds_at_price = tokens_auctioned * price() / multiplier;
-        if (funds_at_price < received_ether) {
+
+        // num_tokens_auctioned = total number of Rei (RDN * token_multiplier) that is auctioned
+        uint required_wei_at_price = num_tokens_auctioned * price() / token_multiplier;
+        if (required_wei_at_price <= received_wei) {
             return 0;
         }
-        return funds_at_price - received_ether;
+
+        // assert(required_wei_at_price - received_wei > 0);
+        return required_wei_at_price - received_wei;
+    }
+
+    /*
+     *  Private functions
+     */
+
+    /// @dev Calculates the token price (WEI / RDN) at the current timestamp
+    /// during the auction; elapsed time = 0 before auction starts.
+    /// Based on the provided parameters, the price does not change in the first
+    /// `price_constant^(1/price_exponent)` seconds due to rounding.
+    /// Rounding in `decay_rate` also produces values that increase instead of decrease
+    /// in the beginning; these spikes decrease over time and are noticeable
+    /// only in first hours. This should be calculated before usage.
+    /// @return Returns the token price - Wei per RDN.
+    function calcTokenPrice() constant private returns (uint) {
+        uint elapsed;
+        if (stage == Stages.AuctionStarted) {
+            elapsed = now - start_time;
+        }
+
+        uint decay_rate = elapsed ** price_exponent / price_constant;
+        return price_start * (1 + elapsed) / (1 + elapsed + decay_rate);
     }
 }
