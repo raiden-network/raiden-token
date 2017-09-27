@@ -10,12 +10,12 @@ from utils import (
 from fixtures import (
     owner_index,
     owner,
-    wallet,
-    team,
+    wallet_address,
     get_bidders,
     contract_params,
     create_contract,
     auction_contract,
+    auction_contract_fast_decline,
     get_token_contract,
     token_contract,
     distributor_contract,
@@ -41,7 +41,7 @@ from populus.utils.wait import wait_for_transaction_receipt
 def test_distributor_init(
     chain,
     web3,
-    wallet,
+    wallet_address,
     owner,
     get_bidders,
     create_contract,
@@ -49,9 +49,10 @@ def test_distributor_init(
     A = get_bidders(1)[0]
     Distributor = chain.provider.get_contract_factory('Distributor')
     Auction = chain.provider.get_contract_factory('DutchAuction')
-    auction = create_contract(Auction, [wallet] + contract_params['args'], {'from': owner})
+    auction = create_contract(Auction, [wallet_address] + contract_params['args'], {'from': owner})
 
-    other_owner_auction = create_contract(Auction, [wallet] + contract_params['args'], {'from': A})
+    other_auction_params = [wallet_address] + contract_params['args']
+    other_owner_auction = create_contract(Auction, other_auction_params, {'from': A})
     other_contract_type = create_contract(Distributor, [auction.address])
 
     assert owner != A
@@ -74,20 +75,25 @@ def test_distributor_init(
 
 
 def test_distributor_distribute(
+    chain,
     web3,
+    wallet_address,
     owner,
+    get_bidders,
+    create_contract,
     token_contract,
-    distributor_contract,
-    auction_ended,
+    auction_contract_fast_decline,
+    auction_bid_tested,
     auction_claim_tokens_tested,
     auction_post_distributed_tests):
-    distributor = distributor_contract
-    auction = auction_ended
+    bidders = get_bidders(10)
+    auction = auction_contract_fast_decline
     token = token_contract(auction.address)
-    addresses = []
-    values = []
-    claimed = []
-    verified_claim = []
+    auction.transact({'from': owner}).setup(token.address)
+    auction.transact({'from': owner}).startAuction()
+
+    Distributor = chain.provider.get_contract_factory('Distributor')
+    distributor = create_contract(Distributor, [auction.address])
 
     # Retrieve bidder addresses from contract bid events
     def get_bidders_addresses(event):
@@ -103,18 +109,30 @@ def test_distributor_distribute(
         values[index] += event['args']['_amount']
 
     def verify_claim(event):
-        print('verify_claim event', event)
-        # Check for double claiming
         addr = event['args']['_recipient']
         sent_amount = event['args']['_sent_amount']
 
+        # Check for double claiming
         assert addr not in verified_claim
-        verified_claim.append(address)
-
-        print('--- verify_claim', sent_amount, token.call().balanceOf(addr))
-        print('--- verify_claim auction balance', token.call().balanceOf(auction.address))
         assert auction.call().bids(addr) == 0
         assert sent_amount == token.call().balanceOf(addr)
+        verified_claim.append(address)
+
+    for bidder in bidders:
+        missing = auction.call().missingFundsToEndAuction()
+        balance = web3.eth.getBalance(bidder)
+        amount = min(missing, balance - 500000)
+        if(amount > 0):
+            print('-- BIDDING', amount, missing, balance)
+            auction_bid_tested(auction, bidder, amount)
+
+    assert auction.call().missingFundsToEndAuction() == 0
+    auction.transact({'from': owner}).finalizeAuction()
+
+    addresses = []
+    values = []
+    claimed = []
+    verified_claim = []
 
     handle_logs(contract=auction, event='BidSubmission', callback=get_bidders_addresses)
 

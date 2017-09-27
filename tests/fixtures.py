@@ -1,8 +1,5 @@
 import pytest
 from eth_utils import decode_hex, keccak
-from functools import (
-    reduce
-)
 
 from utils import (
     print_logs,
@@ -20,51 +17,30 @@ fake_address = 0x03432
 passphrase = '0'
 fixture_decimals = [18]
 
-auction_fast_decline_args = [10000, 4, 2]
+auction_fast_decline_args = [10000000, 4, 2]
+auction_contracts = ['DutchAuction']  # , 'DutchAuctionTest']
 
 
 contract_args = [
     {
-        'token': 'CustomToken',
+        'token': 'RaidenToken',
         'decimals': 18,
         'supply': 10000000,
-        'preallocations': [200000, 800000],
         'args': [10000, 4, 2]
     },
     {
-        'token': 'CustomToken',
+        'token': 'RaidenToken',
         'decimals': 18,
         'supply': 10000000,
-        'preallocations': [200400, 150000, 400001, 200010],
         'args': [1000000, 20, 3]
     },
     {
-        'token': 'CustomToken',
+        'token': 'RaidenToken',
         'decimals': 18,
         'supply': 10000000,
-        'preallocations': [200400, 150000, 400001, 200010],
-        'args': [200000000, 524880000, 3]
+        'args': [2 * 10 ** 10, 524880000, 3]
     }
 ]
-
-'''
-contract_args += [
-    {
-        'token': 'CustomToken2',
-        'decimals': 1,
-        'supply': 10000000,
-        'preallocations': [200000, 800000],
-        'args': [5982, 59]
-    },
-    {
-        'token': 'CustomToken2',
-        'decimals': 1,
-        'supply': 10000000,
-        'preallocations': [200000, 800000],
-        'args': [10000, 7500]
-    }
-]
-'''
 
 token_events = {
     'deploy': 'Deployed',
@@ -75,15 +51,9 @@ token_events = {
 }
 
 
-# auction_supply = initial_supply - reduce((lambda x, y: x + y), prealloc)
-
 def test_bytes(value=10, size=256):
     hex_value = decode_hex('{:x}'.format(value).zfill(size // 4))
     return keccak(hex_value)
-
-
-def prepare_preallocs(multiplier, preallocs):
-    return list(map(lambda x: x * multiplier, preallocs))
 
 
 @pytest.fixture()
@@ -92,7 +62,7 @@ def owner_index():
 
 
 @pytest.fixture()
-def wallet(web3):
+def wallet_address(web3):
     return web3.eth.accounts[1]
 
 
@@ -102,15 +72,9 @@ def owner(web3, owner_index):
 
 
 @pytest.fixture()
-def team(web3, owner_index, contract_params):
-    index_start = owner_index + 1
-    index_end = len(contract_params['preallocations']) + index_start
-    return web3.eth.accounts[index_start:index_end]
-
-@pytest.fixture()
 def get_bidders(web3, owner_index, contract_params, create_accounts):
     def get(number):
-        index_start = owner_index + 1 + len(contract_params['preallocations'])
+        index_start = owner_index + 1
         accounts_len = len(web3.eth.accounts)
         index_end = min(number + index_start, accounts_len)
         bidders = web3.eth.accounts[index_start:index_end]
@@ -143,25 +107,52 @@ def create_accounts(web3):
     return get
 
 
-@pytest.fixture()
+@pytest.fixture(params=auction_contracts)
 def auction_contract(
+    request,
     contract_params,
     chain,
-    wallet,
+    wallet_address,
     create_contract):
-    Auction = chain.provider.get_contract_factory('DutchAuction')
+    auction_contract_type = request.param
+    Auction = chain.provider.get_contract_factory(auction_contract_type)
 
-    auction_contract = create_contract(Auction, [wallet] + contract_params['args'])
+    auction_contract = create_contract(Auction, [wallet_address] + contract_params['args'])
 
     if print_the_logs:
-        print_logs(auction_contract, 'Deployed', 'DutchAuction')
-        print_logs(auction_contract, 'Setup', 'DutchAuction')
-        print_logs(auction_contract, 'SettingsChanged', 'DutchAuction')
-        print_logs(auction_contract, 'AuctionStarted', 'DutchAuction')
-        print_logs(auction_contract, 'BidSubmission', 'DutchAuction')
-        print_logs(auction_contract, 'AuctionEnded', 'DutchAuction')
-        print_logs(auction_contract, 'ClaimedTokens', 'DutchAuction')
-        print_logs(auction_contract, 'TokensDistributed', 'DutchAuction')
+        print_logs(auction_contract, 'Deployed', auction_contract_type)
+        print_logs(auction_contract, 'Setup', auction_contract_type)
+        print_logs(auction_contract, 'SettingsChanged', auction_contract_type)
+        print_logs(auction_contract, 'AuctionStarted', auction_contract_type)
+        print_logs(auction_contract, 'BidSubmission', auction_contract_type)
+        print_logs(auction_contract, 'AuctionEnded', auction_contract_type)
+        print_logs(auction_contract, 'ClaimedTokens', auction_contract_type)
+        print_logs(auction_contract, 'TokensDistributed', auction_contract_type)
+
+    return auction_contract
+
+
+@pytest.fixture(params=auction_contracts)
+def auction_contract_fast_decline(
+    request,
+    chain,
+    web3,
+    wallet_address,
+    create_contract):
+    auction_contract_type = request.param
+    Auction = chain.provider.get_contract_factory(auction_contract_type)
+
+    auction_contract = create_contract(Auction, [wallet_address] + auction_fast_decline_args)
+
+    if print_the_logs:
+        print_logs(auction_contract, 'Deployed', auction_contract_type)
+        print_logs(auction_contract, 'Setup', auction_contract_type)
+        print_logs(auction_contract, 'SettingsChanged', auction_contract_type)
+        print_logs(auction_contract, 'AuctionStarted', auction_contract_type)
+        print_logs(auction_contract, 'BidSubmission', auction_contract_type)
+        print_logs(auction_contract, 'AuctionEnded', auction_contract_type)
+        print_logs(auction_contract, 'ClaimedTokens', auction_contract_type)
+        print_logs(auction_contract, 'TokensDistributed', auction_contract_type)
 
     return auction_contract
 
@@ -169,16 +160,14 @@ def auction_contract(
 @pytest.fixture()
 def get_token_contract(chain, create_contract, owner):
     # contract can be auction contract or proxy contract
-    def get(arguments, transaction=None, token_type='CustomToken', decimals=18):
+    def get(arguments, transaction=None, token_type='RaidenToken', decimals=18):
         if not decimals == 18:
-            token_type = 'CustomToken2'
+            token_type = 'RaidenToken2'
             arguments.insert(0, decimals)
 
-        CustomToken = chain.provider.get_contract_factory(token_type)
+        RaidenToken = chain.provider.get_contract_factory(token_type)
 
-        # print('get_token_contract token_type', token_type, decimals, arguments)
-
-        token_contract = create_contract(CustomToken, arguments, transaction)
+        token_contract = create_contract(RaidenToken, arguments, transaction)
 
         if print_the_logs:
             print_logs(token_contract, 'Transfer', token_type)
@@ -216,21 +205,19 @@ def token_contract(
     chain,
     web3,
     owner,
-    team,
+    wallet_address,
     contract_params,
     get_token_contract):
     decimals = contract_params['decimals']
-    multiplier = 10**(decimals)
-    preallocations = contract_params['preallocations']
+    multiplier = 10 ** decimals
     supply = contract_params['supply'] * multiplier
     token_type = contract_params['token']
 
     def get(auction_address, transaction=None):
         args = [
             auction_address,
-            supply,
-            team,
-            prepare_preallocs(multiplier, preallocations)
+            wallet_address,
+            supply
         ]
 
         token_contract = get_token_contract(args, transaction, token_type, decimals)
@@ -240,18 +227,17 @@ def token_contract(
 
 
 @pytest.fixture()
-def distributor_contract(
-    chain,
-    create_contract,
-    auction_contract):
-    Distributor = chain.provider.get_contract_factory('Distributor')
-    distributor_contract = create_contract(Distributor, [auction_contract.address])
+def distributor_contract(chain, create_contract):
+    def get(auction_address):
+        Distributor = chain.provider.get_contract_factory('Distributor')
+        distributor_contract = create_contract(Distributor, [auction_address])
 
-    if print_the_logs:
-        print_logs(distributor_contract, 'Distributed', 'Distributor')
-        print_logs(distributor_contract, 'ClaimTokensCalled', 'Distributor')
+        if print_the_logs:
+            print_logs(distributor_contract, 'Distributed', 'Distributor')
+            print_logs(distributor_contract, 'ClaimTokensCalled', 'Distributor')
 
-    return distributor_contract
+        return distributor_contract
+    return get
 
 
 @pytest.fixture

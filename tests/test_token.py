@@ -9,7 +9,7 @@ from fixtures import (
     token_events,
     owner_index,
     owner,
-    team,
+    wallet_address,
     get_bidders,
     fixture_decimals,
     contract_params,
@@ -17,7 +17,6 @@ from fixtures import (
     token_contract,
     create_contract,
     print_logs,
-    prepare_preallocs,
     create_accounts,
     txnCost,
     test_bytes,
@@ -48,6 +47,7 @@ def proxy_erc223_contract(chain, create_contract):
 def test_token_init(
     chain,
     web3,
+    wallet_address,
     get_token_contract,
     proxy_contract,
     decimals):
@@ -56,128 +56,69 @@ def test_token_init(
     multiplier = 10**(decimals)
     initial_supply = 5000 * multiplier
 
-    preallocs = [
-        500 * multiplier,
-        800 * multiplier,
-        1000 * multiplier,
-        700 * multiplier
-    ]
-
     # Transaction fails when auction address is invalid
     with pytest.raises(TypeError):
         token = get_token_contract([
             0,
-            initial_supply,
-            [A, B, C, D],
-            preallocs
-        ], {'from': E}, decimals=decimals)
-    with pytest.raises(TypeError):
-        token = get_token_contract([
-            0x00343,
-            initial_supply,
-            [A, B, C, D],
-            preallocs
-        ], {'from': E}, decimals=decimals)
-
-    # Transaction fails when team addresses are invalid
-    with pytest.raises(TypeError):
-        token = get_token_contract([
-            proxy_contract.address,
-            initial_supply,
-            [A, 0, C, D],
-            preallocs
+            wallet_address,
+            initial_supply
         ], {'from': E}, decimals=decimals)
     with pytest.raises(TypeError):
         token = get_token_contract([
             proxy_contract.address,
-            initial_supply,
-            [A, 0x00343, C, D],
-            preallocs
+            0,
+            wallet_address,
+            initial_supply
         ], {'from': E}, decimals=decimals)
-
-    # Transaction fails when supply or preallocations are not uint
     with pytest.raises(TypeError):
         token = get_token_contract([
-            proxy_contract.address,
-            -2,
-            [A, B, C, D],
-            preallocs
+            fake_address,
+            wallet_address,
+            initial_supply
         ], {'from': E}, decimals=decimals)
 
-    with pytest.raises(TypeError):
-        token = get_token_contract([
-            proxy_contract.address,
-            initial_supply,
-            [A, B, C, D],
-            [500 * multiplier, -2]
-        ], {'from': E}, decimals=decimals)
-
-    # Test max uint as supply
+    # Test max uint - 2 as supply (has to be even)
     token = get_token_contract([
         proxy_contract.address,
-        MAX_UINT,
-        [A, B, C, D],
-        preallocs
+        wallet_address,
+        MAX_UINT - 1
     ], {'from': E}, decimals=decimals)
 
     with pytest.raises(TypeError):
         token = get_token_contract([
             proxy_contract.address,
-            MAX_UINT + 1,
-            [A, B, C, D],
-            preallocs
-        ], {'from': E}, decimals=decimals)
-
-    # Transaction fails if different length arrays for owners & preallocation values
-    with pytest.raises(tester.TransactionFailed):
-        token = get_token_contract([
-            proxy_contract.address,
-            1000000 * multiplier,
-            [A, B, C, D],
-            [4000, 3000, 5000]
+            wallet_address,
+            MAX_UINT + 1
         ], {'from': E}, decimals=decimals)
 
     # Transaction fails if initial_supply == 0
     with pytest.raises(tester.TransactionFailed):
         token = get_token_contract([
             proxy_contract.address,
-            0,
-            [A, B, C, D],
-            [0, 0, 0, 0]
+            wallet_address,
+            0
         ], {'from': E}, decimals=decimals)
 
-    # Transaction fails of there are no preallocations
+    with pytest.raises(TypeError):
+        token = get_token_contract([
+            proxy_contract.address,
+            wallet_address,
+            -2
+        ], {'from': E}, decimals=decimals)
+
+    # Fails when supply is an odd number; auction and wallet addresses
+    # are assigned a different number of tokens
     with pytest.raises(tester.TransactionFailed):
         token = get_token_contract([
             proxy_contract.address,
-            initial_supply,
-            [],
-            []
-        ], {'from': E}, decimals=decimals)
-
-    # Fails when initial_supply < preallocations
-    with pytest.raises(tester.TransactionFailed):
-        token = get_token_contract([
-            proxy_contract.address,
-            multiplier - 2,
-            [A, B, C, D],
-            preallocs
-        ], {'from': E}, decimals=decimals)
-
-    # Fails when auctioned tokens <= 0
-    with pytest.raises(tester.TransactionFailed):
-        token = get_token_contract([
-            proxy_contract.address,
-            reduce((lambda x, y: x + y), preallocs),
-            [A, B, C, D],
-            preallocs
+            wallet_address,
+            10000001,
         ], {'from': E}, decimals=decimals)
 
     token = get_token_contract([
         proxy_contract.address,
-        initial_supply,
-        [A, B, C, D],
-        preallocs
+        wallet_address,
+        initial_supply
     ], {'from': E}, decimals=decimals)
     assert token.call().decimals() == decimals
 
@@ -186,6 +127,7 @@ def test_token_init(
 def test_token_variable_access(
     chain,
     web3,
+    wallet_address,
     get_token_contract,
     proxy_contract,
     decimals):
@@ -193,52 +135,40 @@ def test_token_variable_access(
     (A, B, C) = web3.eth.accounts[1:4]
     multiplier = 10**(decimals)
     initial_supply = 3000 * multiplier
-    preallocs = [
-        500 * multiplier,
-        800 * multiplier,
-        1100 * multiplier
-    ]
+
     token = get_token_contract([
         proxy_contract.address,
-        initial_supply,
-        [A, B, C],
-        preallocs
+        wallet_address,
+        initial_supply
     ], {'from': owner}, decimals=decimals)
 
-    assert token.call().name() == 'The Token'
-    assert token.call().symbol() == 'TKN'
+    assert token.call().name() == 'Raiden Token'
+    assert token.call().symbol() == 'RDN'
     assert token.call().decimals() == decimals
-    assert token.call().owner() == owner
-    assert token.call().auction_address() == proxy_contract.address
     assert token.call().totalSupply() == initial_supply
 
 
 def test_token_balanceOf(
     chain,
     web3,
-    team,
+    wallet_address,
     token_contract,
     proxy_contract,
     contract_params):
     token = token_contract(proxy_contract.address)
     multiplier = 10**(contract_params['decimals'])
-    auction_address = token.call().auction_address()
 
     supply = contract_params['supply'] * multiplier
-    preallocs = contract_params['preallocations']
-    preallocs = prepare_preallocs(multiplier, preallocs)
-    auction_balance = supply - reduce((lambda x, y: x + y), preallocs)
+    half_balance = supply // 2
 
-    assert token.call().balanceOf(auction_address) == auction_balance
-
-    for i, member in enumerate(team):
-        assert token.call().balanceOf(member) == preallocs[i]
+    assert token.call().balanceOf(proxy_contract.address) == half_balance
+    assert token.call().balanceOf(wallet_address) == half_balance
 
 
 def transfer_tests(
     bidders,
+    balances,
     multiplier,
-    preallocs,
     token,
     event_handler):
     (A, B, C) = bidders
@@ -266,26 +196,26 @@ def transfer_tests(
 
     txn_hash = token.transact({'from': A}).transfer(B, 0)
     ev_handler.add(txn_hash, token_events['transfer'])
-    assert token.call().balanceOf(A) == preallocs[0]
-    assert token.call().balanceOf(B) == preallocs[1]
+    assert token.call().balanceOf(A) == balances[0]
+    assert token.call().balanceOf(B) == balances[1]
 
     txn_hash = token.transact({'from': A}).transfer(B, 120)
     ev_handler.add(txn_hash, token_events['transfer'])
-    assert token.call().balanceOf(A) == preallocs[0] - 120
-    assert token.call().balanceOf(B) == preallocs[1] + 120
+    assert token.call().balanceOf(A) == balances[0] - 120
+    assert token.call().balanceOf(B) == balances[1] + 120
 
     txn_hash = token.transact({'from': B}).transfer(C, 66)
     ev_handler.add(txn_hash, token_events['transfer'])
-    assert token.call().balanceOf(B) == preallocs[1] + 120 - 66
-    assert token.call().balanceOf(C) == preallocs[2] + 66
+    assert token.call().balanceOf(B) == balances[1] + 120 - 66
+    assert token.call().balanceOf(C) == balances[2] + 66
 
     ev_handler.check()
 
 
 def transfer_erc223_tests(
     bidders,
+    balances,
     multiplier,
-    preallocs,
     token,
     proxy,
     token_erc223,
@@ -335,10 +265,10 @@ def transfer_erc223_tests(
     assert proxy_erc223.call().value() == 0
 
     txn_hash = token.transact({'from': A}).transfer(proxy_erc223.address, 0)
-    #ev_handler.add(txn_hash, token_events['transfer'])
+    # ev_handler.add(txn_hash, token_events['transfer'])
 
     txn_hash = token.transact({'from': A}).transfer(proxy.address, 0)
-    #ev_handler.add(txn_hash, token_events['transfer'])
+    # ev_handler.add(txn_hash, token_events['transfer'])
 
     ev_handler.check()
 
@@ -347,41 +277,44 @@ def transfer_erc223_tests(
 def test_token_transfer(
     chain,
     web3,
+    wallet_address,
+    get_bidders,
     get_token_contract,
     token_contract,
     proxy_contract,
     proxy_erc223_contract,
     decimals,
     event_handler):
-    (A, B, C) = web3.eth.accounts[1:4]
+    (A, B, C) = get_bidders(3)
     multiplier = 10**(decimals)
-    preallocs = [
-        500 * multiplier,
-        800 * multiplier,
-        1100 * multiplier
-    ]
+
     token = get_token_contract([
         proxy_contract.address,
+        wallet_address,
         5000 * multiplier,
-        [A, B, C],
-        preallocs
     ], decimals=decimals)
     assert token.call().decimals() == decimals
 
+    token.transact({'from': wallet_address}).transfer(A, 3000)
+    token.transact({'from': wallet_address}).transfer(B, 2000)
+    token.transact({'from': wallet_address}).transfer(C, 1000)
+
     transfer_tests(
         (A, B, C),
+        [3000, 2000, 1000],
         multiplier,
-        preallocs,
         token,
         event_handler)
 
-    token = token_contract(proxy_contract.address)
     token_erc223 = token_contract(proxy_erc223_contract.address)
+    token_erc223.transact({'from': wallet_address}).transfer(A, 3000)
+    token_erc223.transact({'from': wallet_address}).transfer(B, 2000)
+    token_erc223.transact({'from': wallet_address}).transfer(C, 1000)
 
     transfer_erc223_tests(
         (A, B, C),
+        [3000, 2000, 1000],
         multiplier,
-        preallocs,
         token,
         proxy_contract,
         token_erc223,
@@ -392,26 +325,25 @@ def test_token_transfer(
 @pytest.mark.parametrize('decimals', fixture_decimals)
 def test_token_approve(
     web3,
+    wallet_address,
     get_token_contract,
     proxy_contract,
     decimals,
     event_handler):
     (A, B, C) = web3.eth.accounts[1:4]
     multiplier = 10**(decimals)
-    preallocs = [
-        500 * multiplier,
-        800 * multiplier,
-        1100 * multiplier
-    ]
 
     token = get_token_contract([
         proxy_contract.address,
-        5000 * multiplier,
-        [A, B, C],
-        preallocs
+        wallet_address,
+        5000 * multiplier
     ], decimals=decimals)
     assert token.call().decimals() == decimals
     ev_handler = event_handler(token)
+
+    token.transact({'from': wallet_address}).transfer(A, 3000)
+    token.transact({'from': wallet_address}).transfer(B, 2000)
+    token.transact({'from': wallet_address}).transfer(C, 1000)
 
     with pytest.raises(TypeError):
         token.transact({'from': A}).approve(0, B)
@@ -424,7 +356,7 @@ def test_token_approve(
 
     # We can approve more than we have
     # with pytest.raises(tester.TransactionFailed):
-    txn_hash = token.transact({'from': A}).approve(B, preallocs[0] + 1)
+    txn_hash = token.transact({'from': A}).approve(B, 3000 + 1)
     ev_handler.add(txn_hash, token_events['approve'])
 
     txn_hash = token.transact({'from': A}).approve(A, 300)
@@ -450,23 +382,23 @@ def test_token_approve(
 @pytest.mark.parametrize('decimals', fixture_decimals)
 def test_token_allowance(
     web3,
+    wallet_address,
+    get_bidders,
     get_token_contract,
     proxy_contract,
     decimals):
-    (A, B, C) = web3.eth.accounts[1:4]
+    (A, B) = get_bidders(2)
     multiplier = 10**(decimals)
-    preallocs = [
-        500 * multiplier,
-        800 * multiplier,
-        1100 * multiplier
-    ]
+
     token = get_token_contract([
         proxy_contract.address,
-        5000 * multiplier,
-        [A, B, C],
-        preallocs
+        wallet_address,
+        5000 * multiplier
     ], decimals=decimals)
     assert token.call().decimals() == decimals
+
+    token.transact({'from': wallet_address}).transfer(A, 3000)
+    token.transact({'from': wallet_address}).transfer(B, 2000)
 
     with pytest.raises(TypeError):
         token.call().allowance(0, B)
@@ -491,25 +423,26 @@ def test_token_allowance(
 def test_token_transfer_from(
     chain,
     web3,
+    wallet_address,
+    get_bidders,
     get_token_contract,
     proxy_contract,
     decimals,
     event_handler):
-    (A, B, C) = web3.eth.accounts[1:4]
+    (A, B, C) = get_bidders(3)
     multiplier = 10**(decimals)
-    preallocs = [
-        500 * multiplier,
-        800 * multiplier,
-        1100 * multiplier
-    ]
+
     token = get_token_contract([
         proxy_contract.address,
-        5000 * multiplier,
-        [A, B, C],
-        preallocs
+        wallet_address,
+        5000 * multiplier
     ], decimals=decimals)
     assert token.call().decimals() == decimals
     ev_handler = event_handler(token)
+
+    token.transact({'from': wallet_address}).transfer(A, 3000)
+    token.transact({'from': wallet_address}).transfer(B, 2000)
+    token.transact({'from': wallet_address}).transfer(C, 1000)
 
     txn_hash = token.transact({'from': B}).approve(A, 300)
     ev_handler.add(txn_hash, token_events['approve'])
@@ -581,6 +514,8 @@ def test_token_transfer_from(
 def test_burn(
     chain,
     web3,
+    wallet_address,
+    get_bidders,
     get_token_contract,
     proxy_contract,
     decimals,
@@ -588,23 +523,21 @@ def test_burn(
     event_handler):
     decimals = 18
     eth = web3.eth
-    (A, B, C) = eth.accounts[1:4]
+    (A, B) = get_bidders(2)
     multiplier = 10**(decimals)
     initial_supply = 5000 * multiplier
-    preallocs = [
-        500 * multiplier,
-        800 * multiplier,
-        1100 * multiplier
-    ]
+
     token = get_token_contract([
         proxy_contract.address,
-        initial_supply,
-        [A, B, C],
-        preallocs
+        wallet_address,
+        initial_supply
     ], decimals=decimals)
     assert token.call().decimals() == decimals
 
     ev_handler = event_handler(token)
+
+    token.transact({'from': wallet_address}).transfer(A, 3000)
+    token.transact({'from': wallet_address}).transfer(B, 2000)
 
     with pytest.raises(TypeError):
         token.transact({'from': B}).burn(-3)
@@ -616,16 +549,15 @@ def test_burn(
         token.transact({'from': B}).burn(0)
 
     with pytest.raises(tester.TransactionFailed):
-        token.transact({'from': B}).burn(preallocs[1] + 1)
+        token.transact({'from': B}).burn(2000 + 1)
 
     # Balance should not change besides transaction costs
     tokens_B = token.call().balanceOf(B)
     balance_B = eth.getBalance(B)
-    burnt = 250 * multiplier
+    burnt = 250
     txn_hash = token.transact({'from': B}).burn(burnt)
     txn_cost = txnCost(txn_hash)
     ev_handler.add(txn_hash, token_events['burn'])
-
 
     assert token.call().totalSupply() == initial_supply - burnt
     assert token.call().balanceOf(B) == tokens_B - burnt
