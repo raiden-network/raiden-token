@@ -1,6 +1,6 @@
 from flask_restful import Resource
-import json
 import logging
+import numpy
 
 log = logging.getLogger(__name__)
 
@@ -20,14 +20,13 @@ class BidsHistogram(Resource):
         self.sampler = sampler
 
     def get(self):
-        evs = self.sampler.events
-        BINS = 10
-        n = len(evs) // BINS
-        binned = [evs[i:i + n] for i in range(0, len(evs), n)]
-        ret = []
-        for bin_group in binned:
-            ret.append({'sum': sum([x['args']['_amount'] for x in bin_group])})
-        total = sum([ev['args']['_amount'] for ev in evs])
-
-        assert total == sum([b['sum'] for b in ret])
-        return ret
+        block_to_events = {}
+        for block, events in self.sampler.events.items():
+            block_to_events[block] = sum((event['args']['_amount'] for event in events))
+        min_block = min(block_to_events.keys())
+        max_block = max(block_to_events.keys())
+        bins = range(min_block, max_block, ((max_block - min_block) // 10))
+        ar, ar_bins = numpy.histogram(list(block_to_events.keys()),
+                                      bins=bins,
+                                      weights=list(block_to_events.values()))
+        return {'y': ar.tolist(), 'x': ar_bins.tolist()}

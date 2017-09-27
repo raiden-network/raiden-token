@@ -116,6 +116,7 @@ def auction_simulation(web3, wallet, token, auction, owner, bidders,
     bidder_gevents = [gevent.spawn(b.run) for b in bidder_objs]
 
     gevent.joinall(bidder_gevents)
+    del bidder_gevents
 
     assert auction.call({'from': owner}).missingFundsToEndAuction() == 0
     log.info('missing funds from=%s' % auction.call({'from': owner}).missingFundsToEndAuction())
