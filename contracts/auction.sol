@@ -3,7 +3,7 @@ pragma solidity ^0.4.11;
 import './token.sol';
 
 /// @title Dutch auction contract - distribution of a fixed number of tokens using an auction.
-/// Auction contract code inspired by the Gnosis auction contract. Main difference is that the
+/// The contract code is inspired by the Gnosis auction contract. Main difference is that the
 /// auction ends if a fixed number of tokens was sold.
 contract DutchAuction {
     /*
@@ -11,8 +11,8 @@ contract DutchAuction {
      *
      * Terminology:
      * 1 token unit = Rei
-     * 1 token = RDN = Rei * token_token_multiplier
-     * token_token_multiplier set from token's number of decimals (i.e. 10 ** decimals)
+     * 1 token = RDN = Rei * token_multiplier
+     * token_multiplier set from token's number of decimals (i.e. 10 ** decimals)
      */
 
     /*
@@ -152,7 +152,7 @@ contract DutchAuction {
         // Get number of Rei (RDN * token_multiplier) to be auctioned from token auction balance
         num_tokens_auctioned = token.balanceOf(address(this));
 
-        // Set number of tokens token_multiplier from token decimals
+        // Set the number of the token multiplier for its decimals
         token_multiplier = 10 ** uint(token.decimals());
 
         stage = Stages.AuctionSetUp;

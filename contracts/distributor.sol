@@ -9,6 +9,9 @@ contract Distributor {
      */
 
     DutchAuction public auction;
+
+    // TODO The owner can be removed
+    // Anyone should be able to claim tokens
     address public owner;
 
     /*
