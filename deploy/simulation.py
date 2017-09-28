@@ -1,12 +1,16 @@
 import random
+import logging
+
+log = logging.getLogger(__name__)
 from web3.utils.compat import (
     Timeout,
 )
-from utils import (
+
+from deploy.utils import (
     passphrase,
     check_succesful_tx,
     print_logs,
-    amount_format,
+    amount_format
 )
 
 tx_timeout = 180
@@ -57,27 +61,27 @@ def successful_bid(web3, auction, bidder, amount):
         try:
             txhash = auction.transact({'from': bidder, "value": amount}).bid()
             receipt = check_succesful_tx(web3, txhash)
-            print('BID successful')
+            assert receipt is not None
+            log.info('BID successful from=%s value=%d' % (bidder, amount))
             bid_successful = amount
         except:
             amount = auction.call().missingFundsToEndAuction()
             if(amount > 10):
                 amount = amount // 7
-            print('Bid > missing funds, trying with {0} WEI'.format(amount))
+            log.info('Bid > missing funds, trying with {0} WEI ({bidder})'
+                     .format(amount, bidder=bidder))
     return amount
 
 
-def auction_simulation(web3, wallet, token, auction, owner, bidders, bids=500, bid_interval=None, bid_start_price=None):
-    bids = {}
-    approx_payable_txn_cost = 30000
-    approx_bid_txn_cost = 40000
-    bidders_len = len(bidders)
+def auction_simulation(web3, wallet, token, auction, owner, bidders,
+                       bid_interval=None, bid_start_price=None):
     print_all_logs(token, auction)
 
-    print('Owner balance:', owner, amount_format(web3, web3.eth.getBalance(owner)))
+    log.info('{owner} {balance}'.format(owner=owner,
+                                        balance=amount_format(web3, web3.eth.getBalance(owner))))
 
     # Start the auction
-    print('Start auction owner balance', amount_format(web3, web3.eth.getBalance(owner)))
+    log.info('Start auction owner balance %s' % amount_format(web3, web3.eth.getBalance(owner)))
     txhash = auction.transact({'from': owner}).startAuction()
     receipt = check_succesful_tx(web3, txhash, tx_timeout)
 
@@ -87,92 +91,59 @@ def auction_simulation(web3, wallet, token, auction, owner, bidders, bids=500, b
 
     # Timeout until price is = bid_start_price
     price_start = auction.call().price_start()
+    assert price_start > 0
     price_constant = auction.call().price_constant()
+    assert isinstance(price_constant, int)
     price_exponent = auction.call().price_exponent()
+    assert isinstance(price_exponent, int)
     decimals = token.call().decimals()
     multiplier = 10**decimals
-    initial_bid_delay = 0
+    assert multiplier > 0
 
     '''
     # Delay in seconds if we want to start the first bid at a certain price
     if bid_start_price:
         initial_bid_delay = elapsedAtPrice(bid_start_price, price_factor, price_constant, multiplier)
         assert initial_bid_delay >= 0, 'Price for first bid was set too high'
-        print('Elapsed time until the first bid is made', initial_bid_delay
-    '''
+        log.info('Elapsed time until the first bid is made', initial_bid_delay
+    '''  # noqa
 
-    print('Timeout between bids', bid_interval or ' is random.')
+    log.info('Timeout between bids {0}'.format(bid_interval or ' is random.'))
 
-    with Timeout() as timeout:
-        timeout.sleep(int(initial_bid_delay))  # seconds
+    from deploy.bidder import Bidder
+    import gevent
+    bidder_objs = [Bidder(web3, auction, addr) for addr in bidders]
+    bidder_gevents = [gevent.spawn(b.run) for b in bidder_objs]
 
-    # Have some 1 wei bids
-    unlocked = web3.personal.unlockAccount(bidders[0], passphrase)
-    unlocked = web3.personal.unlockAccount(bidders[1], passphrase)
-    unlocked = web3.personal.unlockAccount(bidders[2], passphrase)
-
-    print('Simulation bids start at', amount_format(web3, auction.call().price()))
-
-    txhash = auction.transact({'from': bidders[0], "value": 1}).bid()
-    receipt = check_succesful_tx(web3, txhash)
-
-    txhash = auction.transact({'from': bidders[1], "value": 1}).bid()
-    receipt = check_succesful_tx(web3, txhash)
-
-    txhash = auction.transact({'from': bidders[2], "value": 2}).bid()
-    receipt = check_succesful_tx(web3, txhash)
-
-    bidder_number = 3
-
-    # Continue bidding until auction ends
-    while auction.call().missingFundsToEndAuction() > 0:
-
-        # Timeout between bids
-        if bid_interval or bid_interval == 0:
-            interval = bid_interval
-        else:
-            interval = random.randint(0, 30)
-        print('Timeout to next bid: {0} seconds'.format(interval))
-        with Timeout() as timeout:
-            timeout.sleep(interval)  # seconds
-
-        bidder = bidders[bidder_number]
-        bids[bidder] = 0
-        missing_funds = auction.call().missingFundsToEndAuction()
-
-        # Avoid overbidding, otherwise the bid will fail
-        delta_overbid = missing_funds / 10
-
-        bidder_balance = web3.eth.getBalance(bidder)
-        max_bid = int((missing_funds - delta_overbid) / (bidders_len - bidder_number))
-
-        # Take the minimum between the bidder's balance and the max bid amount
-        amount = int(min(bidder_balance - approx_bid_txn_cost, max_bid))
-
-        unlocked = web3.personal.unlockAccount(bidder, passphrase)
-
-        print('BID bidder, missing_funds, balance, amount', bidder, missing_funds, bidder_balance, amount_format(web3, amount))
-
-        if bidder_number == bidders_len - 1:
-            print('Bidding / Waiting until missing funds = 0')
-            with Timeout() as timeout:
-                while auction.call().missingFundsToEndAuction() > 0:
-                    print("Missing funds: ", auction.call().missingFundsToEndAuction())
-
-                    if web3.eth.getBalance(bidder) > amount:
-                        amount = successful_bid(web3, auction, bidder, amount)
-                    timeout.sleep(5)
-
-        bids[bidder] += amount
-        # TODO assert bid amout?
-        bidder_number += 1
+    gevent.joinall(bidder_gevents)
+    del bidder_gevents
 
     assert auction.call({'from': owner}).missingFundsToEndAuction() == 0
-    print('missing funds', auction.call({'from': owner}).missingFundsToEndAuction())
+    log.info('missing funds from=%s' % auction.call({'from': owner}).missingFundsToEndAuction())
 
     # Owner calls finalizeAuction
     txhash = auction.transact({'from': owner}).finalizeAuction()
     receipt = check_succesful_tx(web3, txhash)
-
-    print('stage', auction.call().stage())
+    assert receipt is not None
     assert auction.call().stage() == 3  # AuctionEnded
+
+    # distribute tokens
+
+    def claim_tokens(auction, bidder):
+        txhash = auction.transact({'from': bidder}).claimTokens()
+        check_succesful_tx(web3, txhash)
+
+    def get_balance(token, bidder):
+        token_balance = token.call().balanceOf(bidder)
+        log.info('{bidder} {tokens}'.format(bidder=bidder, tokens=token_balance))
+        return token_balance
+
+    event_lst = [gevent.spawn(claim_tokens, auction, x)
+                 for x in bidders]
+    gevent.joinall(event_lst)
+    event_lst = [gevent.spawn(get_balance, token, x)
+                 for x in bidders]
+    gevent.joinall(event_lst)
+    total_balance = sum([ev.value for ev in event_lst])
+    assert auction.call().stage() == 4  # AuctionEnded
+    return total_balance

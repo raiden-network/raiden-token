@@ -1,19 +1,27 @@
+from gevent import monkey
+monkey.patch_all()
 """
 Deploy CustomToken and DutchAuction on a testnet
 """
+import requests.adapters as adapter
+adapter.DEFAULT_POOLSIZE = 1000
+
+
 import click
+import gevent
 from populus import Project
-from web3 import Web3
-from utils import (
+from deploy.utils import (
     passphrase,
     createWallet,
     check_succesful_tx,
-    assignFundsToBidders
+    assignFundsToBidders,
+    returnFundsToOwner
 )
-from simulation import (
+from deploy.simulation import (
     getAuctionFactors,
     auction_simulation
 )
+import logging
 
 
 @click.command()
@@ -48,8 +56,8 @@ from simulation import (
 )
 @click.option(
     '--price-exponent',
-    default=66,
-    help='Price constant used in auction price calculation.'
+    default=3,
+    help='Price exponent'
 )
 @click.option(
     '--price-points',
@@ -70,11 +78,6 @@ from simulation import (
 )
 @click.option(
     '--bidders',
-    default=10,
-    help='Number of bidders. Only if the --simulation flag is set'
-)
-@click.option(
-    '--bids',
     default=10,
     help='Number of bidders. Only if the --simulation flag is set'
 )
@@ -117,27 +120,23 @@ def main(**kwargs):
     bidders = int(kwargs['bidders'])
     bid_start_price = int(kwargs['bid_price'] or 0)
     bid_interval = int(kwargs['bid_interval'] or 0)
-    bids_number = int(kwargs['bids'])
     price_points = kwargs['price_points']
     fund_bidders = kwargs['fund']
     # auction_addr = kwargs['auction']
     # token_addr = kwargs['token']
     # distributor_addr = kwargs['distributor']
 
-
     multiplier = 10**decimals
     supply *= multiplier
 
     if price_points:
         price_points = price_points.split(',')
-        (a, b) = getAuctionFactors(
+        (price_factor, price_constant) = getAuctionFactors(
             int(price_points[0]),
             int(price_points[1]),
             int(price_points[2]),
             int(price_points[3]),
             multiplier)
-        price_factor = a
-        price_constant = b
 
     print("Make sure {} chain is running, you can connect to it and it is synced, or you'll get timeout".format(chain_name))
 
@@ -177,7 +176,7 @@ def main(**kwargs):
         print('Preallocation addresses & amounts in WEI', prealloc_addresses, prealloc_amounts)
         print('Auction start price:', price_start)
         print('Auction price constant:', price_constant)
-        print('Auction price constant:', price_exponent)
+        print('Auction price exponent:', price_exponent)
 
         # Load Populus contract proxy classes
         Auction = chain.provider.get_contract_factory('DutchAuction')
@@ -187,7 +186,8 @@ def main(**kwargs):
         wallet = web3.personal.newAccount(passphrase)
 
         # Deploy Auction
-        auction_txhash = Auction.deploy(transaction={"from": owner}, args=[wallet, price_start, price_constant, price_exponent])
+        auction_txhash = Auction.deploy(transaction={"from": owner},
+                                        args=[wallet, price_start, price_constant, price_exponent])
         print("Deploying auction, tx hash is", auction_txhash)
         receipt = check_succesful_tx(web3, auction_txhash)
         auction_address = receipt["contractAddress"]
@@ -217,7 +217,8 @@ def main(**kwargs):
         print("Token contract address is", token_address)
 
         # Deploy Distributor contract
-        distributor_txhash = Distributor.deploy(transaction={"from": owner}, args=[auction_address])
+        distributor_txhash = Distributor.deploy(transaction={"from": owner},
+                                                args=[auction_address])
         print("Deploying distributor, tx hash is", distributor_txhash)
         receipt = check_succesful_tx(web3, distributor_txhash)
         distributor_address = receipt["contractAddress"]
@@ -228,6 +229,7 @@ def main(**kwargs):
         auction = Auction(address=auction_address)
         token = Token(address=token_address)
         distributor = Distributor(address=distributor_address)
+        assert distributor is not None
 
         txhash = auction.transact({"from": owner}).setup(token_address)
         check_succesful_tx(web3, txhash)
@@ -243,25 +245,33 @@ def main(**kwargs):
         # Start simulation if --simulation flag is set
         if simulation:
             print('Starting simulation setup for', bidders, 'bidders')
-            bidder_addresses = []
-            bidder_addresses = web3.eth.accounts[3:(bidders + 3)]
-            print('Creating more bidder accounts:', bidders -  len(bidder_addresses), 'accounts')
+            bidder_addresses = web3.eth.accounts[1:(bidders + 1)]
+
+            # come to daddy
+            event_list = [gevent.spawn(returnFundsToOwner, web3, owner, bidder)
+                          for bidder in bidder_addresses]
+            gevent.joinall(event_list)
+
+            print('Creating more bidder accounts:', bidders - len(bidder_addresses), 'accounts')
             for i in range(len(bidder_addresses), bidders):
                 address = web3.personal.newAccount(passphrase)
                 bidder_addresses.append(address)
 
-            print('Simulating', len(bidder_addresses), 'bidders', bidder_addresses)
+            print('Simulating', len(bidder_addresses), 'bidders:', bidder_addresses)
             if bid_start_price:
                 print('Bids will start at {0} WEI = {1} ETH  / TKN'.format(
                     bid_start_price,
                     web3.fromWei(bid_start_price, 'ether')))
 
             if fund_bidders:
-                print('Funding bidders accounts with random ETH from the owner account.', owner, bidder_addresses)
                 assignFundsToBidders(web3, owner, bidder_addresses)
 
-            auction_simulation(web3, wallet, token, auction, owner, bidder_addresses, bids_number, bid_interval, bid_start_price)
+            tokens = auction_simulation(web3, wallet, token, auction, owner,
+                                        bidder_addresses, bid_interval, bid_start_price)
+            assert tokens == supply
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.DEBUG)
+    logging.getLogger("urllib3").setLevel(logging.WARNING)
     main()
