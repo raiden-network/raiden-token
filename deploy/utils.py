@@ -140,3 +140,18 @@ def assignFundsToBidders(web3, owner, bidders):
     for bidder in bidders:
         gevents.append(gevent.spawn(sendFunds, web3, owner, bidder, len(bidders)))
     gevent.joinall(gevents)
+
+
+def set_connection_pool_size(web3, pool_connections, pool_size):
+    """Hack to override default poolsize for web3"""
+    from web3.utils.compat.compat_requests import _get_session
+    from web3 import HTTPProvider
+    import requests
+    provider = web3.currentProvider
+    if isinstance(provider, HTTPProvider) is False:
+        return
+    logging.info("setting web3 HTTPProvider connections={0} pool_size={1}"
+                 .format(pool_connections, pool_size))
+    session = _get_session(provider.endpoint_uri)
+    adapter = requests.adapters.HTTPAdapter(pool_connections, pool_size)
+    session.mount('http://', adapter)

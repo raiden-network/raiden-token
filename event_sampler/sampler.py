@@ -24,6 +24,8 @@ class EventSampler:
 
     def sync_all(self):
         events = self.get_logs('BidSubmission')
+        if events is None:
+            return
         for event in events:
             self.on_bid_submission(event)
         log.info("synced %d events" % len(self.events))
@@ -57,4 +59,4 @@ class EventSampler:
         logs = [dict(log) for log in logs]
         for log in logs:
             log['args'] = get_event_data(event_abi, log)['args']
-            return logs
+        return logs

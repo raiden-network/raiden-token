@@ -70,7 +70,6 @@ def successful_bid(web3, auction, bidder, amount):
 
 def auction_simulation(web3, wallet, token, auction, owner, bidders,
                        bid_interval=None, bid_start_price=None, sim_claim_tokens=False):
-    import pudb;pudb.set_trace()
     print_all_logs(token, auction)
 
     log.info('{owner} {balance}'.format(owner=owner,
