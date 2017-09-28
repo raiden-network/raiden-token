@@ -1,7 +1,7 @@
 from gevent import monkey
 monkey.patch_all()
 """
-Deploy CustomToken and DutchAuction on a testnet
+Deploy RaidenToken and DutchAuction on a testnet
 """
 import requests.adapters as adapter
 adapter.DEFAULT_POOLSIZE = 1000
@@ -35,14 +35,13 @@ import logging
     help='Contracts owner, default: web3.eth.accounts[0]'
 )
 @click.option(
+    '--wallet',
+    help='Auction funds will be sent to this wallet address.'
+)
+@click.option(
     '--supply',
     default=10000000,
     help='Token contract supply (number of total issued tokens).'
-)
-@click.option(
-    '--decimals',
-    default=18,
-    help='Token contract decimals.'
 )
 @click.option(
     '--price-start',
@@ -58,18 +57,6 @@ import logging
     '--price-exponent',
     default=3,
     help='Price exponent'
-)
-@click.option(
-    '--price-points',
-    help='2 price points "price1_in_wei,elapsed_seconds1,price2_in_wei,elapsed_seconds2" used to calculate the price factor and constant for the auction price function. Example: "100000000000000000,0,10000000000000000,600"'
-)
-@click.option(
-    '--prealloc-addresses',
-    help='Addresses separated by a comma, for preallocating tokens.'
-)
-@click.option(
-    '--prealloc-amounts',
-    help='Token amounts separated by a comma, for preallocating tokens.'
 )
 @click.option(
     '--simulation',
@@ -94,25 +81,13 @@ import logging
     default=True,
     help='Fund bidders accounts with random ETH from the owner account. Done before starting the simulation.'
 )
-@click.option(
-    '--auction',
-    help='Auction contract address.'
-)
-@click.option(
-    '--token',
-    help='Token contract address.'
-)
-@click.option(
-    '--distributor',
-    help='Distributor contract address.'
-)
 def main(**kwargs):
     project = Project()
 
     chain_name = kwargs['chain']
     owner = kwargs['owner']
+    wallet_address = kwargs['wallet']
     supply = kwargs['supply']
-    decimals = kwargs['decimals']
     price_start = kwargs['price_start']
     price_constant = kwargs['price_constant']
     price_exponent = kwargs['price_exponent']
@@ -120,96 +95,46 @@ def main(**kwargs):
     bidders = int(kwargs['bidders'])
     bid_start_price = int(kwargs['bid_price'] or 0)
     bid_interval = int(kwargs['bid_interval'] or 0)
-    price_points = kwargs['price_points']
     fund_bidders = kwargs['fund']
-    # auction_addr = kwargs['auction']
-    # token_addr = kwargs['token']
-    # distributor_addr = kwargs['distributor']
 
-    multiplier = 10**decimals
+    multiplier = 10 ** 18
     supply *= multiplier
-
-    if price_points:
-        price_points = price_points.split(',')
-        (price_factor, price_constant) = getAuctionFactors(
-            int(price_points[0]),
-            int(price_points[1]),
-            int(price_points[2]),
-            int(price_points[3]),
-            multiplier)
 
     print("Make sure {} chain is running, you can connect to it and it is synced, or you'll get timeout".format(chain_name))
 
     with project.get_chain(chain_name) as chain:
         web3 = chain.web3
         owner = owner or web3.eth.accounts[0]
-
-        # Set preallocations
-        if kwargs['prealloc_addresses']:
-            prealloc_addresses = kwargs['prealloc_addresses'].split(',')
-        else:
-            if len(web3.eth.accounts) >= 2:
-                prealloc_addresses = web3.eth.accounts[1:3]
-            else:
-                # Create needed accounts if they don't exist
-                prealloc_addresses = []
-                priv_keys = []
-                for i in range(0, 2):
-                    priv_key, address = createWallet()
-                    priv_keys.append(priv_key)
-                    prealloc_addresses.append('0x' + address)
-                print('Preallocations will be sent to the following addresses:')
-                print(prealloc_addresses)
-                print('Preallocation addresses private keys: ', priv_keys)
-
-        if kwargs['prealloc_amounts']:
-            prealloc_amounts = kwargs['prealloc_amounts'].split(',')
-        else:
-            prealloc_amounts = [
-                200000 * multiplier,
-                800000 * multiplier
-            ]
+        wallet_address = wallet_address or web3.personal.newAccount(passphrase)
 
         print("Web3 provider is", web3.currentProvider)
         assert owner, "Make sure owner account is created"
+        assert wallet_address, "Make sure wallet account is created"
         print('Owner', owner)
-        print('Preallocation addresses & amounts in WEI', prealloc_addresses, prealloc_amounts)
+        print('Wallet', wallet_address)
         print('Auction start price:', price_start)
         print('Auction price constant:', price_constant)
         print('Auction price exponent:', price_exponent)
 
         # Load Populus contract proxy classes
         Auction = chain.provider.get_contract_factory('DutchAuction')
-        Token = chain.provider.get_contract_factory('CustomToken')
+        Token = chain.provider.get_contract_factory('RaidenToken')
         Distributor = chain.provider.get_contract_factory('Distributor')
-
-        wallet = web3.personal.newAccount(passphrase)
 
         # Deploy Auction
         auction_txhash = Auction.deploy(transaction={"from": owner},
-                                        args=[wallet, price_start, price_constant, price_exponent])
+                                        args=[wallet_address, price_start, price_constant, price_exponent])
         print("Deploying auction, tx hash is", auction_txhash)
         receipt = check_succesful_tx(web3, auction_txhash)
         auction_address = receipt["contractAddress"]
         print("Auction contract address is", auction_address)
 
         # Deploy token
-        if decimals == 18:
-            token_txhash = Token.deploy(transaction={"from": owner}, args=[
-                auction_address,
-                supply,
-                prealloc_addresses,
-                prealloc_amounts
-            ])
-        else:
-            Token = chain.provider.get_contract_factory('CustomToken2')
-            token_txhash = Token.deploy(transaction={"from": owner}, args=[
-                decimals,
-                auction_address,
-                supply,
-                prealloc_addresses,
-                prealloc_amounts
-            ])
+        token_txhash = Token.deploy(transaction={"from": owner}, args=[
+            auction_address,
+            wallet_address,
+            supply
+        ])
 
         print("Deploying token, tx hash is", token_txhash)
         receipt = check_succesful_tx(web3, token_txhash)
@@ -266,7 +191,7 @@ def main(**kwargs):
             if fund_bidders:
                 assignFundsToBidders(web3, owner, bidder_addresses)
 
-            tokens = auction_simulation(web3, wallet, token, auction, owner,
+            tokens = auction_simulation(web3, wallet_address, token, auction, owner,
                                         bidder_addresses, bid_interval, bid_start_price)
             assert tokens == supply
 
