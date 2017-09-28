@@ -21,7 +21,7 @@ class Bidder:
     def bid(self):
         missing_funds = self.auction_contract.call().missingFundsToEndAuction()
         balance = self.web3.eth.getBalance(self.address)
-        max_bid = int(missing_funds * 0.05 * random.random())
+        max_bid = int(missing_funds * 0.6 * random.random())
         amount = int(max(0, min(balance - self.approx_bid_txn_cost, max_bid)))
         if amount == 0:
             amount = 1
