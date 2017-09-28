@@ -12,13 +12,11 @@ import gevent
 from populus import Project
 from deploy.utils import (
     passphrase,
-    createWallet,
     check_succesful_tx,
     assignFundsToBidders,
     returnFundsToOwner
 )
 from deploy.simulation import (
-    getAuctionFactors,
     auction_simulation
 )
 import logging
@@ -64,13 +62,19 @@ import logging
     help='Run auction simulation.'
 )
 @click.option(
+    '--sim-claim-tokens',
+    is_flag=True,
+    help='Run auction simulation.'
+)
+@click.option(
     '--bidders',
     default=10,
     help='Number of bidders. Only if the --simulation flag is set'
 )
 @click.option(
     '--bid-price',
-    help='Price per TKN in WEI at which the first bid should start. Only if the --simulation flag is set'
+    help='Price per TKN in WEI at which the first bid should start. Only if the --simulation flag '
+         'is set'
 )
 @click.option(
     '--bid-interval',
@@ -79,7 +83,8 @@ import logging
 @click.option(
     '--fund/--no-fund',
     default=True,
-    help='Fund bidders accounts with random ETH from the owner account. Done before starting the simulation.'
+    help='Fund bidders accounts with random ETH from the owner account. Done before starting '
+         'the simulation.'
 )
 def main(**kwargs):
     project = Project()
@@ -96,11 +101,13 @@ def main(**kwargs):
     bid_start_price = int(kwargs['bid_price'] or 0)
     bid_interval = int(kwargs['bid_interval'] or 0)
     fund_bidders = kwargs['fund']
+    sim_claim_tokens = kwargs['sim_claim_tokens']
 
     multiplier = 10 ** 18
     supply *= multiplier
 
-    print("Make sure {} chain is running, you can connect to it and it is synced, or you'll get timeout".format(chain_name))
+    print("Make sure {} chain is running, you can connect to it and it is synced, "
+          "or you'll get timeout".format(chain_name))
 
     with project.get_chain(chain_name) as chain:
         web3 = chain.web3
@@ -123,7 +130,8 @@ def main(**kwargs):
 
         # Deploy Auction
         auction_txhash = Auction.deploy(transaction={"from": owner},
-                                        args=[wallet_address, price_start, price_constant, price_exponent])
+                                        args=[wallet_address, price_start,
+                                              price_constant, price_exponent])
         print("Deploying auction, tx hash is", auction_txhash)
         receipt = check_succesful_tx(web3, auction_txhash)
         auction_address = receipt["contractAddress"]
@@ -192,7 +200,8 @@ def main(**kwargs):
                 assignFundsToBidders(web3, owner, bidder_addresses)
 
             tokens = auction_simulation(web3, wallet_address, token, auction, owner,
-                                        bidder_addresses, bid_interval, bid_start_price)
+                                        bidder_addresses, bid_interval, bid_start_price,
+                                        sim_claim_tokens)
             assert tokens == supply
 
 
