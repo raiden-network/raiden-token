@@ -6,3 +6,6 @@ ecdsa
 web3==3.11.1
 click
 numpy
+flask
+gevent
+flask_restful

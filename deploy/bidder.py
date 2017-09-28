@@ -42,5 +42,5 @@ class Bidder:
             if missing_funds == 0:
                 return
             balance = self.web3.eth.getBalance(self.address)
-            gevent.sleep(random.randrange(3) + 1)
+            gevent.sleep(random.random() * 5)
         log.info('auction ended for {bidder}: not enough minerals'.format(bidder=self.address))
