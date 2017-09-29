@@ -35,7 +35,7 @@ contract Distributor {
       */
     /// @dev Contract constructor function, sets the auction contract address.
     /// @param _auction_address Address of auction contract.
-    function Distributor(address _auction_address) {
+    function Distributor(address _auction_address) public {
         require(_auction_address != 0x0);
 
         owner = msg.sender;
