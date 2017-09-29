@@ -15,6 +15,8 @@ from fixtures import (
     owner,
     wallet_address,
     get_bidders,
+    gnosis_multisig_wallet,
+    parity1_multisig_wallet,
     contract_params,
     create_contract,
     get_token_contract,
@@ -275,7 +277,7 @@ def test_auction_bid(
     # 46528 gas cost
     txn_hash = auction.transact({'from': A, "value": missing_funds}).bid()
     receipt = check_succesful_tx(web3, txn_hash)
-    print('--- BID', receipt)
+
     assert auction.call().received_wei() == missing_funds + 100
     assert auction.call().bids(A) == missing_funds + 100
 
@@ -305,6 +307,91 @@ def test_auction_bid(
             'to': auction.address,
             'value': 100
         })
+
+
+def test_auction_bid_wallet(
+    chain,
+    web3,
+    owner,
+    wallet_address,
+    gnosis_multisig_wallet,
+    parity1_multisig_wallet,
+    get_bidders,
+    auction_contract_fast_decline,
+    token_contract,
+    contract_params,
+    txnCost,
+    auction_end_tests,
+    auction_claim_tokens_tested,
+    event_handler):
+    eth = web3.eth
+    auction = auction_contract_fast_decline
+    (A, B, C) = get_bidders(3)
+    ev_handler = event_handler(auction)
+
+    # Initialize token
+    token = token_contract(auction.address)
+    auction.transact({'from': owner}).setup(token.address)
+    auction.transact({'from': owner}).startAuction()
+
+    parity_wallet1 = parity1_multisig_wallet([A, B], 1, 110000)
+    parity_wallet2 = parity1_multisig_wallet([A, B, C], 2, 5)
+    gnosis_wallet1 = gnosis_multisig_wallet([A, B, C], 1)
+    gnosis_wallet2 = gnosis_multisig_wallet([A, B, C], 2)
+
+    web3.eth.sendTransaction({
+        'from': B,
+        'to': parity_wallet1.address,
+        'value': 100000
+    })
+    web3.eth.sendTransaction({
+        'from': B,
+        'to': parity_wallet2.address,
+        'value': 200000
+    })
+    web3.eth.sendTransaction({
+        'from': A,
+        'to': gnosis_wallet1.address,
+        'value': 100000
+    })
+    web3.eth.sendTransaction({
+        'from': B,
+        'to': gnosis_wallet2.address,
+        'value': 200000
+    })
+
+    parity_wallet1.transact({'from': A}).execute(auction.address, 1000, bytearray())
+    assert web3.eth.getBalance(parity_wallet1.address) == 100000 - 1000
+    assert auction.call().bids(parity_wallet1.address) == 1000
+
+    gnosis_wallet1.transact({'from': A}).submitTransaction(auction.address, 1000, bytearray())
+    assert web3.eth.getBalance(gnosis_wallet1.address) == 100000 - 1000
+    assert auction.call().bids(gnosis_wallet1.address) == 1000
+
+    # TODO: parity_wallet2 & gnosis_wallet2
+
+    '''txhash = multisig2.transact({'from': B}).execute(auction.address, 3000, bytearray())
+    txhash = multisig2.transact({'from': B}).submitTransaction(auction.address, 3000, bytearray())
+    assert web3.eth.getBalance(multisig2.address) == 200000
+    assert auction.call().bids(multisig2.address) == 0
+
+    transactionId = None
+    def setId(event):
+        print('setId', event)
+        transactionId = event['args']['transactionId']
+
+    ev_handler.add(txhash, 'Confirmation', setId)
+    ev_handler.check()
+
+
+    # multisig2.transact({'from': B}).confirm(txhash)
+    multisig2.transact({'from': B}).confirmTransaction(transactionId)
+    assert web3.eth.getBalance(multisig2.address) == 200000 - 3000
+    assert auction.call().bids(multisig1.address) == 3000
+
+
+    print('-- auction_bid_tested web3.eth.getBalance(multisig1.address)', web3.eth.getBalance(multisig1.address), auction.call().bids(multisig1.address))
+    print('-- auction_bid_tested web3.eth.getBalance(multisig2.address)', web3.eth.getBalance(multisig2.address), auction.call().bids(multisig2.address))'''
 
 
 # Final bid amount == missing_funds

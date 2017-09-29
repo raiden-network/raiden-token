@@ -107,6 +107,30 @@ def create_accounts(web3):
     return get
 
 
+@pytest.fixture()
+def gnosis_multisig_wallet(chain, web3, create_contract):
+    def get(owners, required):
+        Multisig = chain.provider.get_contract_factory('MultiSigWallet')
+        multisig_wallet = create_contract(Multisig, [
+            owners, required
+        ])
+
+        return multisig_wallet
+    return get
+
+
+@pytest.fixture()
+def parity1_multisig_wallet(chain, web3, create_contract):
+    def get(owners, required, daylimit):
+        Multisig = chain.provider.get_contract_factory('Wallet')
+        multisig_wallet = create_contract(Multisig, [
+            owners, required, daylimit
+        ])
+
+        return multisig_wallet
+    return get
+
+
 @pytest.fixture(params=auction_contracts)
 def auction_contract(
     request,
@@ -262,11 +286,11 @@ def create_contract(chain, event_handler, owner):
         contract = contract_type(address=contract_address)
 
         # Check deploy event if not proxy contract
-        if len(arguments) > 0:
+        '''if len(arguments) > 0:
             ev_handler = event_handler(contract)
             if ev_handler:
                 ev_handler.add(deploy_txn_hash, token_events['deploy'])
-                ev_handler.check()
+                ev_handler.check()'''
 
         return contract
     return get
