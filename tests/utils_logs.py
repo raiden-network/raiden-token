@@ -7,10 +7,7 @@ from web3.utils.compat import (
 )
 
 class LogHandler:
-    def __init__(self,
-        web3,
-        address,
-        abi):
+    def __init__(self, web3, address, abi):
         self.web3 = web3
         self.address = address
         self.abi = abi
@@ -19,10 +16,7 @@ class LogHandler:
         self.event_verified = []
         self.event_unkown = []
 
-    def add(
-        self,
-        txn_hash,
-        event_name):
+    def add(self, txn_hash, event_name, callback=None):
         caller = getframeinfo(stack()[1][0])
         message = "%s:%d" % (caller.filename, caller.lineno)
 
@@ -33,7 +27,7 @@ class LogHandler:
                 self.abi,
                 self.address,
                 event_name,
-                callback=self.handle_log
+                callback=self.handle_log(callback)
             )
 
         self.event_waiting[event_name][txn_hash] = message
@@ -44,20 +38,24 @@ class LogHandler:
 
         self.wait(timeout)
 
-    def handle_log(self, event):
-        txn_hash = event['transactionHash']
-        event_name = event['event']
+    def handle_log(self, callback=None):
+        def get(event):
+            txn_hash = event['transactionHash']
+            event_name = event['event']
 
-        if event_name in self.event_waiting:
-            if txn_hash in self.event_waiting[event_name]:
-                self.event_verified.append(event)
-                self.event_waiting[event_name].pop(txn_hash, None)
-            else:
-                self.event_unkown.append(event)
-            if not len(list(self.event_waiting[event_name].keys())):
-                self.event_waiting.pop(event_name, None)
-                self.event_filters[event_name].stop()
-                self.event_filters.pop(event_name, None)
+            if event_name in self.event_waiting:
+                if txn_hash in self.event_waiting[event_name]:
+                    self.event_verified.append(event)
+                    self.event_waiting[event_name].pop(txn_hash, None)
+                else:
+                    self.event_unkown.append(event)
+                if not len(list(self.event_waiting[event_name].keys())):
+                    self.event_waiting.pop(event_name, None)
+                    self.event_filters[event_name].stop()
+                    self.event_filters.pop(event_name, None)
+            if callback:
+                callback(event)
+        return get
 
     def wait(self, seconds):
         try:
@@ -142,10 +140,10 @@ class LogFilter:
     def get_logs(self):
         response = self.web3.eth.getFilterLogs(self.filter.filter_id)
         logs = log_array_formatter(response)
-        logs = [dict(log) for log in logs]
-        for log in logs:
-            log = self.set_log_data(log)
-        return logs
+        formatted_logs = []
+        for log in [dict(log) for log in logs]:
+            formatted_logs.append(self.set_log_data(log))
+        return formatted_logs
 
     def set_log_data(self, log):
         log = dict(log_array_formatter([log])[0])
