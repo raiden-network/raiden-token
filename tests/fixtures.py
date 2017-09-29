@@ -128,8 +128,8 @@ def auction_contract(
     create_contract):
     auction_contract_type = request.param
     Auction = chain.provider.get_contract_factory(auction_contract_type)
-
-    auction_contract = create_contract(Auction, [wallet_address] + contract_params['args'])
+    params = [wallet_address] + contract_params['args']
+    auction_contract = create_contract(Auction, params, {}, ['Deployed'])
 
     if print_the_logs:
         print_logs(auction_contract, 'Deployed', auction_contract_type)
@@ -147,14 +147,15 @@ def auction_contract(
 @pytest.fixture(params=auction_contracts)
 def auction_contract_fast_decline(
     request,
+    contract_params,
     chain,
     web3,
     wallet_address,
     create_contract):
     auction_contract_type = request.param
     Auction = chain.provider.get_contract_factory(auction_contract_type)
-
-    auction_contract = create_contract(Auction, [wallet_address] + auction_fast_decline_args)
+    params = [wallet_address] + contract_params['args']
+    auction_contract = create_contract(Auction, params, {}, ['Deployed'])
 
     if print_the_logs:
         print_logs(auction_contract, 'Deployed', auction_contract_type)
@@ -178,8 +179,7 @@ def get_token_contract(chain, create_contract, owner):
             arguments.insert(0, decimals)
 
         RaidenToken = chain.provider.get_contract_factory(token_type)
-
-        token_contract = create_contract(RaidenToken, arguments, transaction)
+        token_contract = create_contract(RaidenToken, arguments, transaction, ['Deployed'])
 
         if print_the_logs:
             print_logs(token_contract, 'Transfer', token_type)
@@ -263,7 +263,7 @@ def txnCost(chain, web3):
 
 @pytest.fixture
 def create_contract(chain, event_handler, owner):
-    def get(contract_type, arguments, transaction=None):
+    def get(contract_type, arguments, transaction=None, watch_events=[]):
         if not transaction:
             transaction = {}
         if 'from' not in transaction:
@@ -273,12 +273,11 @@ def create_contract(chain, event_handler, owner):
         contract_address = chain.wait.for_contract_address(deploy_txn_hash)
         contract = contract_type(address=contract_address)
 
-        # Check deploy event if not proxy contract
-        '''if len(arguments) > 0:
+        for ev in watch_events:
             ev_handler = event_handler(contract)
             if ev_handler:
-                ev_handler.add(deploy_txn_hash, token_events['deploy'])
-                ev_handler.check()'''
+                ev_handler.add(deploy_txn_hash, ev)
+                ev_handler.check()
 
         return contract
     return get
