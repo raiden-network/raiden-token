@@ -9,6 +9,7 @@ adapter.DEFAULT_POOLSIZE = 1000
 
 import click
 import gevent
+import sys
 from populus import Project
 from deploy.utils import (
     passphrase,
@@ -21,29 +22,7 @@ from deploy.simulation import (
     auction_simulation
 )
 import logging
-from web3 import Web3
-from populus.contracts.contract import PopulusContract
 log = logging.getLogger(__name__)
-
-
-class Web3Context:
-    def __init__(self, web3, auction_contract, token_contract,
-                 owner, wallet_address, auction_address):
-        assert isinstance(web3, Web3)
-        assert isinstance(auction_contract, PopulusContract)
-        assert isinstance(token_contract, PopulusContract)
-        assert isinstance(owner, str)
-        assert isinstance(wallet_address, str)
-        assert isinstance(auction_address, str)
-
-        self.web3 = web3
-        self.auction_contract = auction_contract
-        self.token_contract = token_contract
-        self.owner = owner
-        self.wallet_address = wallet_address
-
-
-pass_app = click.make_pass_decorator(Web3Context)
 
 
 @click.group()
@@ -56,6 +35,23 @@ pass_app = click.make_pass_decorator(Web3Context)
     '--owner',
     help='Contracts owner, default: web3.eth.accounts[0]'
 )
+@click.pass_context
+def main(ctx, **kwargs):
+    project = Project()
+
+    chain_name = kwargs['chain']
+
+    log.info("Make sure {} chain is running, you can connect to it and it is synced, "
+             "or you'll get timeout".format(chain_name))
+
+    with project.get_chain(chain_name) as chain:
+        set_connection_pool_size(chain.web3, 100, 100)
+        ctx.obj = {}
+        ctx.obj['chain'] = chain
+        ctx.obj['owner'] = kwargs['owner'] or chain.web3.eth.accounts[0]
+
+
+@main.group('deploy')
 @click.option(
     '--wallet',
     help='Auction funds will be sent to this wallet address.'
@@ -81,11 +77,8 @@ pass_app = click.make_pass_decorator(Web3Context)
     help='Price exponent'
 )
 @click.pass_context
-def main(ctx, **kwargs):
-    project = Project()
-
-    chain_name = kwargs['chain']
-    owner = kwargs['owner']
+def deploy(ctx, **kwargs):
+    owner = ctx.obj['owner']
     wallet_address = kwargs['wallet']
     supply = kwargs['supply']
     price_start = kwargs['price_start']
@@ -95,79 +88,73 @@ def main(ctx, **kwargs):
     multiplier = 10 ** 18
     supply *= multiplier
 
-    print("Make sure {} chain is running, you can connect to it and it is synced, "
-          "or you'll get timeout".format(chain_name))
+    chain = ctx.obj['chain']
+    web3 = chain.web3
+    wallet_address = wallet_address or web3.personal.newAccount(passphrase)
 
-    with project.get_chain(chain_name) as chain:
-        web3 = chain.web3
-        set_connection_pool_size(web3, 100, 100)
-        owner = owner or web3.eth.accounts[0]
-        wallet_address = wallet_address or web3.personal.newAccount(passphrase)
+    log.info("Web3 provider is %s" % (web3.currentProvider))
+    assert owner, "Make sure owner account is created"
+    assert wallet_address, "Make sure wallet account is created"
+    log.info('owner=%s wallet=%s' % (owner, wallet_address))
+    log.info('auction start_price=%d constant=%d exponent=%d' %
+             (price_start, price_constant, price_exponent))
 
-        print("Web3 provider is", web3.currentProvider)
-        assert owner, "Make sure owner account is created"
-        assert wallet_address, "Make sure wallet account is created"
-        print('Owner', owner)
-        print('Wallet', wallet_address)
-        print('Auction start price:', price_start)
-        print('Auction price constant:', price_constant)
-        print('Auction price exponent:', price_exponent)
+    # Load Populus contract proxy classes
+    Auction = chain.provider.get_contract_factory('DutchAuction')
+    Token = chain.provider.get_contract_factory('RaidenToken')
+    Distributor = chain.provider.get_contract_factory('Distributor')
 
-        # Load Populus contract proxy classes
-        Auction = chain.provider.get_contract_factory('DutchAuction')
-        Token = chain.provider.get_contract_factory('RaidenToken')
-        Distributor = chain.provider.get_contract_factory('Distributor')
+    # Deploy Auction
+    auction_txhash = Auction.deploy(transaction={"from": owner},
+                                    args=[wallet_address, price_start,
+                                          price_constant, price_exponent])
+    log.info("Deploying auction, tx hash " + auction_txhash)
+    receipt = check_succesful_tx(web3, auction_txhash)
+    auction_address = receipt["contractAddress"]
+    log.info("Auction contract address " + auction_address)
 
-        # Deploy Auction
-        auction_txhash = Auction.deploy(transaction={"from": owner},
-                                        args=[wallet_address, price_start,
-                                              price_constant, price_exponent])
-        print("Deploying auction, tx hash is", auction_txhash)
-        receipt = check_succesful_tx(web3, auction_txhash)
-        auction_address = receipt["contractAddress"]
-        print("Auction contract address is", auction_address)
+    # Deploy token
+    token_txhash = Token.deploy(transaction={"from": owner}, args=[
+        auction_address,
+        wallet_address,
+        supply
+    ])
 
-        # Deploy token
-        token_txhash = Token.deploy(transaction={"from": owner}, args=[
-            auction_address,
-            wallet_address,
-            supply
-        ])
+    log.info("Deploying token, tx hash " + token_txhash)
+    receipt = check_succesful_tx(web3, token_txhash)
+    token_address = receipt["contractAddress"]
+    log.info("Token contract address " + token_address)
 
-        print("Deploying token, tx hash is", token_txhash)
-        receipt = check_succesful_tx(web3, token_txhash)
-        token_address = receipt["contractAddress"]
-        print("Token contract address is", token_address)
+    # Deploy Distributor contract
+    distributor_txhash = Distributor.deploy(transaction={"from": owner},
+                                            args=[auction_address])
+    log.info("Deploying distributor, tx hash is " + distributor_txhash)
+    receipt = check_succesful_tx(web3, distributor_txhash)
+    distributor_address = receipt["contractAddress"]
+    log.info("Distributor contract address  " + distributor_address)
 
-        # Deploy Distributor contract
-        distributor_txhash = Distributor.deploy(transaction={"from": owner},
-                                                args=[auction_address])
-        print("Deploying distributor, tx hash is", distributor_txhash)
-        receipt = check_succesful_tx(web3, distributor_txhash)
-        distributor_address = receipt["contractAddress"]
-        print("Distributor contract address is", distributor_address)
+    # Make contracts aware of each other
+    log.info("Initializing contracts")
+    auction = Auction(address=auction_address)
+    token = Token(address=token_address)
+    distributor = Distributor(address=distributor_address)
+    assert distributor is not None
 
-        # Make contracts aware of each other
-        print("Initializing contracts")
-        auction = Auction(address=auction_address)
-        token = Token(address=token_address)
-        distributor = Distributor(address=distributor_address)
-        assert distributor is not None
+    txhash = auction.transact({"from": owner}).setup(token_address)
+    check_succesful_tx(web3, txhash)
 
-        txhash = auction.transact({"from": owner}).setup(token_address)
-        check_succesful_tx(web3, txhash)
-
-        # Do some contract reads to see everything looks ok
-        print("Token total supply is {0} Tei = {1} TKN".format(
-            token.call().totalSupply(),
-            int(token.call().totalSupply() / multiplier)))
-        print("Auction price at 0 seconds (elapsed) is {0} WEI = {1} ETH".format(
-            auction.call().price(),
-            web3.fromWei(auction.call().price(), 'ether')))
-        ctx.obj = Web3Context(web3, auction, token, owner, wallet_address, auction_address)
+    # Do some contract reads to see everything looks ok
+    log.info("Token total supply is {0} Tei = {1} TKN".format(
+        token.call().totalSupply(),
+        int(token.call().totalSupply() / multiplier)))
+    log.info("Auction price at 0 seconds (elapsed) is {0} WEI = {1} ETH".format(
+        auction.call().price(),
+        web3.fromWei(auction.call().price(), 'ether')))
+    ctx.obj['token_contract_address'] = token_address
+    ctx.obj['auction_contract_address'] = auction_address
 
 
-@main.command()
+@main.group('simulation', invoke_without_command=True)
 @click.option(
     '--claim-tokens',
     is_flag=True,
@@ -188,6 +175,14 @@ def main(ctx, **kwargs):
     help='Time interval in seconds between bids. Only if the --simulation flag is set'
 )
 @click.option(
+    '--token-contract',
+    help='Address of token contract (if set, overrides deployed addr)'
+)
+@click.option(
+    '--auction-contract',
+    help='Address of  auction contract (if set, overrides deployed addr)'
+)
+@click.option(
     '--fund/--no-fund',
     default=True,
     help='Fund bidders accounts with random ETH from the owner account. Done before starting '
@@ -199,41 +194,69 @@ def main(ctx, **kwargs):
     type=int,
     help="How much of the owner's ethereum distribute to the bidders"
 )
-@pass_app
-def simulation(app: Web3Context, **kwargs):
+@click.pass_context
+def simulation(ctx, **kwargs):
     bidders = int(kwargs['bidders'])
     bid_start_price = int(kwargs['bid_price'] or 0)
     bid_interval = int(kwargs['bid_interval'] or 0)
     fund_bidders = kwargs['fund']
     sim_claim_tokens = kwargs['claim_tokens']
-    if simulation:
-        log.info('Starting simulation setup for {0} bidders'.format(bidders))
-        bidder_addresses = app.web3.eth.accounts[1:(bidders + 1)]
 
-        # come to daddy
-        event_list = [gevent.spawn(returnFundsToOwner, app.web3, app.owner, bidder)
-                      for bidder in bidder_addresses]
-        gevent.joinall(event_list)
+    token_contract_address = ctx.obj.get('token_contract_address', None)
+    if token_contract_address is None:
+        token_contract_address = kwargs.get('token_contract')
+    if token_contract_address is None:
+        log.fatal('No token contract address set! Either supply one '
+                  'using --token-contract option, or use deploy command')
+        sys.exit(1)
 
-        log.info('Creating {0} bidder accounts: '.format(bidders - len(bidder_addresses)))
-        for i in range(len(bidder_addresses), bidders):
-            address = app.web3.personal.newAccount(passphrase)
-            bidder_addresses.append(address)
+    auction_contract_address = ctx.obj.get('auction_contract_address', None)
+    if auction_contract_address is None:
+        auction_contract_address = kwargs.get('auction_contract')
+    if auction_contract_address is None:
+        log.fatal('No auction contract address set! Either supply one '
+                  'using --auction-contract option, or use deploy command')
+        sys.exit(1)
 
-        log.info('Simulating {0} bidders: {1}'.format(len(bidder_addresses), bidder_addresses))
-        if bid_start_price:
-            log.info('Bids will start at {0} WEI = {1} ETH  / TKN'.format(
-                bid_start_price,
-                app.web3.fromWei(bid_start_price, 'ether')))
+    chain = ctx.obj['chain']
+    owner = ctx.obj['owner']
+    web3 = chain.web3
 
-        if fund_bidders:
-            assignFundsToBidders(app.web3, app.owner, bidder_addresses,
-                                 kwargs['distribution_limit'])
+    Auction = chain.provider.get_contract_factory('DutchAuction')
+    Token = chain.provider.get_contract_factory('RaidenToken')
 
-        auction_simulation(app.web3, app.wallet_address, app.token_contract,
-                           app.auction_contract, app.owner,
-                           bidder_addresses, bid_interval, bid_start_price,
-                           sim_claim_tokens)
+    auction_contract = Auction(address=auction_contract_address)
+    token_contract = Token(address=token_contract_address)
+
+    log.info('Starting simulation setup for {0} bidders'.format(bidders))
+    bidder_addresses = web3.eth.accounts[1:(bidders + 1)]
+
+    # come to daddy
+    event_list = [gevent.spawn(returnFundsToOwner, web3, owner, bidder)
+                  for bidder in bidder_addresses]
+    gevent.joinall(event_list)
+
+    log.info('Creating {0} bidder accounts: '.format(bidders - len(bidder_addresses)))
+    for i in range(len(bidder_addresses), bidders):
+        address = web3.personal.newAccount(passphrase)
+        bidder_addresses.append(address)
+
+    log.info('Simulating {0} bidders: {1}'.format(len(bidder_addresses), bidder_addresses))
+    if bid_start_price:
+        log.info('Bids will start at {0} WEI = {1} ETH  / TKN'.format(
+            bid_start_price,
+            web3.fromWei(bid_start_price, 'ether')))
+
+    if fund_bidders:
+        assignFundsToBidders(web3, owner, bidder_addresses,
+                             kwargs['distribution_limit'])
+
+    auction_simulation(web3, token_contract, auction_contract, owner,
+                       bidder_addresses, bid_interval, bid_start_price,
+                       sim_claim_tokens)
+
+
+deploy.add_command(simulation)
 
 
 if __name__ == "__main__":
