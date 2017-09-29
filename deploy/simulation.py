@@ -68,7 +68,7 @@ def successful_bid(web3, auction, bidder, amount):
     return amount
 
 
-def auction_simulation(web3, wallet, token, auction, owner, bidders,
+def auction_simulation(web3, token, auction, owner, bidders,
                        bid_interval=None, bid_start_price=None, sim_claim_tokens=False):
     print_all_logs(token, auction)
 
