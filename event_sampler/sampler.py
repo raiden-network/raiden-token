@@ -17,28 +17,61 @@ class EventSampler:
         Auction = self.chain.provider.get_contract_factory('DutchAuction')
         self.auction_contract = Auction(address=auction_contract_addr)
         self.auction_contract_addr = auction_contract_addr
-        watch_logs(self.auction_contract, 'BidSubmission', self.on_bid_submission)
-        watch_logs(self.auction_contract, 'AuctionEnded', self.on_auction_end)
+        callbacks = {
+            'BidSubmission': self.on_bid_submission,
+            'AuctionEnded': self.on_auction_end,
+            'Deployed': self.on_deployed_event,
+            'AuctionStarted': self.on_auction_start,
+            'ClaimedTokens': self.on_claimed_tokens
+        }
         self.events = defaultdict(list)
-        self.sync_all()
+        self.auction_start_block = None
+        self.total_claimed = 0
+        self.final_price = None
+        self.auction_start_time = None
+        self.auction_end_time = None
+        self.price_start = None
+        self.price_constant = None
+        self.price_exponent = None
 
-    def sync_all(self):
-        events = self.get_logs('BidSubmission')
+        for k, v in callbacks.items():
+            self.sync_events(k, v)
+            watch_logs(self.auction_contract, k, v)
+
+    def sync_events(self, event_name: str, callback):
+        events = self.get_logs(event_name)
         if events is None:
             return
         for event in events:
-            self.on_bid_submission(event)
-        log.info("synced %d events" % len(self.events))
+            callback(event)
 
     def last_event(self):
+        if len(self.events) == 0:
+            return None
         last_block = max(self.events.keys())
         return sorted(self.events[last_block], key=itemgetter('logIndex'))[0]
+
+    def on_claimed_tokens(self, event):
+        self.total_claimed += event['args']['_sent_amount']
+
+    def on_deployed_event(self, event):
+        self.price_start = event['args']['_price_start']
+        self.price_constant = event['args']['_price_constant']
+        self.price_exponent = event['args']['_price_exponent']
 
     def on_bid_submission(self, args):
         self.events[args['blockNumber']].append(args)
 
-    def on_auction_end(self, args):
-        log.info('auction end')
+    def on_auction_end(self, event):
+        self.final_price = event['args']['_final_price']
+        self.auction_end_block = event['blockNumber']
+        self.auction_end_time = self.chain.web3.eth.getBlock(event['blockNumber']).timestamp
+        log.info('auction ended %s' % (str(event['args'])))
+
+    def on_auction_start(self, event):
+        self.auction_start_block = event['args']['_block_number']
+        self.auction_start_time = event['args']['_start_time']
+        log.info('auction started %s' % (str(event['args'])))
 
     def get_logs(self, event_name, from_block=0, to_block='latest', filters=None):
         filter_kwargs = {
