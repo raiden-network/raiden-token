@@ -193,6 +193,12 @@ def main(ctx, **kwargs):
     help='Fund bidders accounts with random ETH from the owner account. Done before starting '
          'the simulation.'
 )
+@click.option(
+    '--distribution-limit',
+    default=None,
+    type=int,
+    help="How much of the owner's ethereum distribute to the bidders"
+)
 @pass_app
 def simulation(app: Web3Context, **kwargs):
     bidders = int(kwargs['bidders'])
@@ -221,7 +227,8 @@ def simulation(app: Web3Context, **kwargs):
                 app.web3.fromWei(bid_start_price, 'ether')))
 
         if fund_bidders:
-            assignFundsToBidders(app.web3, app.owner, bidder_addresses)
+            assignFundsToBidders(app.web3, app.owner, bidder_addresses,
+                                 kwargs['distribution_limit'])
 
         auction_simulation(app.web3, app.wallet_address, app.token_contract,
                            app.auction_contract, app.owner,
