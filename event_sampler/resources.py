@@ -43,7 +43,10 @@ class BidsHistogram(Resource):
             block_to_events[block] = sum((event['args']['_amount'] for event in events))
         min_block = min(block_to_events.keys())
         max_block = max(block_to_events.keys())
-        bins = range(min_block, max_block, ((max_block - min_block) // args['bins']))
+        num_bins = args['bins']
+        assert max_block > min_block
+        num_bins = min(max_block - min_block, num_bins)
+        bins = range(min_block, max_block, ((max_block - min_block) // num_bins))
         ar, ar_bins = numpy.histogram(list(block_to_events.keys()),
                                       bins=bins,
                                       weights=list(block_to_events.values()))
