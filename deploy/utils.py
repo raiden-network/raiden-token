@@ -124,19 +124,37 @@ def returnFundsToOwner(web3, owner, bidder):
     assert receipt is not None
 
 
-def sendFunds(web3, owner, bidder, bidders_len):
-        owner_balance = web3.eth.getBalance(owner)
-        max_bid = int(owner_balance / bidders_len)
-        max_bid = max(max_bid, 10**18 * 5)
+def sendFunds(web3, owner, bidder, max_bid):
         value = random.randint(max_bid / 2, max_bid)
-        log.info("{bidder} {0}".format(amount_format(web3, value), bidder=bidder))
+        log.info("funding {bidder} {0}".format(amount_format(web3, value), bidder=bidder))
         txhash = web3.eth.sendTransaction({'from': owner, 'to': bidder, 'value': value})
         check_succesful_tx(web3, txhash)
 
 
-def assignFundsToBidders(web3, owner, bidders):
+def assignFundsToBidders(web3, owner: str, bidders: list, distribution_limit: int=None):
     # Make sure bidders have random ETH
+    owner_balance = web3.eth.getBalance(owner)
+    if distribution_limit is not None:
+        owner_balance = min(owner_balance, distribution_limit)
+    max_bidder_deposit = int(owner_balance / len(bidders))
+#    max_bid = max(max_bidder_deposit, 10**18 * 5)
+    max_bid = max_bidder_deposit
     gevents = []
     for bidder in bidders:
-        gevents.append(gevent.spawn(sendFunds, web3, owner, bidder, len(bidders)))
+        gevents.append(gevent.spawn(sendFunds, web3, owner, bidder, max_bid))
     gevent.joinall(gevents)
+
+
+def set_connection_pool_size(web3, pool_connections, pool_size):
+    """Hack to override default poolsize for web3"""
+    from web3.utils.compat.compat_requests import _get_session
+    from web3 import HTTPProvider
+    import requests
+    provider = web3.currentProvider
+    if isinstance(provider, HTTPProvider) is False:
+        return
+    logging.info("setting web3 HTTPProvider connections={0} pool_size={1}"
+                 .format(pool_connections, pool_size))
+    session = _get_session(provider.endpoint_uri)
+    adapter = requests.adapters.HTTPAdapter(pool_connections, pool_size)
+    session.mount('http://', adapter)

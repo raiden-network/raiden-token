@@ -12,19 +12,41 @@ import gevent
 from populus import Project
 from deploy.utils import (
     passphrase,
-    createWallet,
     check_succesful_tx,
     assignFundsToBidders,
-    returnFundsToOwner
+    returnFundsToOwner,
+    set_connection_pool_size
 )
 from deploy.simulation import (
-    getAuctionFactors,
     auction_simulation
 )
 import logging
+from web3 import Web3
+from populus.contracts.contract import PopulusContract
+log = logging.getLogger(__name__)
 
 
-@click.command()
+class Web3Context:
+    def __init__(self, web3, auction_contract, token_contract,
+                 owner, wallet_address, auction_address):
+        assert isinstance(web3, Web3)
+        assert isinstance(auction_contract, PopulusContract)
+        assert isinstance(token_contract, PopulusContract)
+        assert isinstance(owner, str)
+        assert isinstance(wallet_address, str)
+        assert isinstance(auction_address, str)
+
+        self.web3 = web3
+        self.auction_contract = auction_contract
+        self.token_contract = token_contract
+        self.owner = owner
+        self.wallet_address = wallet_address
+
+
+pass_app = click.make_pass_decorator(Web3Context)
+
+
+@click.group()
 @click.option(
     '--chain',
     default='kovan',
@@ -58,30 +80,8 @@ import logging
     default=3,
     help='Price exponent'
 )
-@click.option(
-    '--simulation',
-    is_flag=True,
-    help='Run auction simulation.'
-)
-@click.option(
-    '--bidders',
-    default=10,
-    help='Number of bidders. Only if the --simulation flag is set'
-)
-@click.option(
-    '--bid-price',
-    help='Price per TKN in WEI at which the first bid should start. Only if the --simulation flag is set'
-)
-@click.option(
-    '--bid-interval',
-    help='Time interval in seconds between bids. Only if the --simulation flag is set'
-)
-@click.option(
-    '--fund/--no-fund',
-    default=True,
-    help='Fund bidders accounts with random ETH from the owner account. Done before starting the simulation.'
-)
-def main(**kwargs):
+@click.pass_context
+def main(ctx, **kwargs):
     project = Project()
 
     chain_name = kwargs['chain']
@@ -91,19 +91,16 @@ def main(**kwargs):
     price_start = kwargs['price_start']
     price_constant = kwargs['price_constant']
     price_exponent = kwargs['price_exponent']
-    simulation = kwargs['simulation']
-    bidders = int(kwargs['bidders'])
-    bid_start_price = int(kwargs['bid_price'] or 0)
-    bid_interval = int(kwargs['bid_interval'] or 0)
-    fund_bidders = kwargs['fund']
 
     multiplier = 10 ** 18
     supply *= multiplier
 
-    print("Make sure {} chain is running, you can connect to it and it is synced, or you'll get timeout".format(chain_name))
+    print("Make sure {} chain is running, you can connect to it and it is synced, "
+          "or you'll get timeout".format(chain_name))
 
     with project.get_chain(chain_name) as chain:
         web3 = chain.web3
+        set_connection_pool_size(web3, 100, 100)
         owner = owner or web3.eth.accounts[0]
         wallet_address = wallet_address or web3.personal.newAccount(passphrase)
 
@@ -123,7 +120,8 @@ def main(**kwargs):
 
         # Deploy Auction
         auction_txhash = Auction.deploy(transaction={"from": owner},
-                                        args=[wallet_address, price_start, price_constant, price_exponent])
+                                        args=[wallet_address, price_start,
+                                              price_constant, price_exponent])
         print("Deploying auction, tx hash is", auction_txhash)
         receipt = check_succesful_tx(web3, auction_txhash)
         auction_address = receipt["contractAddress"]
@@ -166,34 +164,76 @@ def main(**kwargs):
         print("Auction price at 0 seconds (elapsed) is {0} WEI = {1} ETH".format(
             auction.call().price(),
             web3.fromWei(auction.call().price(), 'ether')))
+        ctx.obj = Web3Context(web3, auction, token, owner, wallet_address, auction_address)
 
-        # Start simulation if --simulation flag is set
-        if simulation:
-            print('Starting simulation setup for', bidders, 'bidders')
-            bidder_addresses = web3.eth.accounts[1:(bidders + 1)]
 
-            # come to daddy
-            event_list = [gevent.spawn(returnFundsToOwner, web3, owner, bidder)
-                          for bidder in bidder_addresses]
-            gevent.joinall(event_list)
+@main.command()
+@click.option(
+    '--claim-tokens',
+    is_flag=True,
+    help='Run auction simulation.'
+)
+@click.option(
+    '--bidders',
+    default=10,
+    help='Number of bidders. Only if the --simulation flag is set'
+)
+@click.option(
+    '--bid-price',
+    help='Price per TKN in WEI at which the first bid should start. Only if the --simulation flag '
+         'is set'
+)
+@click.option(
+    '--bid-interval',
+    help='Time interval in seconds between bids. Only if the --simulation flag is set'
+)
+@click.option(
+    '--fund/--no-fund',
+    default=True,
+    help='Fund bidders accounts with random ETH from the owner account. Done before starting '
+         'the simulation.'
+)
+@click.option(
+    '--distribution-limit',
+    default=None,
+    type=int,
+    help="How much of the owner's ethereum distribute to the bidders"
+)
+@pass_app
+def simulation(app: Web3Context, **kwargs):
+    bidders = int(kwargs['bidders'])
+    bid_start_price = int(kwargs['bid_price'] or 0)
+    bid_interval = int(kwargs['bid_interval'] or 0)
+    fund_bidders = kwargs['fund']
+    sim_claim_tokens = kwargs['claim_tokens']
+    if simulation:
+        log.info('Starting simulation setup for {0} bidders'.format(bidders))
+        bidder_addresses = app.web3.eth.accounts[1:(bidders + 1)]
 
-            print('Creating more bidder accounts:', bidders - len(bidder_addresses), 'accounts')
-            for i in range(len(bidder_addresses), bidders):
-                address = web3.personal.newAccount(passphrase)
-                bidder_addresses.append(address)
+        # come to daddy
+        event_list = [gevent.spawn(returnFundsToOwner, app.web3, app.owner, bidder)
+                      for bidder in bidder_addresses]
+        gevent.joinall(event_list)
 
-            print('Simulating', len(bidder_addresses), 'bidders:', bidder_addresses)
-            if bid_start_price:
-                print('Bids will start at {0} WEI = {1} ETH  / TKN'.format(
-                    bid_start_price,
-                    web3.fromWei(bid_start_price, 'ether')))
+        log.info('Creating {0} bidder accounts: '.format(bidders - len(bidder_addresses)))
+        for i in range(len(bidder_addresses), bidders):
+            address = app.web3.personal.newAccount(passphrase)
+            bidder_addresses.append(address)
 
-            if fund_bidders:
-                assignFundsToBidders(web3, owner, bidder_addresses)
+        log.info('Simulating {0} bidders: {1}'.format(len(bidder_addresses), bidder_addresses))
+        if bid_start_price:
+            log.info('Bids will start at {0} WEI = {1} ETH  / TKN'.format(
+                bid_start_price,
+                app.web3.fromWei(bid_start_price, 'ether')))
 
-            tokens = auction_simulation(web3, wallet_address, token, auction, owner,
-                                        bidder_addresses, bid_interval, bid_start_price)
-            assert tokens == supply
+        if fund_bidders:
+            assignFundsToBidders(app.web3, app.owner, bidder_addresses,
+                                 kwargs['distribution_limit'])
+
+        auction_simulation(app.web3, app.wallet_address, app.token_contract,
+                           app.auction_contract, app.owner,
+                           bidder_addresses, bid_interval, bid_start_price,
+                           sim_claim_tokens)
 
 
 if __name__ == "__main__":

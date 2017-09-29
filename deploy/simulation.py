@@ -1,13 +1,8 @@
-import random
 import logging
 
 log = logging.getLogger(__name__)
-from web3.utils.compat import (
-    Timeout,
-)
 
 from deploy.utils import (
-    passphrase,
     check_succesful_tx,
     print_logs,
     amount_format
@@ -74,7 +69,7 @@ def successful_bid(web3, auction, bidder, amount):
 
 
 def auction_simulation(web3, wallet, token, auction, owner, bidders,
-                       bid_interval=None, bid_start_price=None):
+                       bid_interval=None, bid_start_price=None, sim_claim_tokens=False):
     print_all_logs(token, auction)
 
     log.info('{owner} {balance}'.format(owner=owner,
@@ -138,12 +133,13 @@ def auction_simulation(web3, wallet, token, auction, owner, bidders,
         log.info('{bidder} {tokens}'.format(bidder=bidder, tokens=token_balance))
         return token_balance
 
-    event_lst = [gevent.spawn(claim_tokens, auction, x)
-                 for x in bidders]
-    gevent.joinall(event_lst)
-    event_lst = [gevent.spawn(get_balance, token, x)
-                 for x in bidders]
-    gevent.joinall(event_lst)
-    total_balance = sum([ev.value for ev in event_lst])
-    assert auction.call().stage() == 4  # AuctionEnded
-    return total_balance
+    if sim_claim_tokens is True:
+        event_lst = [gevent.spawn(claim_tokens, auction, x)
+                     for x in bidders]
+        gevent.joinall(event_lst)
+        event_lst = [gevent.spawn(get_balance, token, x)
+                     for x in bidders]
+        gevent.joinall(event_lst)
+        total_balance = sum([ev.value for ev in event_lst])
+        assert auction.call().stage() == 4  # TokensDistributed
+        return total_balance
