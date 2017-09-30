@@ -1,4 +1,4 @@
-# Reserve Token
+# Raiden Token
 
 ## Smart Contracts, Unittests and Infrastructure.
 
@@ -191,6 +191,9 @@ function thisFunctionNameIsReallyLong(
 
 
 ## Web App
+
+Web prototype for testing auction models.
+
 
 ### Installation
 
