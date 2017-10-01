@@ -134,7 +134,6 @@ def auction_contract(
     if print_the_logs:
         print_logs(auction_contract, 'Deployed', auction_contract_type)
         print_logs(auction_contract, 'Setup', auction_contract_type)
-        print_logs(auction_contract, 'SettingsChanged', auction_contract_type)
         print_logs(auction_contract, 'AuctionStarted', auction_contract_type)
         print_logs(auction_contract, 'BidSubmission', auction_contract_type)
         print_logs(auction_contract, 'AuctionEnded', auction_contract_type)
@@ -160,7 +159,6 @@ def auction_contract_fast_decline(
     if print_the_logs:
         print_logs(auction_contract, 'Deployed', auction_contract_type)
         print_logs(auction_contract, 'Setup', auction_contract_type)
-        print_logs(auction_contract, 'SettingsChanged', auction_contract_type)
         print_logs(auction_contract, 'AuctionStarted', auction_contract_type)
         print_logs(auction_contract, 'BidSubmission', auction_contract_type)
         print_logs(auction_contract, 'AuctionEnded', auction_contract_type)

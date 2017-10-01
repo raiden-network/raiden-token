@@ -96,11 +96,6 @@ contract DutchAuction {
         uint32 indexed _price_exponent
     );
     event Setup();
-    event SettingsChanged(
-        uint indexed _price_start,
-        uint indexed _price_constant,
-        uint32 indexed _price_exponent
-    );
     event AuctionStarted(uint indexed _start_time, uint indexed _block_number);
     event BidSubmission(
         address indexed _sender,
@@ -179,7 +174,6 @@ contract DutchAuction {
         price_start = _price_start;
         price_constant = _price_constant;
         price_exponent = _price_exponent;
-        SettingsChanged(price_start, price_constant, price_exponent);
     }
 
     /// @notice Start the auction.
