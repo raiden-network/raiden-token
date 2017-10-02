@@ -298,7 +298,7 @@ def test_auction_bid(
         auction_claim_tokens_tested(token, auction, A)
 
     end_time = auction.call().end_time()
-    elapsed = auction.call().waiting_period()
+    elapsed = auction.call().token_claim_waiting_period()
     web3.testing.timeTravel(end_time + elapsed+1)
 
     auction_claim_tokens_tested(token, auction, A)
@@ -690,7 +690,7 @@ def test_auction_simulation(
         auction_claim_tokens_tested(token, auction, bidders[0])
 
     end_time = auction.call().end_time()
-    elapsed = auction.call().waiting_period()
+    elapsed = auction.call().token_claim_waiting_period()
     web3.testing.timeTravel(end_time + elapsed+1)
 
     for i in range(0, index):
