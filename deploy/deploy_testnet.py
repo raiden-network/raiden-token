@@ -51,7 +51,7 @@ def main(ctx, **kwargs):
         ctx.obj['owner'] = kwargs['owner'] or chain.web3.eth.accounts[0]
 
 
-@main.group('deploy')
+@main.group('deploy', invoke_without_command=True)
 @click.option(
     '--wallet',
     help='Auction funds will be sent to this wallet address.'
@@ -167,11 +167,25 @@ def deploy(ctx, **kwargs):
 )
 @click.option(
     '--bid-price',
-    help='Price per TKN in WEI at which the first bid should start. Only if the --simulation flag '
-         'is set'
+    type=int,
+    help='Price per TKN in WEI at which the first bid should start.'
+)
+@click.option(
+    '--max-bid-amount',
+    type=int,
+    default=10000000,
+    help='Maximum amount of ETH to use per bid (in WEI)'
+)
+@click.option(
+    '--max-bid-ceiling',
+    type=float,
+    default='0.8',
+    help='A float value betwen 0 - 1.0'
 )
 @click.option(
     '--bid-interval',
+    default=5,
+    type=int,
     help='Time interval in seconds between bids. Only if the --simulation flag is set'
 )
 @click.option(
@@ -192,15 +206,13 @@ def deploy(ctx, **kwargs):
     '--distribution-limit',
     default=None,
     type=int,
-    help="How much of the owner's ethereum distribute to the bidders"
+    help="How much of the owner's ethereum distribute to the bidders (in wei)"
 )
 @click.pass_context
 def simulation(ctx, **kwargs):
     bidders = int(kwargs['bidders'])
     bid_start_price = int(kwargs['bid_price'] or 0)
-    bid_interval = int(kwargs['bid_interval'] or 0)
     fund_bidders = kwargs['fund']
-    sim_claim_tokens = kwargs['claim_tokens']
 
     token_contract_address = ctx.obj.get('token_contract_address', None)
     if token_contract_address is None:
@@ -228,7 +240,6 @@ def simulation(ctx, **kwargs):
     auction_contract = Auction(address=auction_contract_address)
     token_contract = Token(address=token_contract_address)
 
-    log.info('Starting simulation setup for {0} bidders'.format(bidders))
     bidder_addresses = web3.eth.accounts[1:(bidders + 1)]
 
     # come to daddy
@@ -252,8 +263,7 @@ def simulation(ctx, **kwargs):
                              kwargs['distribution_limit'])
 
     auction_simulation(web3, token_contract, auction_contract, owner,
-                       bidder_addresses, bid_interval, bid_start_price,
-                       sim_claim_tokens)
+                       bidder_addresses, kwargs)
 
 
 deploy.add_command(simulation)
