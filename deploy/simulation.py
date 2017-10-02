@@ -6,7 +6,8 @@ log = logging.getLogger(__name__)
 from deploy.utils import (
     check_succesful_tx,
     print_logs,
-    amount_format
+    amount_format,
+    passphrase
 )
 
 tx_timeout = 180
@@ -65,12 +66,15 @@ def deploy_bidders(bidder_addrs, web3, auction, kwargs):
         bidder.max_bid_ceiling = kwargs['max_bid_ceiling']
         bidder.bid_interval = kwargs['bid_interval']
         bidder.max_bid_price = kwargs['max_bid_amount']
+        bidder.min_bid_price = kwargs['min_bid_amount']
         bidder_objs.append(bidder)
     bidder_gevents = [gevent.spawn(b.run) for b in bidder_objs]
     gevent.joinall(bidder_gevents)
 
 
 def claim_tokens(auction, bidder, web3):
+    unlocked = web3.personal.unlockAccount(bidder, passphrase)
+    assert unlocked is True
     txhash = auction.transact({'from': bidder}).claimTokens()
     check_succesful_tx(web3, txhash)
 
@@ -83,7 +87,6 @@ def get_balance(token, bidder):
 
 def auction_simulation(web3, token, auction, owner, bidders,
                        kwargs):
-    print_all_logs(token, auction)
 
     log.info('owner={owner} balance={balance}'
              .format(owner=owner, balance=amount_format(web3, web3.eth.getBalance(owner))))

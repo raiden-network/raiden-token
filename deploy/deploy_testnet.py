@@ -45,7 +45,7 @@ def main(ctx, **kwargs):
              "or you'll get timeout".format(chain_name))
 
     with project.get_chain(chain_name) as chain:
-        set_connection_pool_size(chain.web3, 100, 100)
+        set_connection_pool_size(chain.web3, 1000, 1000)
         ctx.obj = {}
         ctx.obj['chain'] = chain
         ctx.obj['owner'] = kwargs['owner'] or chain.web3.eth.accounts[0]
@@ -152,6 +152,7 @@ def deploy(ctx, **kwargs):
         web3.fromWei(auction.call().price(), 'ether')))
     ctx.obj['token_contract_address'] = token_address
     ctx.obj['auction_contract_address'] = auction_address
+    ctx.obj['total_supply'] = supply
 
 
 @main.group('simulation', invoke_without_command=True)
@@ -175,6 +176,12 @@ def deploy(ctx, **kwargs):
     type=int,
     default=10000000,
     help='Maximum amount of ETH to use per bid (in WEI)'
+)
+@click.option(
+    '--min-bid-amount',
+    type=int,
+    default=10000,
+    help='Minimum amount of ETH to use per bid (in WEI)'
 )
 @click.option(
     '--max-bid-ceiling',
@@ -262,8 +269,10 @@ def simulation(ctx, **kwargs):
         assignFundsToBidders(web3, owner, bidder_addresses,
                              kwargs['distribution_limit'])
 
-    auction_simulation(web3, token_contract, auction_contract, owner,
-                       bidder_addresses, kwargs)
+    ret = auction_simulation(web3, token_contract, auction_contract, owner,
+                             bidder_addresses, kwargs)
+    if isinstance(ret, int):
+        assert ret == ctx.obj['total_supply']
 
 
 deploy.add_command(simulation)
