@@ -227,6 +227,8 @@ contract DutchAuction {
         atStage(Stages.AuctionStarted)
     {
         require(receiver_address != 0x0);
+        require(receiver_address != address(this));
+        require(receiver_address != address(token));
         require(msg.value > 0);
         assert(bids[receiver_address] + msg.value >= msg.value);
 
