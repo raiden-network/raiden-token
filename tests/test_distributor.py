@@ -136,6 +136,13 @@ def test_distributor_distribute(
 
     handle_logs(contract=auction, event='BidSubmission', callback=get_bidders_addresses)
 
+    with pytest.raises(tester.TransactionFailed):
+        distributor.transact({'from': owner}).distribute(addresses[0:2])
+
+    end_time = auction.call().end_time()
+    elapsed = auction.call().token_claim_waiting_period()
+    web3.testing.timeTravel(end_time + elapsed+1)
+
     # Send 5 claiming transactions in a single batch to not run out of gas
     safe_distribution_no = 5
     steps = math.ceil(len(addresses) / safe_distribution_no)

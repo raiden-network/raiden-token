@@ -27,10 +27,10 @@ class LogHandler:
                 self.abi,
                 self.address,
                 event_name,
-                callback=self.handle_log(callback)
+                callback=self.handle_log
             )
 
-        self.event_waiting[event_name][txn_hash] = message
+        self.event_waiting[event_name][txn_hash] = [message, callback]
 
     def check(self, timeout=5):
         for event in list(self.event_filters.keys()):
@@ -38,24 +38,25 @@ class LogHandler:
 
         self.wait(timeout)
 
-    def handle_log(self, callback=None):
-        def get(event):
-            txn_hash = event['transactionHash']
-            event_name = event['event']
+    def handle_log(self, event):
+        txn_hash = event['transactionHash']
+        event_name = event['event']
 
-            if event_name in self.event_waiting:
-                if txn_hash in self.event_waiting[event_name]:
-                    self.event_verified.append(event)
-                    self.event_waiting[event_name].pop(txn_hash, None)
-                else:
-                    self.event_unkown.append(event)
-                if not len(list(self.event_waiting[event_name].keys())):
-                    self.event_waiting.pop(event_name, None)
-                    self.event_filters[event_name].stop()
-                    self.event_filters.pop(event_name, None)
-            if callback:
-                callback(event)
-        return get
+        if event_name in self.event_waiting:
+            if txn_hash in self.event_waiting[event_name]:
+                self.event_verified.append(event)
+                event_entry = self.event_waiting[event_name].pop(txn_hash, None)
+
+                # Call callback function with event and remove
+                if event_entry[1]:
+                    event_entry[1](event)
+
+            else:
+                self.event_unkown.append(event)
+            if not len(list(self.event_waiting[event_name].keys())):
+                self.event_waiting.pop(event_name, None)
+                self.event_filters[event_name].stop()
+                self.event_filters.pop(event_name, None)
 
     def wait(self, seconds):
         try:
