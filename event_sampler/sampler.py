@@ -17,6 +17,7 @@ class EventSampler:
         Auction = self.chain.provider.get_contract_factory('DutchAuction')
         self.auction_contract = Auction(address=auction_contract_addr)
         self.auction_contract_addr = auction_contract_addr
+        self.block_to_timestamp = {}
         callbacks = {
             'BidSubmission': self.on_bid_submission,
             'AuctionEnded': self.on_auction_end,
@@ -60,6 +61,9 @@ class EventSampler:
         self.price_exponent = event['args']['_price_exponent']
 
     def on_bid_submission(self, args):
+        if args['blockNumber'] not in self.block_to_timestamp:
+            timestamp = self.chain.web3.eth.getBlock(args['blockNumber'])['timestamp']
+            self.block_to_timestamp[args['blockNumber']] = timestamp
         self.events[args['blockNumber']].append(args)
 
     def on_auction_end(self, event):

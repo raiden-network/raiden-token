@@ -92,9 +92,11 @@ def auction_simulation(web3, token, auction, owner, bidders,
              .format(owner=owner, balance=amount_format(web3, web3.eth.getBalance(owner))))
 
     # Start the auction
-    log.info('Start auction owner balance %s' % amount_format(web3, web3.eth.getBalance(owner)))
-    txhash = auction.transact({'from': owner}).startAuction()
-    receipt = check_succesful_tx(web3, txhash, tx_timeout)
+    if kwargs['start_auction'] is True:
+        log.info('Start auction owner balance %s' %
+                 amount_format(web3, web3.eth.getBalance(owner)))
+        txhash = auction.transact({'from': owner}).startAuction()
+        receipt = check_succesful_tx(web3, txhash, tx_timeout)
 
     assert auction.call().stage() == 2  # AuctionStarted
     assert auction.call().price_start() > 0

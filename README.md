@@ -72,50 +72,42 @@ pytest -p no:warnings -s -n NUM_OF_CPUs
    geth attach ipc:/Users/user/Library/Ethereum/rinkeby/geth.ipc
    ```
 
+* `private chain`
+	- private tester chain has a default account at `0x00a329c0648769a73afac7f9381e08fb43dbea72`, loaded with lots of ether
+	- you will need to create an empty password file in order to unlock the account
+
+	```sh
+	parity --dapps-hosts="all" --dapps-apis-all --jsonrpc-hosts="all" --gas-floor-target 0 --gasprice 0 --geth --chain dev --force-ui --reseal-min-period 0 --rpc  --jsonrpc-apis all --password /tmp/empty_password --unlock 0x00a329c0648769a73afac7f9381e08fb43dbea72
+	```
 
 
+#### Auction deployment & simulation
+
+Deployment script can do both deployment of the auction and can also run the simulation.
+
+Deployment:
+- owner must own enough ether to deploy the contracts
+- if you want to run the simulation, note the contract addresses
 ```sh
-
-# Fast deploy on kovan | ropsten | rinkeby | tester | privtest
-
-# Following two calls are quivalent
-python -m deploy.deploy_testnet
-python -m deploy/deploy_testnet \
-    --chain kovan \
-    --owner 0x5601Ea8445A5d96EEeBF89A67C4199FbB7a43Fbb  \  # web3.eth.accounts[0]
-    --supply 10000000 \
-    --price-factor 2 \
-    --price-constant 7500 \
-
-# Custom preallocations
-python -m deploy.deploy_testnet \
-    --prealloc-addresses \ '0xe2e429949e97f2e31cd82facd0a7ae38f65e2f38,0xd1bf222ef7289ae043b723939d86c8a91f3aac3f' \
-    --prealloc-amounts '300,600'
-
+python -m deploy.deploy_testnet --chain privtest --owner 0x00a329c0648769a73afac7f9381e08fb43dbea72  deploy --price-start 2000000 --price-constant 1574640000 --price-exponent 4
 ```
 
-
-#### Auction simulation
-
-Simulation will cycle funds, so we don't loose them: owner's account funds the bidder's accounts. When the auction ends, the owner's account receives the auction funds.
-
+Simulation:
+The bidders are given some ether at the beggining. You can use `--distribution-limit` option to cap the amount distributed.
+Simulation will create n bidders that will send a random amount of ether in random intervals. If bidder runs out of funds, it will stop.
+If you set `--claim-tokens` option, bidders will also try to claim the tokens at the end of the simulation.
 ```sh
-
-# Simulation options (only when the --simulation flag is set)
-    --simulation
-    --bidders 10  # number of bidders
-    --bids 10  # number of bids
-    --price-points 100000000000000000,0,10000000000000000,600  # calculates price_factor & price_constant from 2 price points (wei/TKN, elapsed_seconds)
-    --bid-price  # price per TKN in WEI at which the first bid should start
-    --bid-interval  # time interval in seconds between bids
-    --no-fund   # does not fund the bidder accounts from the owner's
-
-# Testing simulation script locally - tricky,
-# because it usually either takes too long or is too expensive
-# solution: make Token's decimals = 1 and:
-python deploy/deploy_testnet.py --simulation --chain privtest --price-points 1000,0,500,60 --decimals 1 --bid-interval 0 --bidders 4 --no-fund
-
+python -m deploy.deploy_testnet --chain privtest --owner 0x00a329c0648769a73afac7f9381e08fb43dbea72 simulation --bid-interval 3 --max-bid-ceiling 0.9 --max-bid-amount 10000000000 --min-bid-amount 100000000 --bidders 100 --claim-tokens
 ```
+
+Both:
+To simplify things, you can just deploy & simulate:
+```sh
+python -m deploy.deploy_testnet --chain privtest --owner 0x00a329c0648769a73afac7f9381e08fb43dbea72  \
+	deploy --price-start 2000000 --price-constant 1574640000 --price-exponent 4
+	simulation --bid-interval 3 --max-bid-ceiling 0.9 --max-bid-amount 10000000000 --min-bid-amount 100000000 --bidders 100 --claim-tokens
+```
+
 
 
 #### Automatic token distribution

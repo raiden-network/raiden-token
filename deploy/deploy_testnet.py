@@ -190,6 +190,11 @@ def deploy(ctx, **kwargs):
     help='A float value betwen 0 - 1.0'
 )
 @click.option(
+    '--start-auction/--no-start-auction',
+    default=True,
+    help='Whether "startAuction()" is called at the begininng of the sim.'
+)
+@click.option(
     '--bid-interval',
     default=5,
     type=int,
