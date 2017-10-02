@@ -15,6 +15,8 @@ contract DutchAuction {
      * token_multiplier set from token's number of decimals (i.e. 10 ** decimals)
      */
 
+    uint constant public waiting_period = 7 days;
+
     /*
      * Storage
      */
@@ -260,6 +262,7 @@ contract DutchAuction {
         isValidPayload
         atStage(Stages.AuctionEnded)
     {
+        require(now > end_time + waiting_period);
         require(receiver_address != 0x0);
         require(bids[receiver_address] > 0);
 
