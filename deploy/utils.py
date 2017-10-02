@@ -153,8 +153,10 @@ def set_connection_pool_size(web3, pool_connections, pool_size):
     provider = web3.currentProvider
     if isinstance(provider, HTTPProvider) is False:
         return
+    provider._request_kwargs['timeout'] = 30
     logging.info("setting web3 HTTPProvider connections={0} pool_size={1}"
                  .format(pool_connections, pool_size))
     session = _get_session(provider.endpoint_uri)
     adapter = requests.adapters.HTTPAdapter(pool_connections, pool_size)
     session.mount('http://', adapter)
+    requests.adapters.DEFAULT_POOL_TIMEOUT = 30
