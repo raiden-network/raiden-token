@@ -1,4 +1,4 @@
-pragma solidity ^0.4.11;
+pragma solidity ^0.4.17;
 
 import '../ERC223ReceivingContract.sol';
 
@@ -15,7 +15,7 @@ contract Proxy{
     function proxy(address to, string func, address data, uint num)
         returns (bool)
     {
-        return to.call(bytes4(sha3(func)), data, num);
+        return to.call(bytes4(keccak256(func)), data, num);
     }
 
     function proxyPayable(address to, string function_string)
@@ -23,7 +23,7 @@ contract Proxy{
         returns (bool)
     {
         Payable(to, msg.value, function_string);
-        return to.call.value(msg.value)(bytes4(sha3(function_string)));
+        return to.call.value(msg.value)(bytes4(keccak256(function_string)));
     }
 }
 
