@@ -255,6 +255,13 @@ def test_auction_bid(
     token_multiplier = auction.call().token_multiplier()
 
     auction.transact({'from': owner}).startAuction()
+    # Bids with the token contract address as receiver should fail
+    with pytest.raises(tester.TransactionFailed):
+        auction.transact({'from': A, "value": 100}).bid(token.address)
+
+    # Bids with the auction contract address as receiver should fail
+    with pytest.raises(tester.TransactionFailed):
+        auction.transact({'from': A, "value": 100}).bid(auction.address)
 
     # End auction by bidding the needed amount
     missing_funds = auction.call().missingFundsToEndAuction()
