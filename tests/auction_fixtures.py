@@ -29,6 +29,43 @@ def auction_price(price_start, price_constant, price_exponent, elapsed):
     return price_start * (1 + elapsed) // (1 + elapsed + price_decay)
 
 
+def checkBidEvent(sender, amount, missing_funds):
+    def get(event):
+        assert event['args']['_sender'] == sender
+        assert event['args']['_amount'] == amount
+        assert event['args']['_missing_funds'] == missing_funds
+    return get
+
+
+def checkDeployedEvent(price_start, price_constant, price_exponent):
+    def get(event):
+        assert event['args']['_price_start'] == price_start
+        assert event['args']['_price_constant'] == price_constant
+        assert event['args']['_price_exponent'] == price_exponent
+    return get
+
+
+def checkAuctionStartedEvent(start_time, block_number):
+    def get(event):
+        assert event['args']['_start_time'] == start_time
+        assert event['args']['_block_number'] == block_number
+    return get
+
+
+def checkClaimedTokensEvent(recipient, sent_amount):
+    def get(event):
+        print('--checkClaimedTokensEvent-- ', recipient, sent_amount, event)
+        assert event['args']['_recipient'] == recipient
+        assert event['args']['_sent_amount'] == sent_amount
+    return get
+
+
+def checkAuctionEndedEvent(final_price):
+    def get(event):
+        assert event['args']['_final_price'] == final_price
+    return get
+
+
 @pytest.fixture()
 def price(contract_params):
     def get(elapsed):
@@ -142,17 +179,21 @@ def auction_bid_tested(web3, request, wallet_address, txnCost, contract_params):
         wallet_pre_balance = web3.eth.getBalance(wallet_address)
 
         if use_fallback:
-            txn_cost = txnCost(web3.eth.sendTransaction({
+            txn_hash = web3.eth.sendTransaction({
                 'from': bidder,
                 'to': auction.address,
                 'value': amount
-            }))
+            })
         else:
-            txn_cost = txnCost(auction.transact({'from': bidder, 'value': amount}).bid())
+            txn_hash = auction.transact({'from': bidder, 'value': amount}).bid()
+
+        txn_cost = txnCost(txn_hash)
         assert auction.call().bids(bidder) == bidder_pre_a_balance + amount
         assert web3.eth.getBalance(wallet_address) == wallet_pre_balance + amount
         assert web3.eth.getBalance(auction.address) == 0
         assert web3.eth.getBalance(bidder) == bidder_pre_balance - amount - txn_cost
+
+        return txn_hash
     return get
 
 
@@ -187,10 +228,10 @@ def auction_claim_tokens_tested(web3, owner, contract_params):
             assert values[i] > 0
 
         if len(bidders) == 1:
-            auction.transact({'from': bidders[0]}).claimTokens()
+            txn_hash = auction.transact({'from': bidders[0]}).claimTokens()
             # auction.transact({'from': owner}).claimTokens(bidders[0])
         else:
-            distributor.transact({'from': owner}).distribute(bidders)
+            txn_hash = distributor.transact({'from': owner}).distribute(bidders)
 
         for i, bidder in enumerate(bidders):
             assert token.call().balanceOf(bidder) == pre_balances[i] + expected_tokens[i]
@@ -208,6 +249,8 @@ def auction_claim_tokens_tested(web3, owner, contract_params):
         claimed_tokens = reduce((lambda x, y: x + y), expected_tokens)
         auction_balance_calculated = auction_pre_balance - claimed_tokens
         assert auction_balance == auction_balance_calculated
+
+        return txn_hash
 
     return get
 
