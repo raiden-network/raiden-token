@@ -176,7 +176,6 @@ def auction_claim_tokens_tested(web3, owner, contract_params):
         assert final_price > 0
 
         for i, bidder in enumerate(bidders):
-            print('auction_claim_tokens_tested bidder', bidder)
             values.append(auction.call().bids(bidder))
             tokens_expected = token_multiplier * values[i] // final_price
             expected_tokens.append(tokens_expected)
@@ -188,11 +187,9 @@ def auction_claim_tokens_tested(web3, owner, contract_params):
             assert values[i] > 0
 
         if len(bidders) == 1:
-            print('auction_claim_tokens_tested claimTokens', bidders[0])
             auction.transact({'from': bidders[0]}).claimTokens()
             # auction.transact({'from': owner}).claimTokens(bidders[0])
         else:
-            print('auction_claim_tokens_tested distribute', bidders)
             distributor.transact({'from': owner}).distribute(bidders)
 
         for i, bidder in enumerate(bidders):

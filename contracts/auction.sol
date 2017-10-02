@@ -15,6 +15,9 @@ contract DutchAuction {
      * token_multiplier set from token's number of decimals (i.e. 10 ** decimals)
      */
 
+    // Wait 7 days after the end of the auction, before ayone can claim tokens
+    uint constant public token_claim_waiting_period = 7 days;
+
     /*
      * Storage
      */
@@ -260,6 +263,10 @@ contract DutchAuction {
         isValidPayload
         atStage(Stages.AuctionEnded)
     {
+        // Waiting period after the end of the auction, before anyone can claim tokens
+        // Ensures enough time to check if auction was finalized correctly
+        // before users start transacting tokens
+        require(now > end_time + token_claim_waiting_period);
         require(receiver_address != 0x0);
         require(bids[receiver_address] > 0);
 
