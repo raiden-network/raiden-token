@@ -2,9 +2,7 @@
 Distribute tokens to bidders after auction ends.
 """
 from populus import Project
-from web3 import Web3
-from distributor import Distributor
-import json
+from deploy.distributor import Distributor
 import click
 
 
@@ -49,21 +47,19 @@ def main(**kwargs):
     auction_tx = kwargs['auction_tx']
     claims = kwargs['claims']
 
-    with open('build/contracts.json') as json_data:
-        abis = json.load(json_data)
-
     with project.get_chain(chain_name) as chain:
         web3 = chain.web3
-        auction_abi = abis['DutchAuction']['abi']
-        distributor_abi = abis['Distributor']['abi']
+        Auction_abi = chain.provider.get_contract_factory('DutchAuction')
+        Distributor_abi = chain.provider.get_contract_factory('Distributor')
 
         # Load Populus contract proxy classes
-        auction = web3.eth.contract(abi=auction_abi, address=auction_address)
-        distributor = web3.eth.contract(abi=distributor_abi, address=distributor_address)
+        auction = Auction_abi(address=auction_address)
+        distributor = Distributor_abi(address=distributor_address)
 
         print("Web3 provider is", web3.currentProvider)
 
-        distrib = Distributor(web3, auction, auction_tx, auction_abi, distributor, distributor_tx, distributor_abi, claims)
+        distrib = Distributor(web3, auction, auction_tx, auction.abi,
+                              distributor, distributor_tx, claims)
         distrib.distribute()
 
 

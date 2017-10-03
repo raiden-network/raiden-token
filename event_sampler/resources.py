@@ -46,13 +46,20 @@ class BidsHistogram(Resource):
         num_bins = args['bins']
         assert max_block > min_block
         num_bins = min(max_block - min_block, num_bins)
-        bins = range(min_block, max_block, ((max_block - min_block) // num_bins))
+#        bins = range(min_block, max_block, ((max_block - min_block) // num_bins))
         ar, ar_bins = numpy.histogram(list(block_to_events.keys()),
-                                      bins=bins,
+                                      bins=num_bins,
                                       weights=list(block_to_events.values()))
-        web3 = self.sampler.chain.web3
-        bin_timestamps = [web3.eth.getBlock(block_id)['timestamp']
-                          for block_id in ar_bins.tolist()]
+        bin_timestamps = []
+        for block_id in ar_bins.tolist():
+            block_id = int(block_id)
+            timestamp = self.sampler.block_to_timestamp.get(block_id, None)
+            if timestamp is None:
+                timestamp = self.sampler.chain.web3.eth.getBlock(block_id)['timestamp']
+                self.sampler.block_to_timestamp[block_id] = timestamp
+            bin_timestamps.append(timestamp)
+#        bin_timestamps = [self.sampler.block_to_timestamp[int(block_id)]
+#                          for block_id in ar_bins.tolist()]
         return {'timestamped_bins': bin_timestamps,
                 'block_bins': bin_timestamps,
                 'bin_sum': ar.tolist(),

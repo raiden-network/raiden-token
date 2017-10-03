@@ -1,28 +1,27 @@
 """
 Call Distributor with an array of addresses for token claiming after auction ends
 """
-from math import ceil
 from web3.utils.compat import (
     Timeout,
 )
-from utils import (
+from deploy.utils import (
     check_succesful_tx,
     LogFilter,
     # handle_past_logs,
     # watch_logs,
     print_logs
 )
+import logging
+log = logging.getLogger(__name__)
 
 
 class Distributor:
-    def __init__(self, web3, auction, auction_tx, auction_abi, distributor, distributor_tx, distributor_abi, batch_number=5):
+    def __init__(self, web3, auction, auction_tx, auction_abi, distributor,
+                 distributor_tx, batch_number=5):
         self.web3 = web3
         self.auction = auction
-        self.auction_tx = auction_tx
         self.auction_abi = auction_abi
         self.distributor = distributor
-        self.distributor_tx = distributor_tx
-        self.distributor_abi = distributor_abi
         self.auction_ended = False
         self.distribution_ended = False
 
@@ -44,20 +43,17 @@ class Distributor:
         self.filter_claims = None
         self.filter_distributed = None
 
-        self.owner = self.auction.call().owner()
+        self.owner = self.auction.call().owner_address()
 
         # Set contract deployment block numbers
-        self.set_block_numbers()
+        self.auction_block = self.web3.eth.getTransaction(auction_tx)['blockNumber']
+        self.distributor_block = self.web3.eth.getTransaction(distributor_tx)['blockNumber']
 
         # Start event watching
         self.watch_auction_bids()
         self.watch_auction_end()
         self.watch_auction_claim()
         self.watch_auction_distributed()
-
-    def set_block_numbers(self):
-        self.auction_block = self.web3.eth.getTransaction(self.auction_tx)['blockNumber']
-        self.distributor_block = self.web3.eth.getTransaction(self.distributor_tx)['blockNumber']
 
     def watch_auction_bids(self):
         self.filter_bids = self.handle_auction_logs('BidSubmission', self.add_address)
@@ -69,7 +65,7 @@ class Distributor:
         self.filter_auction_end = self.handle_auction_logs('AuctionEnded', set_end)
 
     def watch_auction_claim(self):
-        print_logs(self.distributor, 'ClaimTokensCalled', 'Distributor')
+#        print_logs(self.distributor, 'ClaimTokensCalled', 'Distributor')
         print_logs(self.distributor, 'Distributed', 'Distributor')
         print_logs(self.auction, 'ClaimedTokens', 'DutchAuction')
         # watch_logs(self.auction, 'ClaimedTokens', self.add_verified)
@@ -85,10 +81,10 @@ class Distributor:
 
         # watch_logs(self.auction, 'TokensDistributed', set_distribution_end)
         print_logs(self.auction, 'TokensDistributed', 'DutchAuction')
-        print_logs(self.auction, 'TradingStarted', 'DutchAuction')
+#        print_logs(self.auction, 'TradingStarted', 'DutchAuction')
 
-        self.filter_distributed = self.handle_auction_logs('TokensDistributed', set_distribution_end)
-
+        self.filter_distributed = self.handle_auction_logs('TokensDistributed',
+                                                           set_distribution_end)
 
     def add_address(self, event):
         address = event['args']['_sender']
@@ -106,7 +102,10 @@ class Distributor:
     def add_verified(self, event):
         address = event['args']['_recipient']
         sent_amount = event['args']['_sent_amount']
-        print('add_verified', address, sent_amount, address in self.addresses_claimable, self.addresses_claimable)
+        log.info('add_verified(%s, %s, %s, %s)' %
+                 (address, sent_amount,
+                  str(address in self.addresses_claimable),
+                  str(self.addresses_claimable)))
 
         if address in self.verified_claims:
             print('--- Double verified !!!', address)
@@ -128,7 +127,6 @@ class Distributor:
                 print('self.verified_claims', self.verified_claims)
                 timeout.sleep(2)
 
-
         assert len(self.claimed) == len(self.verified_claims)
         self.filter_claims.stop()
         self.filter_distributed.stop()
@@ -147,10 +145,12 @@ class Distributor:
 
     def distribute(self):
         with Timeout() as timeout:
-            while not self.distribution_ended and (not self.auction_ended or not len(self.addresses_claimable)):
+            while (not self.distribution_ended and
+                   (not self.auction_ended or not len(self.addresses_claimable))):
                 timeout.sleep(2)
 
-        print('Auction ended. We should have all the addresses.', len(self.addresses_claimable), self.addresses_claimable)
+        log.info('Auction ended. We should have all the addresses.' %
+                 (len(self.addresses_claimable), self.addresses_claimable))
 
         # 82495 gas / claimTokens
 
@@ -162,7 +162,9 @@ class Distributor:
             self.claimed = self.claimed + batch
 
             print('Distributing tokens to {0} addresses: {1}'.format(batch_number, batch))
-            txhash = self.distributor.transact({'from': self.owner, 'gas': 4000000}).distribute(batch)
+            txhash = self.distributor.transact(
+                {'from': self.owner, 'gas': 4000000}).distribute(batch)
             receipt = check_succesful_tx(self.web3, txhash)
+            assert receipt is not None
 
         self.distribution_ended_checks()
