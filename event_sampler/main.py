@@ -4,8 +4,6 @@ from populus import Project
 import click
 import gevent
 import logging
-import json
-import os
 from flask import Flask
 from flask_restful import (
     Api,
@@ -44,10 +42,9 @@ def main(sample_period, auction_address, chain_name, host, port):
     app = Flask(__name__)
     api = Api(app)
     project = Project()
-    contracts_abi_path = os.path.join(os.path.dirname(__file__), '../build/contracts.json')
-    auction_abi = json.load(open(contracts_abi_path))['DutchAuction']['abi']
     with project.get_chain(chain_name) as chain:
-        auction_contract = chain.web3.eth.contract(abi=auction_abi, address=auction_address)
+        Auction = chain.provider.get_contract_factory('DutchAuction')
+        auction_contract = Auction(address=auction_address)
         sampler = EventSampler(auction_address, chain)
         api.add_resource(BidsHistogram, "/histogram",
                          resource_class_kwargs={'sampler': sampler})

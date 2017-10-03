@@ -115,7 +115,7 @@ python -m deploy.deploy_testnet --chain privtest --owner 0x00a329c0648769a73afac
 
 ```sh
 
-python deploy/distribute.py \
+python -m deploy.distribute \
     --chain privtest \
     --distributor 0x8b96503f6b2cefaa83d385fa2cb269999ab4ac9f \
     --distributor-tx 0xc4eaffce4009eb13cd432f3c25d6f5eafb42249d4cd81a6164e83225ad65abee \

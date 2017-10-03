@@ -5,38 +5,11 @@ log = logging.getLogger(__name__)
 
 from deploy.utils import (
     check_succesful_tx,
-    print_logs,
     amount_format,
     passphrase
 )
 
 tx_timeout = 180
-
-
-# is this still needed?
-def getAuctionFactors(price1, elapsed1, price2, elapsed2, multiplier):
-    price_constant = (elapsed2 * (price2 - 1) - elapsed1 * (price1 - 1)) / (price1 - price2)
-    price_factor = (price2 - 1) * (elapsed2 + price_constant) / multiplier
-
-    price1_calculated = round(multiplier * price_factor / (elapsed1 + price_constant) + 1)
-    price2_calculated = round(multiplier * price_factor / (elapsed2 + price_constant) + 1)
-
-    assert price1 == price1_calculated
-    assert price2 == price2_calculated
-
-    return (int(price_factor), int(price_constant))
-
-
-def print_all_logs(token_contract, auction_contract):
-    print_logs(token_contract, 'Transfer', 'CustomToken')
-    print_logs(auction_contract, 'Deployed', 'DutchAuction')
-    print_logs(auction_contract, 'Setup', 'DutchAuction')
-    print_logs(auction_contract, 'SettingsChanged', 'DutchAuction')
-    print_logs(auction_contract, 'AuctionStarted', 'DutchAuction')
-    print_logs(auction_contract, 'BidSubmission', 'DutchAuction')
-    print_logs(auction_contract, 'AuctionEnded', 'DutchAuction')
-    print_logs(auction_contract, 'ClaimedTokens', 'DutchAuction')
-    print_logs(auction_contract, 'TokensDistributed', 'DutchAuction')
 
 
 def successful_bid(web3, auction, bidder, amount):

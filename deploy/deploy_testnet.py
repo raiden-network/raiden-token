@@ -174,14 +174,14 @@ def deploy(ctx, **kwargs):
 @click.option(
     '--max-bid-amount',
     type=int,
-    default=10000000,
-    help='Maximum amount of ETH to use per bid (in WEI)'
+    default=100e18,
+    help='Maximum amount of WEI to use per bid'
 )
 @click.option(
     '--min-bid-amount',
     type=int,
     default=10000,
-    help='Minimum amount of ETH to use per bid (in WEI)'
+    help='Minimum amount of WEI to use per bid'
 )
 @click.option(
     '--max-bid-ceiling',
@@ -218,7 +218,7 @@ def deploy(ctx, **kwargs):
     '--distribution-limit',
     default=None,
     type=int,
-    help="How much of the owner's ethereum distribute to the bidders (in wei)"
+    help="How much of the owner's WEI will be distributed to the bidders, to run the simulation"
 )
 @click.pass_context
 def simulation(ctx, **kwargs):
