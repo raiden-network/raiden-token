@@ -22,6 +22,7 @@ class Bidder:
         self.max_bid_price = 1000000
         self.min_bid_price = 1000
         self.last_missing_funds = 1e100
+        self.max_bids = None
 
     def bid(self):
         missing_funds = self.auction_contract.call().missingFundsToEndAuction()
@@ -56,10 +57,14 @@ class Bidder:
     def run(self):
         log.info('bidder=%s started' % (self.address))
         balance = self.web3.eth.getBalance(self.address)
+        bids_total = 0
         while balance > 0:
+            bids_total += 1
             self.bid()
             missing_funds = self.auction_contract.call().missingFundsToEndAuction()
             if missing_funds == 0:
+                return
+            if isinstance(self.max_bids, int) and bids_total >= self.max_bids:
                 return
             balance = self.web3.eth.getBalance(self.address)
             gevent.sleep(random.random() * self.bid_interval_seconds)

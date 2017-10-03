@@ -41,6 +41,11 @@ def deploy_bidders(bidder_addrs, web3, auction, kwargs):
         bidder.max_bid_price = kwargs['max_bid_amount']
         bidder.min_bid_price = kwargs['min_bid_amount']
         bidder_objs.append(bidder)
+    for i in range(0, kwargs['wei_bidders']):
+        if i == 0:
+            bidder_objs[i].max_bids = 1
+        bidder_objs[i].max_bid_price = 1
+        bidder_objs[i].min_bid_price = 1
     bidder_gevents = [gevent.spawn(b.run) for b in bidder_objs]
     gevent.joinall(bidder_gevents)
 

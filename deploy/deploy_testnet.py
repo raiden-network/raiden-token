@@ -164,7 +164,13 @@ def deploy(ctx, **kwargs):
 @click.option(
     '--bidders',
     default=10,
-    help='Number of bidders. Only if the --simulation flag is set'
+    help='Number of bidders.'
+)
+@click.option(
+    '--wei-bidders',
+    type=int,
+    default=1,
+    help='How many of running bidders will do 1 WEI bids.'
 )
 @click.option(
     '--bid-price',
@@ -232,6 +238,9 @@ def simulation(ctx, **kwargs):
     if token_contract_address is None:
         log.fatal('No token contract address set! Either supply one '
                   'using --token-contract option, or use deploy command')
+        sys.exit(1)
+    if kwargs['bidders'] < kwargs['wei_bidders']:
+        log.fatal('1 wei bidders number must be less or equal as the total number of bidders')
         sys.exit(1)
 
     auction_contract_address = ctx.obj.get('auction_contract_address', None)
