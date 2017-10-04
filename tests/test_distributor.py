@@ -67,9 +67,8 @@ def test_distributor_init(
     with pytest.raises(TypeError):
         create_contract(Distributor, [0x0])
 
-    # Fail if auction has another owner
-    with pytest.raises(tester.TransactionFailed):
-        create_contract(Distributor, [other_owner_auction.address])
+    # Distributor contract can have any owner
+    create_contract(Distributor, [other_owner_auction.address])
 
     distributor_contract = create_contract(Distributor, [auction.address])
 
