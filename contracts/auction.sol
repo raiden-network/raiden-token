@@ -84,11 +84,6 @@ contract DutchAuction {
         _;
     }
 
-    modifier isValidPayload() {
-        require(msg.data.length == 0 || msg.data.length == 4 || msg.data.length == 36);
-        _;
-    }
-
     /*
      * Events
      */
@@ -223,7 +218,6 @@ contract DutchAuction {
     function bid(address receiver_address)
         public
         payable
-        isValidPayload
         atStage(Stages.AuctionStarted)
     {
         require(receiver_address != 0x0);
@@ -262,7 +256,6 @@ contract DutchAuction {
     /// @param receiver_address Tokens will be assigned to this address if eligible.
     function claimTokens(address receiver_address)
         public
-        isValidPayload
         atStage(Stages.AuctionEnded)
     {
         // Waiting period after the end of the auction, before anyone can claim tokens
