@@ -247,8 +247,8 @@ contract DutchAuction {
     /// @notice Claim auction tokens for `msg.sender` after the auction has ended.
     /// @dev Claims tokens for `msg.sender` after auction. To be used if tokens can
     /// be claimed by beneficiaries, individually.
-    function claimTokens() public atStage(Stages.AuctionEnded) {
-        claimTokens(msg.sender);
+    function claimTokens() public atStage(Stages.AuctionEnded) returns (bool) {
+        return claimTokens(msg.sender);
     }
 
     /// @notice Claim auction tokens for `receiver_address` after the auction has ended.
@@ -257,13 +257,17 @@ contract DutchAuction {
     function claimTokens(address receiver_address)
         public
         atStage(Stages.AuctionEnded)
+        returns (bool)
     {
         // Waiting period after the end of the auction, before anyone can claim tokens
         // Ensures enough time to check if auction was finalized correctly
         // before users start transacting tokens
         require(now > end_time + token_claim_waiting_period);
         require(receiver_address != 0x0);
-        require(bids[receiver_address] > 0);
+
+        if (bids[receiver_address] == 0) {
+            return false;
+        }
 
         // Number of Rei = bid_wei / Rei = bid_wei / (wei_per_RDN * token_multiplier)
         uint num = token_multiplier * bids[receiver_address] / final_price;
@@ -287,6 +291,7 @@ contract DutchAuction {
 
         assert(token.balanceOf(receiver_address) >= num);
         assert(bids[receiver_address] == 0);
+        return true;
     }
 
     /// @notice Get the RDN price in WEI during the auction, at the time of
