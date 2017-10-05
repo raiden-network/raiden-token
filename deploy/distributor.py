@@ -6,11 +6,9 @@ from web3.utils.compat import (
 )
 from deploy.utils import (
     check_succesful_tx,
-    LogFilter,
-    # handle_past_logs,
-    # watch_logs,
     print_logs
 )
+from tests.utils_logs import LogFilter
 import logging
 log = logging.getLogger(__name__)
 
@@ -57,20 +55,20 @@ class Distributor:
 
     def watch_auction_bids(self):
         self.filter_bids = self.handle_auction_logs('BidSubmission', self.add_address)
+        self.filter_bids.init()
 
     def watch_auction_end(self):
         def set_end(event):
             self.auction_ended = True
 
         self.filter_auction_end = self.handle_auction_logs('AuctionEnded', set_end)
+        self.filter_auction_end.init()
 
     def watch_auction_claim(self):
-#        print_logs(self.distributor, 'ClaimTokensCalled', 'Distributor')
-        print_logs(self.distributor, 'Distributed', 'Distributor')
-        print_logs(self.auction, 'ClaimedTokens', 'DutchAuction')
         # watch_logs(self.auction, 'ClaimedTokens', self.add_verified)
 
         self.filter_claims = self.handle_auction_logs('ClaimedTokens', self.add_verified)
+        self.filter_claims.init()
 
     def watch_auction_distributed(self):
         def set_distribution_end(event):
@@ -85,6 +83,7 @@ class Distributor:
 
         self.filter_distributed = self.handle_auction_logs('TokensDistributed',
                                                            set_distribution_end)
+        self.filter_distributed.init()
 
     def add_address(self, event):
         address = event['args']['_sender']
@@ -120,12 +119,12 @@ class Distributor:
 
     def distribution_ended_checks(self):
         print('Waiting to make sure we get all ClaimedTokens events')
-        with Timeout(180) as timeout:
+        with Timeout(300) as timeout:
             while not self.distribution_ended or len(self.claimed) != len(self.verified_claims):
                 print('self.distribution_ended', self.distribution_ended)
                 print('self.claimed', len(self.claimed), len(self.verified_claims), self.claimed)
                 print('self.verified_claims', self.verified_claims)
-                timeout.sleep(2)
+                timeout.sleep(50)
 
         assert len(self.claimed) == len(self.verified_claims)
         self.filter_claims.stop()
@@ -149,7 +148,7 @@ class Distributor:
                    (not self.auction_ended or not len(self.addresses_claimable))):
                 timeout.sleep(2)
 
-        log.info('Auction ended. We should have all the addresses.' %
+        log.info('Auction ended. We should have all the addresses. %s, %s' %
                  (len(self.addresses_claimable), self.addresses_claimable))
 
         # 82495 gas / claimTokens
