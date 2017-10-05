@@ -208,14 +208,14 @@ contract DutchAuction {
     /// @notice Send `msg.value` WEI to the auction from the `msg.sender` account.
     /// @dev Allows to send a bid to the auction.
     function bid() public payable atStage(Stages.AuctionStarted) {
-        bid(msg.sender);
+        proxyBid(msg.sender);
     }
 
     /// @notice Send `msg.value` WEI to the auction from the `msg.sender` account
     /// and the `receiver` account will receive the tokens if claimed.
     /// @dev Allows to send a bid to the auction.
     /// @param receiver_address Token receiver account address.
-    function bid(address receiver_address)
+    function proxyBid(address receiver_address)
         public
         payable
         atStage(Stages.AuctionStarted)
@@ -248,13 +248,13 @@ contract DutchAuction {
     /// @dev Claims tokens for `msg.sender` after auction. To be used if tokens can
     /// be claimed by beneficiaries, individually.
     function claimTokens() public atStage(Stages.AuctionEnded) returns (bool) {
-        return claimTokens(msg.sender);
+        return proxyClaimTokens(msg.sender);
     }
 
     /// @notice Claim auction tokens for `receiver_address` after the auction has ended.
     /// @dev Claims tokens for `receiver_address` after auction has ended.
     /// @param receiver_address Tokens will be assigned to this address if eligible.
-    function claimTokens(address receiver_address)
+    function proxyClaimTokens(address receiver_address)
         public
         atStage(Stages.AuctionEnded)
         returns (bool)

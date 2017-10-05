@@ -229,7 +229,7 @@ def auction_claim_tokens_tested(web3, owner, contract_params):
 
         if len(bidders) == 1:
             txn_hash = auction.transact({'from': bidders[0]}).claimTokens()
-            # auction.transact({'from': owner}).claimTokens(bidders[0])
+            # auction.transact({'from': owner}).proxyClaimTokens(bidders[0])
         else:
             txn_hash = distributor.transact({'from': owner}).distribute(bidders)
 
