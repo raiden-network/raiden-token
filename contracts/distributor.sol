@@ -34,7 +34,7 @@ contract Distributor {
     function distribute(address[] addresses) public {
         for (uint32 i = 0; i < addresses.length; i++) {
             if (auction.bids(addresses[i]) > 0) {
-                auction.claimTokens(addresses[i]);
+                auction.proxyClaimTokens(addresses[i]);
             }
         }
     }
