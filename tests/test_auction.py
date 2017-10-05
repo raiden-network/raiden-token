@@ -297,11 +297,11 @@ def test_auction_bid(
 
     # Bids with the token contract address as receiver should fail
     with pytest.raises(tester.TransactionFailed):
-        auction.transact({'from': A, "value": 100}).bid(token.address)
+        auction.transact({'from': A, "value": 100}).proxyBid(token.address)
 
     # Bids with the auction contract address as receiver should fail
     with pytest.raises(tester.TransactionFailed):
-        auction.transact({'from': A, "value": 100}).bid(auction.address)
+        auction.transact({'from': A, "value": 100}).proxyBid(auction.address)
 
     missing_funds = auction.call().missingFundsToEndAuction()
 
