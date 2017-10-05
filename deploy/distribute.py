@@ -2,9 +2,13 @@
 Distribute tokens to bidders after auction ends.
 """
 from populus import Project
-from deploy.distributor import Distributor
+from deploy.distributor import Distributor as DistributorScript
 import click
-
+from deploy.utils import (
+    check_succesful_tx
+)
+import logging
+log = logging.getLogger(__name__)
 
 @click.command()
 @click.option(
@@ -14,12 +18,10 @@ import click
 )
 @click.option(
     '--distributor',
-    required=True,
     help='Distributor contract address.'
 )
 @click.option(
     '--distributor-tx',
-    required=True,
     help='Distributor contract address.'
 )
 @click.option(
@@ -49,16 +51,29 @@ def main(**kwargs):
 
     with project.get_chain(chain_name) as chain:
         web3 = chain.web3
-        Auction_abi = chain.provider.get_contract_factory('DutchAuction')
-        Distributor_abi = chain.provider.get_contract_factory('Distributor')
+        print("Web3 provider is", web3.currentProvider)
+        
+        owner = chain.web3.eth.accounts[0]
+        Auction = chain.provider.get_contract_factory('DutchAuction')
+        Distributor = chain.provider.get_contract_factory('Distributor')
 
         # Load Populus contract proxy classes
-        auction = Auction_abi(address=auction_address)
-        distributor = Distributor_abi(address=distributor_address)
+        auction = Auction(address=auction_address)
 
-        print("Web3 provider is", web3.currentProvider)
+        if not distributor_address:
+            distributor_tx = Distributor.deploy(transaction={"from": owner},
+                                                    args=[auction_address])
+            log.info("Deploying distributor, tx hash is " + distributor_tx)
+            print("Deploying distributor, tx hash is ", distributor_tx)
+            receipt = check_succesful_tx(web3, distributor_tx)
+            distributor_address = receipt["contractAddress"]
+            log.info("Distributor contract address  " + distributor_address)
+            print("Distributor contract address  ", distributor_address)
 
-        distrib = Distributor(web3, auction, auction_tx, auction.abi,
+        distributor = Distributor(address=distributor_address)
+        assert distributor is not None
+
+        distrib = DistributorScript(web3, auction, auction_tx, auction.abi,
                               distributor, distributor_tx, claims)
         distrib.distribute()
 
