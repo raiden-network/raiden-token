@@ -29,13 +29,9 @@ def createWallet():
 
 
 def check_succesful_tx(web3, txid, timeout=180) -> dict:
-
     receipt = wait_for_transaction_receipt(web3, txid, timeout=timeout)
     txinfo = web3.eth.getTransaction(txid)
-
-    # EVM has only one error mode and it's consume all gas
-    assert txinfo["gas"] != receipt["gasUsed"]
-    return receipt
+    return receipt, txinfo["gas"] != receipt["gasUsed"]
 
 
 class LogFilter:
@@ -119,14 +115,15 @@ def returnFundsToOwner(web3, owner, bidder):
     assert unlocked is True
     txhash = web3.eth.sendTransaction({'from': bidder, 'to': owner, 'value': value})
     receipt = check_succesful_tx(web3, txhash)
-    log.info("{bidder} > {owner} {0}"
+    log.info("return funds: {bidder} > {owner} {0}"
              .format(amount_format(web3, value), bidder=bidder, owner=owner))
     assert receipt is not None
 
 
 def sendFunds(web3, owner, bidder, max_bid):
         value = random.randint(max_bid / 2, max_bid)
-        log.info("funding {bidder} {0}".format(amount_format(web3, value), bidder=bidder))
+        log.info("funding bidder={bidder} with {0}"
+                 .format(amount_format(web3, value), bidder=bidder))
         txhash = web3.eth.sendTransaction({'from': owner, 'to': bidder, 'value': value})
         check_succesful_tx(web3, txhash)
 
