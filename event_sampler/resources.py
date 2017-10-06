@@ -27,14 +27,15 @@ log = logging.getLogger(__name__)
 # }
 
 
-class BidsHistogram(Resource):
-    def __init__(self, sampler):
-        super(BidsHistogram, self).__init__()
+class AuctionStatus(Resource):
+    def __init__(self, auction_contract, sampler):
+        super(AuctionStatus, self).__init__()
+        self.contract = auction_contract
         self.sampler = sampler
 
-    def get(self):
+    def get_histogram(self):
         if len(self.sampler.events.items()) == 0:
-            return "No events", 503
+            return None
         parser = reqparse.RequestParser()
         parser.add_argument('bins', help='bins in the histogram', default=20, type=int)
         args = parser.parse_args()
@@ -65,14 +66,7 @@ class BidsHistogram(Resource):
                 'bin_sum': ar.tolist(),
                 'bin_cumulative_sum': numpy.cumsum(ar).tolist()}
 
-
-class AuctionStatus(Resource):
-    def __init__(self, auction_contract, sampler):
-        super(AuctionStatus, self).__init__()
-        self.contract = auction_contract
-        self.sampler = sampler
-
-    def get(self):
+    def get_status(self):
         last_event = self.sampler.last_event()
         web3 = self.sampler.chain.web3
         ret = {}
@@ -93,4 +87,12 @@ class AuctionStatus(Resource):
         ret['price_start'] = self.sampler.price_start
         ret['price_constant'] = self.sampler.price_constant
         ret['price_exponent'] = self.sampler.price_exponent
+        if ret['auction_stage'] >= 2:
+            ret['auction_contract_address'] = self.contract.address
+        return ret
+
+    def get(self):
+        ret = {}
+        ret['histogram'] = self.get_histogram()
+        ret['status'] = self.get_status()
         return ret

@@ -8,7 +8,7 @@ from flask import Flask
 from flask_restful import (
     Api,
 )
-from event_sampler.resources import BidsHistogram, AuctionStatus
+from event_sampler.resources import AuctionStatus
 from event_sampler.sampler import EventSampler
 
 
@@ -20,6 +20,7 @@ from event_sampler.sampler import EventSampler
 )
 @click.option(
     '--auction-address',
+    required=True,
     help='Address of the auction contract'
 )
 @click.option(
@@ -46,8 +47,6 @@ def main(sample_period, auction_address, chain_name, host, port):
         Auction = chain.provider.get_contract_factory('DutchAuction')
         auction_contract = Auction(address=auction_address)
         sampler = EventSampler(auction_address, chain)
-        api.add_resource(BidsHistogram, "/histogram",
-                         resource_class_kwargs={'sampler': sampler})
         api.add_resource(AuctionStatus, "/status",
                          resource_class_kwargs={'auction_contract': auction_contract,
                                                 'sampler': sampler})
