@@ -18,6 +18,10 @@ contract DutchAuction {
     // Wait 7 days after the end of the auction, before ayone can claim tokens
     uint constant public token_claim_waiting_period = 7 days;
 
+
+    // Unresticted claim limit
+    uint32 constant public claim_limit = 150 * 10**18;
+
     /*
      * Storage
      */
@@ -266,6 +270,12 @@ contract DutchAuction {
         require(receiver_address != 0x0);
 
         if (bids[receiver_address] == 0) {
+            return false;
+        }
+
+        // enforcable kyc requirement for bids exceeding a threshold
+        // higher bids can only be claimed with consent of owner
+        if (bids[receiver_address] > claim_limit && msg.sender != owner) {
             return false;
         }
 
