@@ -94,7 +94,16 @@ def deploy_bidders(bidder_addrs, web3, auction, kwargs):
 def claim_tokens(auction, bidder, web3):
     unlocked = web3.personal.unlockAccount(bidder, passphrase)
     assert unlocked is True
-    txhash = auction.transact({'from': bidder}).claimTokens()
+    try:
+        txhash = auction.transact({'from': bidder}).claimTokens()
+    except ValueError as e:
+        # method call failed: there are probably no tokens to claim
+        if e.args[0]['code'] != -32015:
+            raise e
+        log.warn('claimTokens() failed for bidder ({0}). '
+                 'Most likely this bidder owns no tokens or waiting perios hasn\'t expired. ({1})'
+                 .format(bidder, str(e)))
+        return
     receipt, success = check_succesful_tx(web3, txhash)
     if success is False:
         log.info('claimTokens(%s) failed for tx %s. This is either an error, '

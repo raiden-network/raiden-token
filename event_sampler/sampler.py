@@ -3,6 +3,12 @@ from collections import defaultdict
 from operator import itemgetter
 
 import logging
+import time
+import json
+import shutil
+import gevent
+import os
+import click
 
 log = logging.getLogger(__name__)
 from web3.utils.filters import construct_event_filter_params
@@ -10,14 +16,61 @@ from web3.utils.events import get_event_data
 from web3.formatters import input_filter_params_formatter, log_array_formatter
 
 
+class StateSave:
+    def __init__(self, state):
+        self.state = state
+        self.run = gevent.event.Event()
+        self.save_period = 5
+
+    def stop(self):
+        self.run.set()
+
+    def start(self):
+        self.ev_save = gevent.spawn(self.callback)
+
+    def callback(self):
+        while self.run.is_set() is False:
+            self.state.save()
+            gevent.sleep(self.save_period)
+
+
+class EventSamplerState:
+    def __init__(self, state_file_path):
+        self.state_file_path = state_file_path
+        self.state_file_tmp = state_file_path + ".tmp"
+        self.block_to_timestamp = {}
+        if os.path.isfile(state_file_path):
+            self.block_to_timestamp = self.load()
+
+    def save(self):
+        with open(self.state_file_tmp, 'w') as f:
+            json.dump(self.block_to_timestamp, f)
+            f.flush()
+        shutil.copy2(self.state_file_tmp, self.state_file_path)
+
+    def load(self):
+        for state_file in (self.state_file_path, self.state_file_tmp):
+            try:
+                return self.load_state(state_file)
+            except ValueError:
+                log.warning("Can't load state from: %s" % (state_file))
+        return {}
+
+    def load_state(self, state_file):
+        with open(state_file, 'r') as f:
+            state = json.loads(f.read())
+            return {int(k): v for k, v in state.items()}
+
+
 class EventSampler:
-    def __init__(self, auction_contract_addr, chain):
+    def __init__(self, auction_contract_addr, chain,
+                 state_file_path: str=click.get_app_dir('event_sampler')):
         self.contract_addr = auction_contract_addr
         self.chain = chain
         Auction = self.chain.provider.get_contract_factory('DutchAuction')
         self.auction_contract = Auction(address=auction_contract_addr)
         self.auction_contract_addr = auction_contract_addr
-        self.block_to_timestamp = {}
+        self.state = EventSamplerState(state_file_path)
         callbacks = {
             'BidSubmission': self.on_bid_submission,
             'AuctionEnded': self.on_auction_end,
@@ -39,12 +92,22 @@ class EventSampler:
             self.sync_events(k, v)
             watch_logs(self.auction_contract, k, v)
 
+        # start state save event - after the events are synced
+        self.save_event = StateSave(self.state)
+        self.save_event.start()
+
     def sync_events(self, event_name: str, callback):
+        t_start = time.time()
         events = self.get_logs(event_name)
+        log.info('get logs of %s took %f seconds (%d events)'
+                 % (event_name, time.time() - t_start, len(events)))
         if events is None:
             return
+        t_start = time.time()
         for event in events:
             callback(event)
+        log.info('callbacks of %s took %f seconds (%d events)'
+                 % (event_name, time.time() - t_start, len(events)))
 
     def last_event(self):
         if len(self.events) == 0:
@@ -61,9 +124,9 @@ class EventSampler:
         self.price_exponent = event['args']['_price_exponent']
 
     def on_bid_submission(self, args):
-        if args['blockNumber'] not in self.block_to_timestamp:
+        if args['blockNumber'] not in self.state.block_to_timestamp:
             timestamp = self.chain.web3.eth.getBlock(args['blockNumber'])['timestamp']
-            self.block_to_timestamp[args['blockNumber']] = timestamp
+            self.state.block_to_timestamp[args['blockNumber']] = timestamp
         self.events[args['blockNumber']].append(args)
 
     def on_auction_end(self, event):
