@@ -272,6 +272,9 @@ contract DutchAuction {
         // Number of Rei = bid_wei / Rei = bid_wei / (wei_per_RDN * token_multiplier)
         uint num = (token_multiplier * bids[receiver_address]) / final_price;
 
+        // Due to final_price floor rounding, the number of assigned tokens may be higher
+        // than expected. Therefore, the number of remaining unassigned auction tokens
+        // may be smaller than the number of tokens needed for the last claimTokens call
         uint auction_tokens_balance = token.balanceOf(address(this));
         if(num > auction_tokens_balance) {
             num = auction_tokens_balance;
