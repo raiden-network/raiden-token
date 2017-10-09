@@ -276,7 +276,7 @@ contract DutchAuction {
         // than expected. Therefore, the number of remaining unassigned auction tokens
         // may be smaller than the number of tokens needed for the last claimTokens call
         uint auction_tokens_balance = token.balanceOf(address(this));
-        if(num > auction_tokens_balance) {
+        if (num > auction_tokens_balance) {
             num = auction_tokens_balance;
         }
 
