@@ -205,26 +205,16 @@ contract DutchAuction {
 
     /// --------------------------------- Auction Functions ------------------
 
+
     /// @notice Send `msg.value` WEI to the auction from the `msg.sender` account.
     /// @dev Allows to send a bid to the auction.
-    function bid() public payable atStage(Stages.AuctionStarted) {
-        proxyBid(msg.sender);
-    }
-
-    /// @notice Send `msg.value` WEI to the auction from the `msg.sender` account
-    /// and the `receiver` account will receive the tokens if claimed.
-    /// @dev Allows to send a bid to the auction.
-    /// @param receiver_address Token receiver account address.
-    function proxyBid(address receiver_address)
+    function bid()
         public
         payable
         atStage(Stages.AuctionStarted)
     {
-        require(receiver_address != 0x0);
-        require(receiver_address != address(this));
-        require(receiver_address != address(token));
         require(msg.value > 0);
-        assert(bids[receiver_address] + msg.value >= msg.value);
+        assert(bids[msg.sender] + msg.value >= msg.value);
 
         // Missing funds without the current bid value
         uint missing_funds = missingFundsToEndAuction();
@@ -233,13 +223,13 @@ contract DutchAuction {
         // at the current price.
         require(msg.value <= missing_funds);
 
-        bids[receiver_address] += msg.value;
+        bids[msg.sender] += msg.value;
         received_wei += msg.value;
 
         // Send bid amount to wallet
         wallet_address.transfer(msg.value);
 
-        BidSubmission(receiver_address, msg.value, missing_funds);
+        BidSubmission(msg.sender, msg.value, missing_funds);
 
         assert(received_wei >= msg.value);
     }

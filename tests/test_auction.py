@@ -295,14 +295,6 @@ def test_auction_bid(
     txn_hash = auction.transact({'from': owner}).startAuction()
     ev_handler.add(txn_hash, 'AuctionStarted')
 
-    # Bids with the token contract address as receiver should fail
-    with pytest.raises(tester.TransactionFailed):
-        auction.transact({'from': A, "value": 100}).proxyBid(token.address)
-
-    # Bids with the auction contract address as receiver should fail
-    with pytest.raises(tester.TransactionFailed):
-        auction.transact({'from': A, "value": 100}).proxyBid(auction.address)
-
     missing_funds = auction.call().missingFundsToEndAuction()
 
     # Test fallback function
