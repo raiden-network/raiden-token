@@ -270,7 +270,12 @@ contract DutchAuction {
         }
 
         // Number of Rei = bid_wei / Rei = bid_wei / (wei_per_RDN * token_multiplier)
-        uint num = token_multiplier * bids[receiver_address] / final_price;
+        uint num = (token_multiplier * bids[receiver_address]) / final_price;
+
+        uint auction_tokens_balance = token.balanceOf(address(this));
+        if(num > auction_tokens_balance) {
+            num = auction_tokens_balance;
+        }
 
         // Update the total amount of funds for which tokens have been claimed
         funds_claimed += bids[receiver_address];
