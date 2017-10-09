@@ -4,9 +4,6 @@ import math
 from web3.utils.compat import (
     Timeout,
 )
-from utils import (
-    handle_logs,
-)
 from fixtures import (
     owner_index,
     owner,
@@ -36,6 +33,7 @@ from auction_fixtures import (
 )
 
 from populus.utils.wait import wait_for_transaction_receipt
+from utils import ClaimsCollector
 
 
 def test_distributor_init(
@@ -84,91 +82,73 @@ def test_distributor_distribute(
     auction_contract_fast_decline,
     auction_bid_tested,
     auction_claim_tokens_tested,
-    auction_post_distributed_tests):
+    auction_post_distributed_tests,
+    event_handler):
     bidders = get_bidders(10)
     auction = auction_contract_fast_decline
     token = token_contract(auction.address)
+    ev_handler = event_handler(auction)
+
     auction.transact({'from': owner}).setup(token.address)
     auction.transact({'from': owner}).startAuction()
 
     Distributor = chain.provider.get_contract_factory('Distributor')
     distributor = create_contract(Distributor, [auction.address])
 
-    # Retrieve bidder addresses from contract bid events
-    def get_bidders_addresses(event):
-        address = event['args']['_sender']
+    collector = ClaimsCollector(auction, token)
+    bidders_number = 0
 
-        if address not in addresses:
-            addresses.append(address)
-            values.append(0)
-            index = len(addresses) - 1
-        else:
-            index = addresses.index(address)
-
-        values[index] += event['args']['_amount']
-
-    def verify_claim(event):
-        addr = event['args']['_recipient']
-        sent_amount = event['args']['_sent_amount']
-
-        # Check for double claiming
-        assert addr not in verified_claim
-        assert auction.call().bids(addr) == 0
-        assert sent_amount == token.call().balanceOf(addr)
-        verified_claim.append(address)
-
-    for bidder in bidders:
+    # Simulate some bids and collect the addresses from the events
+    for bidder in bidders[:-1]:
         missing = auction.call().missingFundsToEndAuction()
         balance = web3.eth.getBalance(bidder)
-        amount = min(missing, balance - 500000)
+        cap = (balance - 500000) // 1000000000000000000
+        amount = min(missing, cap)
+        # print('-- BIDDING', bidder, amount, missing, balance, cap)
         if(amount > 0):
-            print('-- BIDDING', amount, missing, balance)
-            auction_bid_tested(auction, bidder, amount)
+            tx_hash = auction_bid_tested(auction, bidder, amount)
+            ev_handler.add(tx_hash, 'BidSubmission', collector.add)
+            ev_handler.check()
+            bidders_number += 1
+
+    missing = auction.call().missingFundsToEndAuction()
+    if missing > 0:
+        tx_hash = auction_bid_tested(auction, bidders[-1], missing)
+        ev_handler.add(tx_hash, 'BidSubmission', collector.add)
+        ev_handler.check()
+        bidders_number += 1
 
     assert auction.call().missingFundsToEndAuction() == 0
     auction.transact({'from': owner}).finalizeAuction()
 
-    addresses = []
-    values = []
-    claimed = []
-    verified_claim = []
-
-    handle_logs(contract=auction, event='BidSubmission', callback=get_bidders_addresses)
-
-    with pytest.raises(tester.TransactionFailed):
-        distributor.transact({'from': owner}).distribute(addresses[0:2])
+    assert len(collector.addresses) == bidders_number
 
     end_time = auction.call().end_time()
     elapsed = auction.call().token_claim_waiting_period()
-    web3.testing.timeTravel(end_time + elapsed+1)
+    claim_ok_timestamp = end_time + elapsed+1
+
+    if claim_ok_timestamp > web3.eth.getBlock('latest')['timestamp']:
+        # We cannot claim tokens before waiting period has passed
+        with pytest.raises(tester.TransactionFailed):
+            distributor.transact({'from': owner}).distribute(collector.addresses[0:2])
+
+        # Simulate time travel
+        web3.testing.timeTravel(claim_ok_timestamp)
 
     # Send 5 claiming transactions in a single batch to not run out of gas
     safe_distribution_no = 5
-    steps = math.ceil(len(addresses) / safe_distribution_no)
+    steps = math.ceil(len(collector.addresses) / safe_distribution_no)
 
     # Call the distributor contract with batches of bidder addresses
     for i in range(0, steps):
         start = i * safe_distribution_no
         end = (i + 1) * safe_distribution_no
-        auction_claim_tokens_tested(token, auction, addresses[start:end], distributor)
-        # distributor.transact({'from': owner}).distribute(addresses[start:end])
+        tx_hash = auction_claim_tokens_tested(token, auction, collector.addresses[start:end], distributor)
+        ev_handler.add(tx_hash, 'ClaimedTokens', collector.verify)
+        ev_handler.check()
+        # distributor.transact({'from': owner}).distribute(collector.addresses[start:end])
 
     auction_post_distributed_tests(auction)
-
-    # Verify that a single "ClaimedTokens" event has been issued by the auction contract
-    # for each address
-    for j in range(0, len(addresses) - 1):
-        address = addresses[j]
-        assert auction.call().bids(address) == 0
-
-        # check if auction event was triggered for this user
-        handle_logs(
-            contract=auction,
-            event='ClaimedTokens',
-            params={
-                'filter': {'_recipient': address}
-            },
-            callback=verify_claim)
 
 
 def test_waitfor_last_events_timeout():

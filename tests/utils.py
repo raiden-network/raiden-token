@@ -127,3 +127,35 @@ def xassert(a, b, threshold=0.0001):
         assert abs(a - b) / min(a, b) <= threshold, (a, b)
     assert abs(a - b) <= threshold, (a, b)
     return True
+
+class ClaimsCollector:
+    def __init__(self, auction, token):
+        self.auction = auction
+        self.token = token
+        self.addresses = []
+        self.values = []
+        self.claimed = []
+        self.verified_claim = []
+
+    def add(self, event):
+        address = event['args']['_sender']
+
+        if address not in self.addresses:
+            self.addresses.append(address)
+            self.values.append(0)
+            index = len(self.addresses) - 1
+        else:
+            index = self.addresses.index(address)
+
+        self.values[index] += event['args']['_amount']
+
+    def verify(self, event):
+        address = event['args']['_recipient']
+        sent_amount = event['args']['_sent_amount']
+
+        # Check for double claiming
+        assert address not in self.verified_claim
+        assert self.auction.call().bids(address) == 0
+        assert sent_amount == self.token.call().balanceOf(address)
+        self.verified_claim.append(address)
+        print('-- verify_claim -- ', address, sent_amount)
