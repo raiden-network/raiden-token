@@ -340,13 +340,17 @@ def test_auction_bid(
             'value': 1
         })
 
-    # Claim tokens only after waiting period
-    with pytest.raises(tester.TransactionFailed):
-        auction_claim_tokens_tested(token, auction, A)
-
     end_time = auction.call().end_time()
     elapsed = auction.call().token_claim_waiting_period()
-    web3.testing.timeTravel(end_time + elapsed+1)
+    claim_ok_timestamp = end_time + elapsed+1
+
+    # We cannot claim tokens before waiting period has passed
+    if claim_ok_timestamp > web3.eth.getBlock('latest')['timestamp']:
+        with pytest.raises(tester.TransactionFailed):
+            auction_claim_tokens_tested(token, auction, A)
+
+        # Simulate time travel
+        web3.testing.timeTravel(claim_ok_timestamp)
 
     auction_claim_tokens_tested(token, auction, A)
 
@@ -751,13 +755,17 @@ def test_auction_simulation(
 
     rounding_error_tokens = 0
 
-    # Claim tokens only after waiting period
-    with pytest.raises(tester.TransactionFailed):
-        auction_claim_tokens_tested(token, auction, bidders[0])
-
     end_time = auction.call().end_time()
     elapsed = auction.call().token_claim_waiting_period()
-    web3.testing.timeTravel(end_time + elapsed+1)
+    claim_ok_timestamp = end_time + elapsed+1
+
+    # We cannot claim tokens before waiting period has passed
+    if claim_ok_timestamp > web3.eth.getBlock('latest')['timestamp']:
+        with pytest.raises(tester.TransactionFailed):
+            auction_claim_tokens_tested(token, auction, bidders[0])
+
+        # Simulate time travel
+        web3.testing.timeTravel(claim_ok_timestamp)
 
     for i in range(0, index):
         bidder = bidders[i]

@@ -229,17 +229,13 @@ def auction_claim_tokens_tested(web3, owner, contract_params):
 
         if len(bidders) == 1:
             txn_hash = auction.transact({'from': bidders[0]}).claimTokens()
-            # auction.transact({'from': owner}).proxyClaimTokens(bidders[0])
+            # txn_hash = auction.transact({'from': owner}).proxyClaimTokens(bidders[0])
         else:
             txn_hash = distributor.transact({'from': owner}).distribute(bidders)
 
         for i, bidder in enumerate(bidders):
             assert token.call().balanceOf(bidder) == pre_balances[i] + expected_tokens[i]
             assert auction.call().bids(bidder) == 0
-
-            # Bidder cannot claim tokens again
-            with pytest.raises(tester.TransactionFailed):
-                auction.transact({'from': bidder}).claimTokens()
 
         funds_claimed = auction.call().funds_claimed()
         funds_claimed_calculated = pre_funds_claimed + reduce((lambda x, y: x + y), values)
@@ -249,6 +245,15 @@ def auction_claim_tokens_tested(web3, owner, contract_params):
         claimed_tokens = reduce((lambda x, y: x + y), expected_tokens)
         auction_balance_calculated = auction_pre_balance - claimed_tokens
         assert auction_balance == auction_balance_calculated
+
+        # Bidder cannot claim tokens again
+        if auction.call().stage() == 3:
+            assert auction.call({'from': bidders[0]}).claimTokens() == False
+        else:
+            # Stage is changed to TokensDistributed and transaction fails instead of
+            # returning False
+            with pytest.raises(tester.TransactionFailed):
+                auction.transact({'from': bidders[0]}).claimTokens()
 
         return txn_hash
 

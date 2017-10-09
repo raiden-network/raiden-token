@@ -41,8 +41,6 @@ class Distributor:
         self.filter_claims = None
         self.filter_distributed = None
 
-        self.owner = self.auction.call().owner_address()
-
         # Set contract deployment block numbers
         self.auction_block = self.web3.eth.getTransaction(auction_tx)['blockNumber']
         self.distributor_block = self.web3.eth.getTransaction(distributor_tx)['blockNumber']
@@ -161,8 +159,7 @@ class Distributor:
             self.claimed = self.claimed + batch
 
             print('Distributing tokens to {0} addresses: {1}'.format(batch_number, batch))
-            txhash = self.distributor.transact(
-                {'from': self.owner, 'gas': 4000000}).distribute(batch)
+            txhash = self.distributor.transact({'gas': 4000000}).distribute(batch)
             receipt = check_succesful_tx(self.web3, txhash)
             assert receipt is not None
 
