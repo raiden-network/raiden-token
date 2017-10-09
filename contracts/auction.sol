@@ -163,7 +163,6 @@ contract DutchAuction {
         uint _price_constant,
         uint32 _price_exponent)
         internal
-        isOwner
     {
         require(stage == Stages.AuctionDeployed || stage == Stages.AuctionSetUp);
         require(_price_start > 0);
