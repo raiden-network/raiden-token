@@ -159,3 +159,11 @@ class ClaimsCollector:
         assert sent_amount == self.token.call().balanceOf(address)
         self.verified_claim.append(address)
         print('-- verify_claim -- ', address, sent_amount)
+
+
+class TransactionIdKeeper:
+    def __init__(self, key='transactionId'):
+        self.key = key
+
+    def add(self, event):
+        self.transaction_id = event['args'][self.key]
