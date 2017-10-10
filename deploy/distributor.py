@@ -160,7 +160,8 @@ class Distributor:
 
             print('Distributing tokens to {0} addresses: {1}'.format(batch_number, batch))
             txhash = self.distributor.transact({'gas': 4000000}).distribute(batch)
-            receipt = check_succesful_tx(self.web3, txhash)
+            receipt, success = check_succesful_tx(self.web3, txhash)
+            assert success is True
             assert receipt is not None
 
         self.distribution_ended_checks()

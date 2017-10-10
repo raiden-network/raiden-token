@@ -65,7 +65,8 @@ def main(**kwargs):
                                                     args=[auction_address])
             log.info("Deploying distributor, tx hash is " + distributor_tx)
             print("Deploying distributor, tx hash is ", distributor_tx)
-            receipt = check_succesful_tx(web3, distributor_tx)
+            receipt, success = check_succesful_tx(web3, distributor_tx)
+            assert success is True
             distributor_address = receipt["contractAddress"]
             log.info("Distributor contract address  " + distributor_address)
             print("Distributor contract address  ", distributor_address)
