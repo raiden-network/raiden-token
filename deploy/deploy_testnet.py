@@ -8,15 +8,12 @@ adapter.DEFAULT_POOLSIZE = 1000
 
 
 import click
-import gevent
 import sys
 from populus import Project
 from deploy.utils import (
     passphrase,
     check_succesful_tx,
-    assignFundsToBidders,
-    returnFundsToOwner,
-    set_connection_pool_size
+    set_connection_pool_size,
 )
 from deploy.simulation import (
     auction_simulation
@@ -102,14 +99,14 @@ def deploy(ctx, **kwargs):
     # Load Populus contract proxy classes
     Auction = chain.provider.get_contract_factory('DutchAuction')
     Token = chain.provider.get_contract_factory('RaidenToken')
-    Distributor = chain.provider.get_contract_factory('Distributor')
 
     # Deploy Auction
     auction_txhash = Auction.deploy(transaction={"from": owner},
                                     args=[wallet_address, price_start,
                                           price_constant, price_exponent])
     log.info("Deploying auction, tx hash " + auction_txhash)
-    receipt = check_succesful_tx(web3, auction_txhash)
+    receipt, success = check_succesful_tx(web3, auction_txhash)
+    assert success is True
     auction_address = receipt["contractAddress"]
     log.info("Auction contract address " + auction_address)
 
@@ -121,24 +118,15 @@ def deploy(ctx, **kwargs):
     ])
 
     log.info("Deploying token, tx hash " + token_txhash)
-    receipt = check_succesful_tx(web3, token_txhash)
+    receipt, success = check_succesful_tx(web3, token_txhash)
+    assert success is True
     token_address = receipt["contractAddress"]
     log.info("Token contract address " + token_address)
-
-    # Deploy Distributor contract
-    distributor_txhash = Distributor.deploy(transaction={"from": owner},
-                                            args=[auction_address])
-    log.info("Deploying distributor, tx hash is " + distributor_txhash)
-    receipt = check_succesful_tx(web3, distributor_txhash)
-    distributor_address = receipt["contractAddress"]
-    log.info("Distributor contract address  " + distributor_address)
 
     # Make contracts aware of each other
     log.info("Initializing contracts")
     auction = Auction(address=auction_address)
     token = Token(address=token_address)
-    distributor = Distributor(address=distributor_address)
-    assert distributor is not None
 
     txhash = auction.transact({"from": owner}).setup(token_address)
     check_succesful_tx(web3, txhash)
@@ -154,10 +142,14 @@ def deploy(ctx, **kwargs):
     ctx.obj['auction_contract_address'] = auction_address
     ctx.obj['total_supply'] = supply
 
+    log.info("contracts deployed: --auction-contract %s --token-contract %s"
+             % (auction_address, token_address))
+
 
 @main.group('simulation', invoke_without_command=True)
 @click.option(
-    '--claim-tokens',
+    '--claim-tokens/--no-claim-tokens',
+    default=False,
     is_flag=True,
     help='Run auction simulation.'
 )
@@ -197,8 +189,21 @@ def deploy(ctx, **kwargs):
 )
 @click.option(
     '--start-auction/--no-start-auction',
-    default=True,
+    default=False,
+    is_flag=True,
     help='Whether "startAuction()" is called at the begininng of the sim.'
+)
+@click.option(
+    '--deploy-bidders/--no-deploy-bidders',
+    default=False,
+    is_flag=True,
+    help='If set, bidders are deployed (aka do the actual simulation)'
+)
+@click.option(
+    '--finalize-auction/--no-finalize-auction',
+    default=False,
+    is_flag=True,
+    help='Whether "finalizeAuction()" is called after all bidders finish.'
 )
 @click.option(
     '--bid-interval',
@@ -228,10 +233,6 @@ def deploy(ctx, **kwargs):
 )
 @click.pass_context
 def simulation(ctx, **kwargs):
-    bidders = int(kwargs['bidders'])
-    bid_start_price = int(kwargs['bid_price'] or 0)
-    fund_bidders = kwargs['fund']
-
     token_contract_address = ctx.obj.get('token_contract_address', None)
     if token_contract_address is None:
         token_contract_address = kwargs.get('token_contract')
@@ -261,32 +262,7 @@ def simulation(ctx, **kwargs):
     auction_contract = Auction(address=auction_contract_address)
     token_contract = Token(address=token_contract_address)
 
-    bidder_addresses = web3.eth.accounts[1:(bidders + 1)]
-
-    # come to daddy
-    event_list = [gevent.spawn(returnFundsToOwner, web3, owner, bidder)
-                  for bidder in bidder_addresses]
-    gevent.joinall(event_list)
-
-    log.info('Creating {0} bidder accounts: '.format(bidders - len(bidder_addresses)))
-    for i in range(len(bidder_addresses), bidders):
-        address = web3.personal.newAccount(passphrase)
-        bidder_addresses.append(address)
-
-    log.info('Simulating {0} bidders: {1}'.format(len(bidder_addresses), bidder_addresses))
-    if bid_start_price:
-        log.info('Bids will start at {0} WEI = {1} ETH  / TKN'.format(
-            bid_start_price,
-            web3.fromWei(bid_start_price, 'ether')))
-
-    if fund_bidders:
-        assignFundsToBidders(web3, owner, bidder_addresses,
-                             kwargs['distribution_limit'])
-
-    ret = auction_simulation(web3, token_contract, auction_contract, owner,
-                             bidder_addresses, kwargs)
-    if isinstance(ret, int):
-        assert ret == ctx.obj['total_supply']
+    auction_simulation(web3, token_contract, auction_contract, owner, kwargs)
 
 
 deploy.add_command(simulation)

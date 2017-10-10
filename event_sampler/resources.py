@@ -54,10 +54,10 @@ class AuctionStatus(Resource):
         bin_timestamps = []
         for block_id in ar_bins.tolist():
             block_id = int(block_id)
-            timestamp = self.sampler.block_to_timestamp.get(block_id, None)
+            timestamp = self.sampler.state.block_to_timestamp.get(block_id, None)
             if timestamp is None:
                 timestamp = self.sampler.chain.web3.eth.getBlock(block_id)['timestamp']
-                self.sampler.block_to_timestamp[block_id] = timestamp
+                self.sampler.state.block_to_timestamp[block_id] = timestamp
             bin_timestamps.append(timestamp)
 #        bin_timestamps = [self.sampler.block_to_timestamp[int(block_id)]
 #                          for block_id in ar_bins.tolist()]

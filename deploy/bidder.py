@@ -23,12 +23,16 @@ class Bidder:
         self.min_bid_price = 1000
         self.last_missing_funds = 1e100
         self.max_bids = None
+        self.max_retries = 10
+        self.retries = 0
 
     def bid(self):
         missing_funds = self.auction_contract.call().missingFundsToEndAuction()
         if missing_funds == 0:
             return
-        assert missing_funds <= self.last_missing_funds
+        if missing_funds <= self.last_missing_funds:
+            log.warning('missing funds <= last missing: %d < %d'
+                        % (missing_funds, self.last_missing_funds))
         self.last_missing_funds = missing_funds
         balance = self.web3.eth.getBalance(self.address)
         unlocked = self.web3.personal.unlockAccount(self.address, passphrase)
@@ -36,9 +40,14 @@ class Bidder:
         amount = self.get_random_bid(missing_funds, balance)
         log.info('BID bidder=%s, missing_funds=%.2e, balance=%d, amount=%s' %
                  (self.address, missing_funds, balance, amount_format(self.web3, amount)))
-        txhash = self.auction_contract.transact({'from': self.address, "value": amount}).bid()
-        receipt = check_succesful_tx(self.web3, txhash)
-        assert receipt is not None
+        try:
+            txhash = self.auction_contract.transact({'from': self.address, "value": amount}).bid()
+            receipt, success = check_succesful_tx(self.web3, txhash)
+        except ValueError as e:
+            log.warn(str(e))
+            if self.retries >= self.max_retries:
+                raise e
+            self.retries += 1
 
     def get_random_bid(self, missing_funds, balance):
         # cap missing funds to percentage defined by max_bid_ceiling
