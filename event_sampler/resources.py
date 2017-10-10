@@ -50,7 +50,7 @@ class AuctionStatus(Resource):
 #        bins = range(min_block, max_block, ((max_block - min_block) // num_bins))
         ar, ar_bins = numpy.histogram(list(block_to_events.keys()),
                                       bins=num_bins,
-                                      weights=list(block_to_events.values()))
+                                      weights=[numpy.float64(x) for x in block_to_events.values()])
         bin_timestamps = []
         for block_id in ar_bins.tolist():
             block_id = int(block_id)
