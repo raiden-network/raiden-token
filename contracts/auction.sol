@@ -18,6 +18,10 @@ contract DutchAuction {
     // Wait 7 days after the end of the auction, before ayone can claim tokens
     uint constant public token_claim_waiting_period = 7 days;
 
+    // Bid value over which the address has to be whitelisted
+    // At deployment moment, equivalent with $15,000
+    uint constant public bid_threshold = 50 ether;
+
     /*
      * Storage
      */
@@ -56,7 +60,11 @@ contract DutchAuction {
     // Wei per RDN (Rei * token_multiplier)
     uint public final_price;
 
+    // Bidder address => bid value
     mapping (address => uint) public bids;
+
+    // Whitelist for addresses that want to bid more than bid_threshold
+    mapping (address => bool) public whitelist;
 
     Stages public stage;
 
@@ -173,6 +181,16 @@ contract DutchAuction {
         price_exponent = _price_exponent;
     }
 
+    /// @notice Adds account addresses to whitelist.
+    /// @dev Adds account addresses to whitelist.
+    /// @param _bidder_addresses Array of addresses.
+    function addToWhitelist(address[] _bidder_addresses) public isOwner {
+        for (uint32 i = 0; i < _bidder_addresses.length; i++) {
+            assert(_bidder_addresses[i] != 0x0);
+            whitelist[_bidder_addresses[i]] = true;
+        }
+    }
+
     /// @notice Start the auction.
     /// @dev Starts auction and sets start_time.
     function startAuction() public isOwner atStage(Stages.AuctionSetUp) {
@@ -213,6 +231,7 @@ contract DutchAuction {
         atStage(Stages.AuctionStarted)
     {
         require(msg.value > 0);
+        require(bids[msg.sender] + msg.value < bid_threshold || whitelist[msg.sender]);
         assert(bids[msg.sender] + msg.value >= msg.value);
 
         // Missing funds without the current bid value
