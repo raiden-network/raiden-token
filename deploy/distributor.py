@@ -6,7 +6,7 @@ from web3.utils.compat import (
 )
 from deploy.utils import (
     check_succesful_tx,
-    print_logs
+    get_expected_tokens
 )
 from tests.utils_logs import LogFilter
 import logging
@@ -15,24 +15,31 @@ log = logging.getLogger(__name__)
 
 class Distributor:
     def __init__(self, web3, auction, auction_tx, auction_abi, distributor,
-                 distributor_tx, batch_number=5):
+                 distributor_tx, batch_number=None):
         self.web3 = web3
         self.auction = auction
+        self.token_multiplier = auction.call().token_multiplier()
         self.auction_abi = auction_abi
         self.distributor = distributor
         self.auction_ended = False
         self.distribution_ended = False
+        self.total_distribute_tx_gas = 4000000
 
         # How many addresses to send in a transaction
+        # If None, will be calculated from the tx gas estimation
         self.batch_number = batch_number
 
-        # Bidder addresses that have not claimed tokens
-        self.addresses_claimable = []
-        # Bid values
-        self.values = []
+        # Bidder addresses
+        self.bidder_addresses = []
+        # Bid values for the bidder addresses
+        self.bid_values = []
 
-        # Keep track of claimed tokens and verified claims
-        self.claimed = []
+        # Bidder addresses that have not claimed tokens
+        self.addresses_unclaimed = []
+
+
+        # Keep track of distributor claims and verified claims
+        self.addresses_claimed = []
         self.verified_claims = []
 
         # Filters
@@ -47,88 +54,103 @@ class Distributor:
 
         # Start event watching
         self.watch_auction_bids()
-        self.watch_auction_end()
-        self.watch_auction_claim()
-        self.watch_auction_distributed()
+        # self.watch_auction_end()
+        # self.watch_auction_claim()
+        # self.watch_auction_distributed()
 
     def watch_auction_bids(self):
         self.filter_bids = self.handle_auction_logs('BidSubmission', self.add_address)
-        self.filter_bids.init()
+        self.filter_bids.init(self.watch_auction_end)
+        self.filter_bids.watch()
 
     def watch_auction_end(self):
         def set_end(event):
             self.auction_ended = True
+            self.final_price = self.auction.call().final_price()
 
         self.filter_auction_end = self.handle_auction_logs('AuctionEnded', set_end)
-        self.filter_auction_end.init()
+        self.filter_auction_end.init(self.watch_auction_claim)
+        self.filter_auction_end.watch()
 
     def watch_auction_claim(self):
-        # watch_logs(self.auction, 'ClaimedTokens', self.add_verified)
-
         self.filter_claims = self.handle_auction_logs('ClaimedTokens', self.add_verified)
-        self.filter_claims.init()
+        self.filter_claims.init(self.watch_auction_distributed)
+        self.filter_claims.watch()
 
     def watch_auction_distributed(self):
         def set_distribution_end(event):
             self.distribution_ended = True
             self.filter_bids.stop()
             self.filter_auction_end.stop()
-            print('set_distribution_end')
-
-        # watch_logs(self.auction, 'TokensDistributed', set_distribution_end)
-        print_logs(self.auction, 'TokensDistributed', 'DutchAuction')
-#        print_logs(self.auction, 'TradingStarted', 'DutchAuction')
 
         self.filter_distributed = self.handle_auction_logs('TokensDistributed',
                                                            set_distribution_end)
         self.filter_distributed.init()
+        self.filter_distributed.watch()
 
     def add_address(self, event):
         address = event['args']['_sender']
 
         # We might have multiple bids from the same bidder
-        if address not in self.addresses_claimable:
-            self.addresses_claimable.append(address)
-            self.values.append(0)
-            index = len(self.addresses_claimable) - 1
+        if address not in self.bidder_addresses:
+            self.bidder_addresses.append(address)
+            self.addresses_unclaimed.append(address)
+            self.bid_values.append(0)
+            index = len(self.bidder_addresses) - 1
         else:
-            index = self.addresses_claimable.index(address)
+            index = self.bidder_addresses.index(address)
 
-        self.values[index] += event['args']['_amount']
+        self.bid_values[index] += event['args']['_amount']
 
     def add_verified(self, event):
         address = event['args']['_recipient']
         sent_amount = event['args']['_sent_amount']
-        log.info('add_verified(%s, %s, %s, %s)' %
-                 (address, sent_amount,
-                  str(address in self.addresses_claimable),
-                  str(self.addresses_claimable)))
+        expected_tokens = None
+        diff_tokens = None
+        bid_value = None
 
         if address in self.verified_claims:
-            print('--- Double verified !!!', address)
-        self.verified_claims.append(address)
+            log.warning('DOUBLE VERIFIED %s' % (address))
+        else:
+            self.verified_claims.append(address)
 
-        # This bidder has claimed the tokens himself
-        if address in self.addresses_claimable:
-            self.addresses_claimable.remove(address)
+        if address in self.bidder_addresses:
+            index = self.bidder_addresses.index(address)
+            bid_value = self.bid_values[index]
+            expected_tokens = get_expected_tokens(self.bid_values[index],
+                self.token_multiplier, self.final_price)
 
-        if address not in self.claimed:
-            self.claimed.append(address)
+            if address in self.addresses_unclaimed:
+                self.addresses_unclaimed.remove(address)
+
+        # Bidder claimed the tokens himself
+        if address not in self.addresses_claimed:
+            self.addresses_claimed.append(address)
+
+        if expected_tokens:
+            diff_tokens = expected_tokens - sent_amount
+        log.info('Verified address %s, diff: %s, sent tokens: %s, expected tokens: %s, bid value: %s)' %
+            (address,
+            diff_tokens,
+            sent_amount,
+            expected_tokens,
+            bid_value))
 
     def distribution_ended_checks(self):
-        print('Waiting to make sure we get all ClaimedTokens events')
+        log.info('Waiting to make sure we get all ClaimedTokens events')
+
         with Timeout(300) as timeout:
-            while not self.distribution_ended or len(self.claimed) != len(self.verified_claims):
-                print('self.distribution_ended', self.distribution_ended)
-                print('self.claimed', len(self.claimed), len(self.verified_claims), self.claimed)
-                print('self.verified_claims', self.verified_claims)
+            while not self.distribution_ended or len(self.addresses_claimed) != len(self.verified_claims):
+                log.info('Distribution ended: %s', str(self.distribution_ended))
+                log.info('Claimed %s, verified claims %s' % (len(self.addresses_claimed),
+                    len(self.verified_claims)))
                 timeout.sleep(50)
 
-        assert len(self.claimed) == len(self.verified_claims)
+        assert len(self.addresses_claimed) == len(self.verified_claims)
         self.filter_claims.stop()
         self.filter_distributed.stop()
 
-        print('DISTRIBUTION COMPLETE')
+        log.info('DISTRIBUTION COMPLETE')
 
     def handle_auction_logs(self, event_name, callback):
         return LogFilter(
@@ -143,23 +165,37 @@ class Distributor:
     def distribute(self):
         with Timeout() as timeout:
             while (not self.distribution_ended and
-                   (not self.auction_ended or not len(self.addresses_claimable))):
+                   (not self.auction_ended or not len(self.addresses_unclaimed))):
                 timeout.sleep(2)
 
-        log.info('Auction ended. We should have all the addresses. %s, %s' %
-                 (len(self.addresses_claimable), self.addresses_claimable))
+        unclaimed_number = len(self.addresses_unclaimed)
+        log.info('Auction ended. We should have all the addresses: %s, %s' %
+            (len(self.bidder_addresses), self.bidder_addresses))
+        log.info('Unclaimed tokens - addresses: %s, %s' %
+            (unclaimed_number, self.addresses_unclaimed))
 
-        # 82495 gas / claimTokens
+        # 87380 gas / claimTokens
+        # We need to calculate from gas estimation
+        if unclaimed_number > 0 and not self.batch_number:
+            valid_bid_address = self.addresses_unclaimed[0]
+            claim_tx_gas = self.auction.estimateGas({'from': valid_bid_address}).claimTokens()
+            log.info('ESTIMATED claimTokens tx GAS: %s', (claim_tx_gas))
+
+            self.batch_number = self.total_distribute_tx_gas // claim_tx_gas
+            log.info('BATCH number: %s', (self.batch_number))
 
         # Call the distributor contract with batches of bidder addresses
-        while len(self.addresses_claimable):
-            batch_number = min(self.batch_number, len(self.addresses_claimable))
-            batch = self.addresses_claimable[:batch_number]
-            self.addresses_claimable = self.addresses_claimable[batch_number:]
-            self.claimed = self.claimed + batch
+        while len(self.addresses_unclaimed):
+            batch_number = min(self.batch_number, len(self.addresses_unclaimed))
+            batch = self.addresses_unclaimed[:batch_number]
+            self.addresses_unclaimed = self.addresses_unclaimed[batch_number:]
+            self.addresses_claimed = self.addresses_claimed + batch
 
-            print('Distributing tokens to {0} addresses: {1}'.format(batch_number, batch))
-            txhash = self.distributor.transact({'gas': 4000000}).distribute(batch)
+            log.info('Distributing tokens to %s addresses: %s' % (batch_number, ','.join(batch)))
+            txhash = self.distributor.transact({
+                'gas': self.total_distribute_tx_gas
+            }).distribute(batch)
+
             receipt, success = check_succesful_tx(self.web3, txhash)
             assert success is True
             assert receipt is not None

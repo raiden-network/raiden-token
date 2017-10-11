@@ -96,8 +96,9 @@ class LogFilter:
         callback=None):
         self.web3 = web3
         self.event_name = event_name
+
+        # Callback for every registered log
         self.callback = callback
-        self.watching = False
 
         filter_kwargs = {
             'fromBlock': from_block,
@@ -120,10 +121,12 @@ class LogFilter:
         filter_params = input_filter_params_formatter(self.filter)
         self.filter = web3.eth.filter(filter_params)
 
-    def init(self):
+    def init(self, post_callback=None):
         for log in self.get_logs():
             log['event'] = self.event_name
             self.callback(log)
+        if post_callback:
+            post_callback()
 
     def watch(self):
         def log_callback(log):
@@ -131,12 +134,10 @@ class LogFilter:
             self.callback(log)
 
         self.filter.watch(log_callback)
-        self.watching = True
 
     def stop(self):
-        if self.watching:
+        if self.filter.running:
             self.filter.stop_watching()
-        self.web3.eth.uninstallFilter(self.filter.filter_id)
 
     def get_logs(self):
         response = self.web3.eth.getFilterLogs(self.filter.filter_id)
