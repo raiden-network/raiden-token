@@ -119,6 +119,18 @@ def gnosis_multisig_wallet(chain, web3, create_contract):
     return get
 
 
+@pytest.fixture()
+def foundation_multisig_wallet(chain, web3, create_contract):
+    def get(owners, required, daylimit):
+        Multisig = chain.provider.get_contract_factory('Wallet')
+        multisig_wallet = create_contract(Multisig, [
+            owners, required, daylimit
+        ])
+
+        return multisig_wallet
+    return get
+
+
 @pytest.fixture(params=auction_contracts)
 def auction_contract(
     request,
