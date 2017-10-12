@@ -45,8 +45,8 @@ class AuctionStatus(Resource):
         min_block = min(block_to_events.keys())
         max_block = max(block_to_events.keys())
         num_bins = args['bins']
-        assert max_block > min_block
-        num_bins = min(max_block - min_block, num_bins)
+#        assert max_block > min_block
+        num_bins = max(min(max_block - min_block, num_bins), 1)
 #        bins = range(min_block, max_block, ((max_block - min_block) // num_bins))
         ar, ar_bins = numpy.histogram(list(block_to_events.keys()),
                                       bins=num_bins,
