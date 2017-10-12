@@ -157,3 +157,7 @@ def set_connection_pool_size(web3, pool_connections, pool_size):
     adapter = requests.adapters.HTTPAdapter(pool_connections, pool_size)
     session.mount('http://', adapter)
     requests.adapters.DEFAULT_POOL_TIMEOUT = 30
+
+
+def get_expected_tokens(amount, token_multiplier, final_price):
+    return (token_multiplier * amount) // final_price
