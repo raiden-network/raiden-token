@@ -2,13 +2,10 @@
   "chains": {
     "mainnet": {
       "chain": {
-        "class": "populus.chain.geth.MainnetChain"
+        "class": "populus.chain.ExternalChain"
       },
       "contracts": {
         "backends": {
-          "InstalledPackages": {
-            "$ref": "contracts.backends.InstalledPackages"
-          },
           "JSONFile": {
             "$ref": "contracts.backends.JSONFile"
           },
