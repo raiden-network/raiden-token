@@ -231,7 +231,7 @@ contract DutchAuction {
         atStage(Stages.AuctionStarted)
     {
         require(msg.value > 0);
-        require(bids[msg.sender] + msg.value < bid_threshold || whitelist[msg.sender]);
+        require(bids[msg.sender] + msg.value <= bid_threshold || whitelist[msg.sender]);
         assert(bids[msg.sender] + msg.value >= msg.value);
 
         // Missing funds without the current bid value
