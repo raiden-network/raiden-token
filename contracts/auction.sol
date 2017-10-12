@@ -15,7 +15,7 @@ contract DutchAuction {
      * token_multiplier set from token's number of decimals (i.e. 10 ** decimals)
      */
 
-    // Wait 7 days after the end of the auction, before ayone can claim tokens
+    // Wait 7 days after the end of the auction, before anyone can claim tokens
     uint constant public token_claim_waiting_period = 7 days;
 
     // Bid value over which the address has to be whitelisted
