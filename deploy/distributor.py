@@ -31,9 +31,7 @@ class Distributor:
         self.batch_number = batch_number
 
         # Bidder addresses
-        self.bidder_addresses = []
-        # Bid values for the bidder addresses
-        self.bid_values = []
+        self.bidder_addresses = {}
 
         # Bidder addresses that have not claimed tokens
         self.addresses_unclaimed = []
@@ -93,21 +91,16 @@ class Distributor:
 
         # We might have multiple bids from the same bidder
         if address not in self.bidder_addresses:
-            self.bidder_addresses.append(address)
+            self.bidder_addresses[address] = 0
             self.addresses_unclaimed.append(address)
-            self.bid_values.append(0)
-            index = len(self.bidder_addresses) - 1
-        else:
-            index = self.bidder_addresses.index(address)
 
-        self.bid_values[index] += event['args']['_amount']
+        self.bidder_addresses[address] += event['args']['_amount']
 
     def add_verified(self, event):
         address = event['args']['_recipient']
         sent_amount = event['args']['_sent_amount']
         expected_tokens = None
         diff_tokens = None
-        bid_value = None
 
         if address in self.verified_claims:
             log.warning('DOUBLE VERIFIED %s' % (address))
@@ -115,10 +108,8 @@ class Distributor:
             self.verified_claims.append(address)
 
         if address in self.bidder_addresses:
-            index = self.bidder_addresses.index(address)
-            bid_value = self.bid_values[index]
             expected_tokens = get_expected_tokens(
-                self.bid_values[index],
+                self.bidder_addresses[address],
                 self.token_multiplier, self.final_price)
 
             if address in self.addresses_unclaimed:
@@ -133,12 +124,13 @@ class Distributor:
 
         if self.file:
             with open(self.file, 'a') as f:
-                f.write('%s,%s,%s,%s,%s,%s\n' % (event['blockNumber'], address, bid_value,
+                f.write('%s,%s,%s,%s,%s,%s\n' % (event['blockNumber'], address,
+                                                 self.bidder_addresses[address],
                                                  sent_amount, expected_tokens, diff_tokens))
         else:
             log.info('Verified address %s, diff: %s, sent tokens: %s, expected tokens: %s,'
                      ' bid value: %s)' % (address, diff_tokens, sent_amount,
-                                          expected_tokens, bid_value))
+                                          expected_tokens, self.bidder_addresses[address]))
 
     def distribution_ended_checks(self):
         log.info('Waiting to make sure we get all ClaimedTokens events')
@@ -177,7 +169,7 @@ class Distributor:
 
         unclaimed_number = len(self.addresses_unclaimed)
         log.info('Auction ended. We should have all the addresses: %s' %
-                 (len(self.bidder_addresses)))
+                 (len(self.bidder_addresses.keys())))
         log.info('Unclaimed tokens - addresses: %s' %
                  (unclaimed_number))
 
