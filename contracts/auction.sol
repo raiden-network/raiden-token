@@ -186,7 +186,6 @@ contract DutchAuction {
     /// @param _bidder_addresses Array of addresses.
     function addToWhitelist(address[] _bidder_addresses) public isOwner {
         for (uint32 i = 0; i < _bidder_addresses.length; i++) {
-            assert(_bidder_addresses[i] != 0x0);
             whitelist[_bidder_addresses[i]] = true;
         }
     }
