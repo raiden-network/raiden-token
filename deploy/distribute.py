@@ -1,6 +1,6 @@
-"""
+'''
 Distribute tokens to bidders after auction ends.
-"""
+'''
 from populus import Project
 from deploy.distributor import Distributor as DistributorScript
 import click
@@ -11,6 +11,7 @@ import sys
 import logging
 log = logging.getLogger(__name__)
 
+
 @click.command()
 @click.option(
     '--chain',
@@ -20,10 +21,6 @@ log = logging.getLogger(__name__)
 @click.option(
     '--distributor',
     help='Distributor contract address.'
-)
-@click.option(
-    '--distributor-tx',
-    help='Distributor deployment transaction hash.'
 )
 @click.option(
     '--auction',
@@ -45,7 +42,6 @@ def main(**kwargs):
 
     chain_name = kwargs['chain']
     distributor_address = kwargs['distributor']
-    distributor_tx = kwargs['distributor_tx']
     auction_address = kwargs['auction']
     auction_tx = kwargs['auction_tx']
     batch_number = kwargs['batch_number']
@@ -55,7 +51,7 @@ def main(**kwargs):
 
     with project.get_chain(chain_name) as chain:
         web3 = chain.web3
-        log.info("Web3 provider is %s" % (web3.currentProvider))
+        log.info('Web3 provider is %s' % (web3.currentProvider))
 
         owner = chain.web3.eth.accounts[0]
         Auction = chain.provider.get_contract_factory('DutchAuction')
@@ -74,25 +70,25 @@ def main(**kwargs):
             sys.exit()
 
         if not distributor_address:
-            distributor_tx = Distributor.deploy(transaction={"from": owner},
-                                                    args=[auction_address])
-            log.info("DISTRIBUTOR tx hash: " + distributor_tx)
+            distributor_tx = Distributor.deploy(transaction={'from': owner},
+                                                args=[auction_address])
+            log.info('DISTRIBUTOR tx hash: ' + distributor_tx)
             receipt, success = check_succesful_tx(web3, distributor_tx)
             assert success is True
             assert receipt is not None
 
-            distributor_address = receipt["contractAddress"]
-            log.info("DISTRIBUTOR contract address  " + distributor_address)
+            distributor_address = receipt['contractAddress']
+            log.info('DISTRIBUTOR contract address  ' + distributor_address)
 
         distributor = Distributor(address=distributor_address)
         assert distributor is not None
 
         distrib = DistributorScript(web3, auction, auction_tx, auction.abi,
-                              distributor, distributor_tx, batch_number)
+                                    distributor, batch_number)
         distrib.distribute()
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     logging.basicConfig(level=logging.DEBUG)
-    logging.getLogger("urllib3").setLevel(logging.WARNING)
+    logging.getLogger('urllib3').setLevel(logging.WARNING)
     main()

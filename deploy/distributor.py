@@ -15,7 +15,7 @@ log = logging.getLogger(__name__)
 
 class Distributor:
     def __init__(self, web3, auction, auction_tx, auction_abi, distributor,
-                 distributor_tx, batch_number=None):
+                 batch_number=None):
         self.web3 = web3
         self.auction = auction
         self.token_multiplier = auction.call().token_multiplier()
@@ -37,7 +37,6 @@ class Distributor:
         # Bidder addresses that have not claimed tokens
         self.addresses_unclaimed = []
 
-
         # Keep track of distributor claims and verified claims
         self.addresses_claimed = []
         self.verified_claims = []
@@ -50,7 +49,6 @@ class Distributor:
 
         # Set contract deployment block numbers
         self.auction_block = self.web3.eth.getTransaction(auction_tx)['blockNumber']
-        self.distributor_block = self.web3.eth.getTransaction(distributor_tx)['blockNumber']
 
         # Start event watching
         self.watch_auction_bids()
@@ -117,7 +115,8 @@ class Distributor:
         if address in self.bidder_addresses:
             index = self.bidder_addresses.index(address)
             bid_value = self.bid_values[index]
-            expected_tokens = get_expected_tokens(self.bid_values[index],
+            expected_tokens = get_expected_tokens(
+                self.bid_values[index],
                 self.token_multiplier, self.final_price)
 
             if address in self.addresses_unclaimed:
@@ -129,21 +128,19 @@ class Distributor:
 
         if expected_tokens:
             diff_tokens = expected_tokens - sent_amount
-        log.info('Verified address %s, diff: %s, sent tokens: %s, expected tokens: %s, bid value: %s)' %
-            (address,
-            diff_tokens,
-            sent_amount,
-            expected_tokens,
-            bid_value))
+        log.info('Verified address %s, diff: %s, sent tokens: %s, expected tokens: %s,'
+                 ' bid value: %s)' % (address, diff_tokens, sent_amount,
+                                      expected_tokens, bid_value))
 
     def distribution_ended_checks(self):
         log.info('Waiting to make sure we get all ClaimedTokens events')
 
         with Timeout(300) as timeout:
-            while not self.distribution_ended or len(self.addresses_claimed) != len(self.verified_claims):
+            while not self.distribution_ended or len(self.addresses_claimed) != \
+                    len(self.verified_claims):
                 log.info('Distribution ended: %s', str(self.distribution_ended))
                 log.info('Claimed %s, verified claims %s' % (len(self.addresses_claimed),
-                    len(self.verified_claims)))
+                                                             len(self.verified_claims)))
                 timeout.sleep(50)
 
         assert len(self.addresses_claimed) == len(self.verified_claims)
@@ -170,9 +167,9 @@ class Distributor:
 
         unclaimed_number = len(self.addresses_unclaimed)
         log.info('Auction ended. We should have all the addresses: %s, %s' %
-            (len(self.bidder_addresses), self.bidder_addresses))
+                 (len(self.bidder_addresses), self.bidder_addresses))
         log.info('Unclaimed tokens - addresses: %s, %s' %
-            (unclaimed_number, self.addresses_unclaimed))
+                 (unclaimed_number, self.addresses_unclaimed))
 
         # 87380 gas / claimTokens
         # We need to calculate from gas estimation
