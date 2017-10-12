@@ -190,6 +190,15 @@ contract DutchAuction {
         }
     }
 
+    /// @notice Removes account addresses from whitelist.
+    /// @dev Removes account addresses from whitelist.
+    /// @param _bidder_addresses Array of addresses.
+    function removeFromWhitelist(address[] _bidder_addresses) public isOwner {
+        for (uint32 i = 0; i < _bidder_addresses.length; i++) {
+            whitelist[_bidder_addresses[i]] = false;
+        }
+    }
+
     /// @notice Start the auction.
     /// @dev Starts auction and sets start_time.
     function startAuction() public isOwner atStage(Stages.AuctionSetUp) {
