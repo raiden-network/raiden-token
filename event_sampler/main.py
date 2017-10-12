@@ -29,6 +29,11 @@ from event_sampler.sampler import EventSampler
     help='Name of the chain'
 )
 @click.option(
+    '--state-file',
+    default='/tmp/event_sampler.json',
+    help='State file path'
+)
+@click.option(
     '--host',
     default='localhost',
     help='Address of the REST server'
@@ -38,7 +43,7 @@ from event_sampler.sampler import EventSampler
     default=5000,
     help='Port of the REST server'
 )
-def main(sample_period, auction_address, chain_name, host, port):
+def main(sample_period, auction_address, chain_name, state_file, host, port):
     from gevent.pywsgi import WSGIServer
     app = Flask(__name__)
     api = Api(app)
@@ -46,7 +51,7 @@ def main(sample_period, auction_address, chain_name, host, port):
     with project.get_chain(chain_name) as chain:
         Auction = chain.provider.get_contract_factory('DutchAuction')
         auction_contract = Auction(address=auction_address)
-        sampler = EventSampler(auction_address, chain)
+        sampler = EventSampler(auction_address, chain, state_file_path=state_file)
         api.add_resource(AuctionStatus, "/status",
                          resource_class_kwargs={'auction_contract': auction_contract,
                                                 'sampler': sampler})
