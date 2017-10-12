@@ -8,6 +8,7 @@ from deploy.utils import (
     check_succesful_tx
 )
 import sys
+from time import time
 import logging
 log = logging.getLogger(__name__)
 
@@ -37,6 +38,11 @@ log = logging.getLogger(__name__)
     default=None,
     help='How many token claims to be processed. Default is calculated from gas cost estimation.'
 )
+@click.option(
+    '--to-file/--no-file',
+    default=True,
+    help='Write event information to csv file.'
+)
 def main(**kwargs):
     project = Project()
 
@@ -45,6 +51,11 @@ def main(**kwargs):
     auction_address = kwargs['auction']
     auction_tx = kwargs['auction_tx']
     batch_number = kwargs['batch_number']
+    to_file = kwargs['to_file']
+
+    claims_file = None
+    if to_file:
+        claims_file = 'build/claimed_tokens_{}_{}.csv'.format(chain_name, time())
 
     if batch_number:
         batch_number = int(batch_number)
@@ -84,7 +95,7 @@ def main(**kwargs):
         assert distributor is not None
 
         distrib = DistributorScript(web3, auction, auction_tx, auction.abi,
-                                    distributor, batch_number)
+                                    distributor, batch_number, claims_file)
         distrib.distribute()
 
 

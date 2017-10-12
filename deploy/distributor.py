@@ -15,12 +15,13 @@ log = logging.getLogger(__name__)
 
 class Distributor:
     def __init__(self, web3, auction, auction_tx, auction_abi, distributor,
-                 batch_number=None):
+                 batch_number=None, claims_file=None):
         self.web3 = web3
         self.auction = auction
         self.token_multiplier = auction.call().token_multiplier()
         self.auction_abi = auction_abi
         self.distributor = distributor
+        self.file = claims_file
         self.auction_ended = False
         self.distribution_ended = False
         self.total_distribute_tx_gas = 4000000
@@ -50,11 +51,12 @@ class Distributor:
         # Set contract deployment block numbers
         self.auction_block = self.web3.eth.getTransaction(auction_tx)['blockNumber']
 
+        if self.file:
+            with open(self.file, 'a') as f:
+                f.write('block_number,address,bid_value,received_tokens,expected_tokens,diff\n')
+
         # Start event watching
         self.watch_auction_bids()
-        # self.watch_auction_end()
-        # self.watch_auction_claim()
-        # self.watch_auction_distributed()
 
     def watch_auction_bids(self):
         self.filter_bids = self.handle_auction_logs('BidSubmission', self.add_address)
@@ -128,9 +130,15 @@ class Distributor:
 
         if expected_tokens:
             diff_tokens = expected_tokens - sent_amount
-        log.info('Verified address %s, diff: %s, sent tokens: %s, expected tokens: %s,'
-                 ' bid value: %s)' % (address, diff_tokens, sent_amount,
-                                      expected_tokens, bid_value))
+
+        if self.file:
+            with open(self.file, 'a') as f:
+                f.write('%s,%s,%s,%s,%s,%s\n' % (event['blockNumber'], address, bid_value,
+                                                 sent_amount, expected_tokens, diff_tokens))
+        else:
+            log.info('Verified address %s, diff: %s, sent tokens: %s, expected tokens: %s,'
+                     ' bid value: %s)' % (address, diff_tokens, sent_amount,
+                                          expected_tokens, bid_value))
 
     def distribution_ended_checks(self):
         log.info('Waiting to make sure we get all ClaimedTokens events')
@@ -148,6 +156,8 @@ class Distributor:
         self.filter_distributed.stop()
 
         log.info('DISTRIBUTION COMPLETE')
+        if self.file:
+            log.info('The following file has been created: %s', self.file)
 
     def handle_auction_logs(self, event_name, callback):
         return LogFilter(
@@ -166,10 +176,10 @@ class Distributor:
                 timeout.sleep(2)
 
         unclaimed_number = len(self.addresses_unclaimed)
-        log.info('Auction ended. We should have all the addresses: %s, %s' %
-                 (len(self.bidder_addresses), self.bidder_addresses))
-        log.info('Unclaimed tokens - addresses: %s, %s' %
-                 (unclaimed_number, self.addresses_unclaimed))
+        log.info('Auction ended. We should have all the addresses: %s' %
+                 (len(self.bidder_addresses)))
+        log.info('Unclaimed tokens - addresses: %s' %
+                 (unclaimed_number))
 
         # 87380 gas / claimTokens
         # We need to calculate from gas estimation
