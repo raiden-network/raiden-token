@@ -21,6 +21,9 @@
         }
       },
       "web3": {
+        "eth": {
+          "default_account": "0x2222222222222222222222222222222222222222"
+        },
         "provider": {
           "class": "web3.providers.rpc.HTTPProvider",
             "settings": {
@@ -54,7 +57,7 @@
       },
       "web3": {
         "eth": {
-          "default_account": "0xbB5AEb01acF5b75bc36eC01f5137Dd2728FbE983"
+          "default_account": "0x2222222222222222222222222222222222222222"
         },
         "provider": {
           "class": "web3.providers.rpc.HTTPProvider",
@@ -89,7 +92,7 @@
       },
       "web3": {
         "eth": {
-          "default_account": "0xbB5AEb01acF5b75bc36eC01f5137Dd2728FbE983"
+          "default_account": "0x2222222222222222222222222222222222222222"
         },
         "provider": {
           "class": "web3.providers.rpc.HTTPProvider",
@@ -226,7 +229,7 @@
       },
       "web3": {
         "eth": {
-          "default_account": "0x5601Ea8445A5d96EEeBF89A67C4199FbB7a43Fbb"
+          "default_account": "0x2222222222222222222222222222222222222222"
         },
         "provider": {
           "class": "web3.providers.rpc.HTTPProvider",
@@ -261,7 +264,7 @@
       },
       "web3": {
         "eth": {
-            "default_account": "0xd96b724286c592758de7cbd72c086a8a8605417f"
+            "default_account": "0x2222222222222222222222222222222222222222"
         },
         "provider": {
           "class": "web3.providers.rpc.HTTPProvider",
@@ -296,7 +299,7 @@
       },
       "web3": {
         "eth": {
-            "default_account": "0xd96b724286c592758de7cbd72c086a8a8605417f"
+            "default_account": "0x2222222222222222222222222222222222222222"
         },
         "provider": {
           "class": "web3.providers.rpc.HTTPProvider",
