@@ -10,6 +10,7 @@ from fixtures import (
     owner_index,
     owner,
     wallet_address,
+    whitelister_address,
     get_bidders,
     gnosis_multisig_wallet,
     foundation_multisig_wallet,

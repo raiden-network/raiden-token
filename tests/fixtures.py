@@ -57,13 +57,18 @@ def test_bytes(value=10, size=256):
 
 
 @pytest.fixture()
-def owner_index():
-    return 2
+def wallet_address(web3):
+    return web3.eth.accounts[1]
 
 
 @pytest.fixture()
-def wallet_address(web3):
-    return web3.eth.accounts[1]
+def whitelister_address(web3):
+    return web3.eth.accounts[2]
+
+
+@pytest.fixture()
+def owner_index():
+    return 3
 
 
 @pytest.fixture()
@@ -131,11 +136,6 @@ def foundation_multisig_wallet(chain, web3, create_contract):
     return get
 
 
-@pytest.fixture()
-def whitelister_address(web3):
-    return web3.eth.acccounts[1]
-
-
 @pytest.fixture(params=auction_contracts)
 def auction_contract(
         request,
@@ -168,10 +168,11 @@ def auction_contract_fast_decline(
     chain,
     web3,
     wallet_address,
+    whitelister_address,
     create_contract):
     auction_contract_type = request.param
     Auction = chain.provider.get_contract_factory(auction_contract_type)
-    params = [wallet_address] + contract_params['args']
+    params = [wallet_address, whitelister_address] + contract_params['args']
     auction_contract = create_contract(Auction, params, {}, ['Deployed'])
 
     if print_the_logs:
