@@ -14,6 +14,7 @@ from fixtures import (
     owner_index,
     owner,
     wallet_address,
+    whitelister_address,
     get_bidders,
     contract_params,
     create_contract,
@@ -49,24 +50,26 @@ def test_auction_init(
     web3,
     owner,
     wallet_address,
+    whitelister_address,
     create_contract,
     contract_params):
     Auction = chain.provider.get_contract_factory('DutchAuction')
+    args = [wallet_address, whitelister_address]
 
     with pytest.raises(TypeError):
-        auction_contract = create_contract(Auction, [wallet_address])
+        auction_contract = create_contract(Auction, args)
     with pytest.raises(TypeError):
-        auction_contract = create_contract(Auction, [wallet_address, 10000, -3, 2])
+        auction_contract = create_contract(Auction, args + [10000, -3, 2])
     with pytest.raises(TypeError):
-        auction_contract = create_contract(Auction, [wallet_address, 10000, 3, -2])
+        auction_contract = create_contract(Auction, args + [10000, 3, -2])
     with pytest.raises(TypeError):
-        auction_contract = create_contract(Auction, [wallet_address, -1, 3, 2])
+        auction_contract = create_contract(Auction, args + [-1, 3, 2])
     with pytest.raises(tester.TransactionFailed):
-        auction_contract = create_contract(Auction, [wallet_address, 10000, 0, 2])
+        auction_contract = create_contract(Auction, args + [10000, 0, 2])
     with pytest.raises(tester.TransactionFailed):
-        auction_contract = create_contract(Auction, [wallet_address, 0, 3, 2])
+        auction_contract = create_contract(Auction, args + [0, 3, 2])
 
-    create_contract(Auction, [wallet_address] + contract_params['args'], {'from': owner})
+    create_contract(Auction, args + contract_params['args'], {'from': owner})
 
 
 def test_auction_setup(

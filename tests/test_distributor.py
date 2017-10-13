@@ -8,6 +8,7 @@ from fixtures import (
     owner_index,
     owner,
     wallet_address,
+    whitelister_address,
     get_bidders,
     contract_params,
     create_contract,
@@ -40,6 +41,7 @@ def test_distributor_init(
     chain,
     web3,
     wallet_address,
+    whitelister_address,
     owner,
     get_bidders,
     create_contract,
@@ -47,9 +49,10 @@ def test_distributor_init(
     A = get_bidders(1)[0]
     Distributor = chain.provider.get_contract_factory('Distributor')
     Auction = chain.provider.get_contract_factory('DutchAuction')
-    auction = create_contract(Auction, [wallet_address] + contract_params['args'], {'from': owner})
+    auction_params = [wallet_address, whitelister_address]
+    auction = create_contract(Auction, auction_params + contract_params['args'], {'from': owner})
 
-    other_auction_params = [wallet_address] + contract_params['args']
+    other_auction_params = [wallet_address, whitelister_address] + contract_params['args']
     other_owner_auction = create_contract(Auction, other_auction_params, {'from': A})
     other_contract_type = create_contract(Distributor, [auction.address])
 
