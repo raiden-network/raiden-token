@@ -29,6 +29,7 @@ contract DutchAuction {
     RaidenToken public token;
     address public owner_address;
     address public wallet_address;
+    address public whitelister_address;
 
     // Price decay function parameters to be changed depending on the desired outcome
 
@@ -92,6 +93,11 @@ contract DutchAuction {
         _;
     }
 
+    modifier isWhitelister() {
+        require(msg.sender == whitelister_address);
+        _;
+    }
+
     /*
      * Events
      */
@@ -124,13 +130,16 @@ contract DutchAuction {
     /// @param _price_exponent Auction price divisor exponent.
     function DutchAuction(
         address _wallet_address,
+        address _whitelister_address,
         uint _price_start,
         uint _price_constant,
         uint32 _price_exponent)
         public
     {
         require(_wallet_address != 0x0);
+        require(_whitelister_address != 0x0);
         wallet_address = _wallet_address;
+        whitelister_address = _whitelister_address;
 
         owner_address = msg.sender;
         stage = Stages.AuctionDeployed;
@@ -184,7 +193,7 @@ contract DutchAuction {
     /// @notice Adds account addresses to whitelist.
     /// @dev Adds account addresses to whitelist.
     /// @param _bidder_addresses Array of addresses.
-    function addToWhitelist(address[] _bidder_addresses) public isOwner {
+    function addToWhitelist(address[] _bidder_addresses) public isWhitelister {
         for (uint32 i = 0; i < _bidder_addresses.length; i++) {
             whitelist[_bidder_addresses[i]] = true;
         }
@@ -193,7 +202,7 @@ contract DutchAuction {
     /// @notice Removes account addresses from whitelist.
     /// @dev Removes account addresses from whitelist.
     /// @param _bidder_addresses Array of addresses.
-    function removeFromWhitelist(address[] _bidder_addresses) public isOwner {
+    function removeFromWhitelist(address[] _bidder_addresses) public isWhitelister {
         for (uint32 i = 0; i < _bidder_addresses.length; i++) {
             whitelist[_bidder_addresses[i]] = false;
         }

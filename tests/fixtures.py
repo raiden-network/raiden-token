@@ -131,16 +131,22 @@ def foundation_multisig_wallet(chain, web3, create_contract):
     return get
 
 
+@pytest.fixture()
+def whitelister_address(web3):
+    return web3.eth.acccounts[1]
+
+
 @pytest.fixture(params=auction_contracts)
 def auction_contract(
-    request,
-    contract_params,
-    chain,
-    wallet_address,
-    create_contract):
+        request,
+        contract_params,
+        chain,
+        wallet_address,
+        create_contract,
+        whitelister_address):
     auction_contract_type = request.param
     Auction = chain.provider.get_contract_factory(auction_contract_type)
-    params = [wallet_address] + contract_params['args']
+    params = [wallet_address, whitelister_address] + contract_params['args']
     auction_contract = create_contract(Auction, params, {}, ['Deployed'])
 
     if print_the_logs:
