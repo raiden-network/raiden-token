@@ -14,10 +14,11 @@ log = logging.getLogger(__name__)
 
 
 class Distributor:
-    def __init__(self, web3, auction, auction_tx, auction_abi, distributor,
+    def __init__(self, web3, owner, auction, auction_tx, auction_abi, distributor,
                  batch_number=None, claims_file=None):
         self.web3 = web3
         self.auction = auction
+        self.owner = owner
         self.token_multiplier = auction.call().token_multiplier()
         self.auction_abi = auction_abi
         self.distributor = distributor
@@ -192,6 +193,7 @@ class Distributor:
 
             log.info('Distributing tokens to %s addresses: %s' % (batch_number, ','.join(batch)))
             txhash = self.distributor.transact({
+                'from': self.owner,
                 'gas': self.total_distribute_tx_gas
             }).distribute(batch)
 

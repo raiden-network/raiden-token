@@ -20,6 +20,10 @@ log = logging.getLogger(__name__)
     help='Chain to deploy on: kovan | ropsten | rinkeby | tester | privtest'
 )
 @click.option(
+    '--owner',
+    help='Contracts owner, default: web3.eth.accounts[0]'
+)
+@click.option(
     '--distributor',
     help='Distributor contract address.'
 )
@@ -47,6 +51,7 @@ def main(**kwargs):
     project = Project()
 
     chain_name = kwargs['chain']
+    owner = kwargs['owner']
     distributor_address = kwargs['distributor']
     auction_address = kwargs['auction']
     auction_tx = kwargs['auction_tx']
@@ -64,7 +69,7 @@ def main(**kwargs):
         web3 = chain.web3
         log.info('Web3 provider is %s' % (web3.currentProvider))
 
-        owner = chain.web3.eth.accounts[0]
+        owner = owner or chain.web3.eth.accounts[0]
         Auction = chain.provider.get_contract_factory('DutchAuction')
         Distributor = chain.provider.get_contract_factory('Distributor')
 
@@ -94,7 +99,7 @@ def main(**kwargs):
         distributor = Distributor(address=distributor_address)
         assert distributor is not None
 
-        distrib = DistributorScript(web3, auction, auction_tx, auction.abi,
+        distrib = DistributorScript(web3, owner, auction, auction_tx, auction.abi,
                                     distributor, batch_number, claims_file)
         distrib.distribute()
 
