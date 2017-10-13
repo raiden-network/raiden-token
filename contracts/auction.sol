@@ -19,8 +19,8 @@ contract DutchAuction {
     uint constant public token_claim_waiting_period = 7 days;
 
     // Bid value over which the address has to be whitelisted
-    // At deployment moment, equivalent with $15,000
-    uint constant public bid_threshold = 50 ether;
+    // At deployment moment, less than 10k$
+    uint constant public bid_threshold = 25 ether;
 
     /*
      * Storage
