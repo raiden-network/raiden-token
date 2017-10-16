@@ -132,7 +132,7 @@
         "provider": {
           "class": "web3.providers.rpc.HTTPProvider",
             "settings": {
-            "endpoint_uri": "http://geth:8545",
+            "endpoint_uri": "http://geth_ropsten:8545",
             "request_kwargs": {
                 "timeout": 180
             }
