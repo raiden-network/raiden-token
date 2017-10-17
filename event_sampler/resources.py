@@ -1,6 +1,7 @@
 from flask_restful import Resource, reqparse
 import logging
 import numpy
+import ethereum
 
 log = logging.getLogger(__name__)
 
@@ -88,7 +89,8 @@ class AuctionStatus(Resource):
         ret['price_constant'] = self.sampler.price_constant
         ret['price_exponent'] = self.sampler.price_exponent
         if ret['auction_stage'] >= 2:
-            ret['auction_contract_address'] = self.contract.address
+            checksummed_addr = ethereum.utils.add_cool_checksum(self.contract.address)
+            ret['auction_contract_address'] = checksummed_addr
         return ret
 
     def get(self):
