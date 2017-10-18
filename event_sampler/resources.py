@@ -72,6 +72,7 @@ class AuctionStatus(Resource):
         web3 = self.sampler.chain.web3
         ret = {}
         ret['auction_stage'] = self.contract.call().stage()
+        ret['price'] = self.contract.call().price()
         block_to_sum = {}
         for block, events in self.sampler.events.items():
             block_to_sum[block] = sum((event['args']['_amount'] for event in events))
