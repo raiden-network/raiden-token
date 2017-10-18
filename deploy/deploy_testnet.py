@@ -55,6 +55,7 @@ def main(ctx, **kwargs):
 )
 @click.option(
     '--whitelister',
+    required=True,
     help='Address with permission to add/remove bidders to/from a whitelist.'
 )
 @click.option(
