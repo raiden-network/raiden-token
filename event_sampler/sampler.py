@@ -124,9 +124,16 @@ class EventSampler:
         self.price_exponent = event['args']['_price_exponent']
 
     def on_bid_submission(self, args):
+        log.info('BidSubmission %s' % str(args))
         if args['blockNumber'] not in self.state.block_to_timestamp:
             timestamp = self.chain.web3.eth.getBlock(args['blockNumber'])['timestamp']
             self.state.block_to_timestamp[args['blockNumber']] = timestamp
+        dup = [x for x in self.events[args['blockNumber']]
+               if x['transactionIndex'] == args['transactionIndex']
+               ]
+        if len(dup) >= 1:
+            log.warning('duplicate transaction? %s %s' % (str(args), str(dup)))
+            return
         self.events[args['blockNumber']].append(args)
 
     def on_auction_end(self, event):
