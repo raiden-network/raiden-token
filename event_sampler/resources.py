@@ -33,6 +33,7 @@ class AuctionStatus(Resource):
         super(AuctionStatus, self).__init__()
         self.contract = auction_contract
         self.sampler = sampler
+        self.wallet_address = self.contract.call().wallet_address()
 
     def get_histogram(self):
         if len(self.sampler.events.items()) == 0:
@@ -46,9 +47,7 @@ class AuctionStatus(Resource):
         min_block = min(block_to_events.keys())
         max_block = max(block_to_events.keys())
         num_bins = args['bins']
-#        assert max_block > min_block
         num_bins = max(min(max_block - min_block, num_bins), 1)
-#        bins = range(min_block, max_block, ((max_block - min_block) // num_bins))
         ar, ar_bins = numpy.histogram(list(block_to_events.keys()),
                                       bins=num_bins,
                                       weights=[numpy.float64(x) for x in block_to_events.values()])
@@ -68,7 +67,6 @@ class AuctionStatus(Resource):
                 'bin_cumulative_sum': numpy.cumsum(ar).tolist()}
 
     def get_status(self):
-        last_event = self.sampler.last_event()
         web3 = self.sampler.chain.web3
         ret = {}
         ret['auction_stage'] = self.contract.call().stage()
@@ -76,8 +74,13 @@ class AuctionStatus(Resource):
         block_to_sum = {}
         for block, events in self.sampler.events.items():
             block_to_sum[block] = sum((event['args']['_amount'] for event in events))
+        total = sum((v for v in block_to_sum.values()))
+        wallet_balance = self.contract.web3.eth.getBalance(self.wallet_address)
+        if total != wallet_balance:
+            log.warning('log balance and events total sum do not match (%d != %d)'
+                        % (total, wallet_balance))
 
-        ret['raised_eth'] = sum((v for v in block_to_sum.values()))
+        ret['raised_eth'] = wallet_balance
         ret['final_price'] = self.sampler.final_price
         ret['claimed_tokens'] = self.sampler.total_claimed
         ret['timestamp'] = web3.eth.getBlock("latest")['timestamp']
