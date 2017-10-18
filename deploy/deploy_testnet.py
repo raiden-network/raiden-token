@@ -54,6 +54,10 @@ def main(ctx, **kwargs):
     help='Auction funds will be sent to this wallet address.'
 )
 @click.option(
+    '--whitelister',
+    help='Address with permission to add/remove bidders to/from a whitelist.'
+)
+@click.option(
     '--supply',
     default=10000000,
     help='Token contract supply (number of total issued tokens).'
@@ -81,6 +85,7 @@ def deploy(ctx, **kwargs):
     price_start = kwargs['price_start']
     price_constant = kwargs['price_constant']
     price_exponent = kwargs['price_exponent']
+    whitelister = kwargs['whitelister']
 
     multiplier = 10 ** 18
     supply *= multiplier
@@ -102,7 +107,7 @@ def deploy(ctx, **kwargs):
 
     # Deploy Auction
     auction_txhash = Auction.deploy(transaction={"from": owner},
-                                    args=[wallet_address, price_start,
+                                    args=[wallet_address, whitelister, price_start,
                                           price_constant, price_exponent])
     log.info("Deploying auction, tx hash " + auction_txhash)
     receipt, success = check_succesful_tx(web3, auction_txhash)
