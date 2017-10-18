@@ -80,10 +80,7 @@ class AuctionStatus(Resource):
         ret['raised_eth'] = sum((v for v in block_to_sum.values()))
         ret['final_price'] = self.sampler.final_price
         ret['claimed_tokens'] = self.sampler.total_claimed
-        if last_event is not None:
-            ret['timestamp'] = web3.eth.getBlock(last_event['blockNumber'])['timestamp']
-        else:
-            ret['timestamp'] = None
+        ret['timestamp'] = web3.eth.getBlock("latest")['timestamp']
         ret['start_time'] = self.sampler.auction_start_time
         ret['end_time'] = self.sampler.auction_end_time
         ret['price_start'] = self.sampler.price_start
