@@ -87,9 +87,11 @@ Deployment script can do both deployment of the auction and can also run the sim
 
 Deployment:
 - owner must own enough ether to deploy the contracts
+- wallet is the address at which all the ETH is sent after each bid
+- whitelister is the address that has permission to add/remove address to/from the auction's whitelist
 - if you want to run the simulation, note the contract addresses
 ```sh
-python -m deploy.deploy_testnet --chain privtest --owner 0x00a329c0648769a73afac7f9381e08fb43dbea72  deploy --price-start 2000000 --price-constant 1574640000 --price-exponent 4
+python -m deploy.deploy_testnet --chain privtest --owner 0x00a329c0648769a73afac7f9381e08fb43dbea72  deploy --wallet 0x00a329c0648769a73afac7f9381e08fb43dbea72 --whitelister 0x00a329c0648769a73afac7f9381e08fb43dbea72 --price-start 2000000 --price-constant 1574640000 --price-exponent 4
 ```
 
 Simulation:
