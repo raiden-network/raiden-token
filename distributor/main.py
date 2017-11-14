@@ -2,7 +2,7 @@
 Distribute tokens to bidders after auction ends.
 '''
 from populus import Project
-from deploy.distributor import Distributor as DistributorScript
+from distributor.distributor import Distributor as DistributorScript
 import click
 from deploy.utils import (
     check_succesful_tx
@@ -17,7 +17,7 @@ log = logging.getLogger(__name__)
 @click.option(
     '--chain',
     default='kovan',
-    help='Chain to deploy on: kovan | ropsten | rinkeby | tester | privtest'
+    help='Chain to deploy on: kovan | ropsten | rinkeby | tester | privtest | mainnet'
 )
 @click.option(
     '--account',
@@ -43,9 +43,24 @@ log = logging.getLogger(__name__)
     help='How many token claims to be processed. Default is calculated from gas cost estimation.'
 )
 @click.option(
+    '--gas-price',
+    default=None,
+    help='Set custom gas price.'
+)
+@click.option(
+    '--wait/--no-wait',
+    default=False,
+    help='Wait for tx receipt.'
+)
+@click.option(
     '--to-file/--no-file',
     default=True,
     help='Write event information to csv file.'
+)
+@click.option(
+    '--distribution/--no-distribution',
+    default=True,
+    help='Only collect bid events information.'
 )
 def main(**kwargs):
     project = Project()
@@ -56,7 +71,10 @@ def main(**kwargs):
     auction_address = kwargs['auction']
     auction_tx = kwargs['auction_tx']
     batch_number = kwargs['batch_number']
+    gas_price = kwargs['gas_price']
     to_file = kwargs['to_file']
+    distribution = kwargs['distribution']
+    wait = kwargs['wait']
 
     claims_file = None
     if to_file:
@@ -75,33 +93,37 @@ def main(**kwargs):
 
         # Load Populus contract proxy classes
         auction = Auction(address=auction_address)
+        distributor = None
 
-        end_time = auction.call().end_time()
-        waiting = auction.call().token_claim_waiting_period()
-        token_claim_ok_time = end_time + waiting
-        now = web3.eth.getBlock('latest')['timestamp']
-        if token_claim_ok_time > now:
-            log.warning('Token claim waiting period is not over')
-            log.warning('Remaining: %s seconds' % (token_claim_ok_time - now))
-            sys.exit()
+        if distribution:
+            if not distributor_address:
+                end_time = auction.call().end_time()
+                waiting = auction.call().token_claim_waiting_period()
+                token_claim_ok_time = end_time + waiting
+                now = web3.eth.getBlock('latest')['timestamp']
+                if token_claim_ok_time > now:
+                    log.warning('Token claim waiting period is not over')
+                    log.warning('Remaining: %s seconds' % (token_claim_ok_time - now))
+                    sys.exit()
 
-        if not distributor_address:
-            distributor_tx = Distributor.deploy(transaction={'from': account},
-                                                args=[auction_address])
-            log.info('DISTRIBUTOR tx hash: ' + distributor_tx)
-            receipt, success = check_succesful_tx(web3, distributor_tx)
-            assert success is True
-            assert receipt is not None
+                distributor_tx = Distributor.deploy(transaction={'from': account},
+                                                    args=[auction_address])
+                log.info('DISTRIBUTOR tx hash: ' + distributor_tx)
+                receipt, success = check_succesful_tx(web3, distributor_tx)
+                assert success is True
+                assert receipt is not None
 
-            distributor_address = receipt['contractAddress']
-            log.info('DISTRIBUTOR contract address  ' + distributor_address)
+                distributor_address = receipt['contractAddress']
+                log.info('DISTRIBUTOR contract address  ' + distributor_address)
 
-        distributor = Distributor(address=distributor_address)
-        assert distributor is not None
+            distributor = Distributor(address=distributor_address)
+            #assert distributor is not None
 
         distrib = DistributorScript(web3, account, auction, auction_tx, auction.abi,
-                                    distributor, batch_number, claims_file)
-        distrib.distribute()
+                                    distributor, batch_number, gas_price, claims_file,
+                                    wait, not distribution)
+        if distribution:
+            distrib.distribute()
 
 
 if __name__ == '__main__':
