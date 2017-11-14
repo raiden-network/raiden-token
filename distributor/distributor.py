@@ -1,6 +1,7 @@
 """
 Call Distributor with an array of addresses for token claiming after auction ends
 """
+from time import time
 from web3.utils.compat import (
     Timeout,
 )
@@ -15,17 +16,24 @@ log = logging.getLogger(__name__)
 
 class Distributor:
     def __init__(self, web3, account, auction, auction_tx, auction_abi, distributor,
-                 batch_number=None, claims_file=None):
+                 batch_number=None, gas_price=None, claims_file=None, wait=None,
+                 no_distribution=None):
         self.web3 = web3
         self.auction = auction
         self.account = account
         self.token_multiplier = auction.call().token_multiplier()
         self.auction_abi = auction_abi
         self.distributor = distributor
+        self.gas_price = gas_price
         self.file = claims_file
         self.auction_ended = False
         self.distribution_ended = False
-        self.total_distribute_tx_gas = 4000000
+        self.wait = wait
+
+        # The gas limit in the mainnet at the time of writting is about 6,705,843
+        # Our batch transactions should fill up 1/4th of the block
+        self.total_distribute_tx_gas = 6500000 / 4
+        self.no_distribution = no_distribution
 
         # How many addresses to send in a transaction
         # If None, will be calculated from the tx gas estimation
@@ -48,7 +56,8 @@ class Distributor:
         self.filter_distributed = None
 
         # Set contract deployment block numbers
-        self.auction_block = self.web3.eth.getTransaction(auction_tx)['blockNumber']
+        self.auction_block = self.web3.eth.getTransaction(auction_tx)['blockNumber'] - 100000
+        # self.auction_block = 0
 
         if self.file:
             with open(self.file, 'a') as f:
@@ -58,6 +67,13 @@ class Distributor:
         self.watch_auction_bids()
 
     def watch_auction_bids(self):
+        print('!!!watch_auction_bids', self.no_distribution)
+        if self.no_distribution:
+            self.bids_file = 'build/bids_{}.csv'.format(time())
+            with open(self.bids_file, 'a') as f:
+                f.write('block_number,address,step_bid_value,event_bid_value\n')
+            log.info('The following file has been created: %s', self.bids_file)
+
         self.filter_bids = self.handle_auction_logs('BidSubmission', self.add_address)
         self.filter_bids.init(self.watch_auction_end)
         self.filter_bids.watch()
@@ -88,6 +104,8 @@ class Distributor:
         self.filter_distributed.watch()
 
     def add_address(self, event):
+        if not event:
+            return
         address = event['args']['_sender']
 
         # We might have multiple bids from the same bidder
@@ -96,6 +114,13 @@ class Distributor:
             self.addresses_unclaimed.append(address)
 
         self.bidder_addresses[address] += event['args']['_amount']
+        if self.no_distribution:
+            with open(self.bids_file, 'a') as f:
+                f.write('%s,%s,%s,%s\n' % (event['blockNumber'],
+                                                 #event['timestamp'],
+                                                 address,
+                                                 self.bidder_addresses[address],
+                                                 event['args']['_amount']))
 
     def add_verified(self, event):
         address = event['args']['_recipient']
@@ -178,10 +203,11 @@ class Distributor:
         # We need to calculate from gas estimation
         if unclaimed_number > 0 and not self.batch_number:
             valid_bid_address = self.addresses_unclaimed[0]
-            claim_tx_gas = self.auction.estimateGas({'from': valid_bid_address}).claimTokens()
+            claim_tx_gas = self.auction.estimateGas({'from': self.account}).proxyClaimTokens(valid_bid_address)
+            # claim_tx_gas = 50000
             log.info('ESTIMATED claimTokens tx GAS: %s', (claim_tx_gas))
 
-            self.batch_number = self.total_distribute_tx_gas // claim_tx_gas
+            self.batch_number = int(self.total_distribute_tx_gas // claim_tx_gas)
             log.info('BATCH number: %s', (self.batch_number))
 
         # Call the distributor contract with batches of bidder addresses
@@ -192,13 +218,19 @@ class Distributor:
             self.addresses_claimed = self.addresses_claimed + batch
 
             log.info('Distributing tokens to %s addresses: %s' % (batch_number, ','.join(batch)))
-            txhash = self.distributor.transact({
-                'from': self.account,
-                'gas': self.total_distribute_tx_gas
-            }).distribute(batch)
 
-            receipt, success = check_succesful_tx(self.web3, txhash)
-            assert success is True
-            assert receipt is not None
+            # Send the distribute transaction
+            tx = {
+                'from': self.account,
+                'gas': int(self.total_distribute_tx_gas)
+            }
+            if self.gas_price:
+                tx['gas_price'] = int(self.gas_price)
+            txhash = self.distributor.transact(tx).distribute(batch)
+
+            if self.wait:
+                receipt, success = check_succesful_tx(self.web3, txhash)
+                assert success is True
+                assert receipt is not None
 
         self.distribution_ended_checks()

@@ -114,18 +114,17 @@ python -m deploy.deploy_testnet --chain privtest --owner 0x00a329c0648769a73afac
 
 #### Automatic token distribution
 
+Deploys the Distributor contract used for claiming tokens for the bidders. Runs the script for retrieving bidder addresses from the DutchAuction contract events and batching them.
 
 ```sh
-
-python -m deploy.distribute \
-    --chain privtest \
-    --distributor 0x8b96503f6b2cefaa83d385fa2cb269999ab4ac9f \
-    --distributor-tx 0xc4eaffce4009eb13cd432f3c25d6f5eafb42249d4cd81a6164e83225ad65abee \
-    --auction 0x66b14432eaad5956e57ab02316a50705f2dc4f25 \
-    --auction-tx 0x989bf8f2cf5bdfdd053c95b4ce711636054f06406df41cd77160b2fad31efe2c \
-    --claims 2  # number of addresses to be sent in a transaction (wip)
-
+python -m distributor.main --chain privtest --auction ${AUCTION_ADDRESS} --auction-tx ${AUCTION_DEPLOY_TX_HASH}
 ```
+
+Optional:
+
+`--distributor ${DISTRIBUTOR_ADDRESS}` can be used to run the script with an already deployed Distributor contract.
+`--batch-number` can be used to set how many address we send to `Distributor.distribute()`, otherwise the number is calculated with estimateGas.
+`--gas-price` sets a custom gas price.
 
 ### Solidity coding style
 
